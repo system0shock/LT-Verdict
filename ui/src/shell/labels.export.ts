@@ -1,10 +1,10 @@
-// Русские строки действия «Экспорт» в шапке новой оболочки (срез U7b).
+// Русские строки действия «Экспорт» в шапке (срез U7b).
 
 export const EXPORT_LABELS = {
   html: 'Экспорт HTML',
 } as const
 
-// Блок ссылок скачивания «Обзора» (новая оболочка). Английские значения остаются в прежнем интерфейсе.
+// Блок ссылок скачивания на вкладке «История».
 export interface DownloadLabels {
   group: string
   format: (format: string) => string
@@ -35,22 +35,7 @@ export const DOWNLOAD_LABELS: DownloadLabels = {
   pgProfile: 'Скачать отчёт pg_profile',
 }
 
-export const EN_DOWNLOAD_LABELS: DownloadLabels = {
-  group: 'Analysis downloads',
-  format: (format) => `Download ${format === 'asciidoc' ? 'AsciiDoc' : format.toUpperCase()}`,
-  resourceSnapshot: 'Download resource snapshot',
-  capacityPlan: 'Download capacity plan',
-  capacityResult: 'Download capacity result',
-  trendPlan: 'Download trend plan',
-  trendResult: 'Download trend result',
-  openSearchContext: (profileId) => `Download OpenSearch context${profileId === null ? '' : ` — ${profileId}`}`,
-  postgresPre: 'Download PostgreSQL pre capture',
-  postgresPost: 'Download PostgreSQL post capture',
-  postgresContext: 'Download PostgreSQL context',
-  pgProfile: 'Download pg_profile report',
-}
-
-// Панель «Сохранённая аналитика» «Обзора» (новая оболочка): заголовок, поля и кнопки. Вложенные таблицы остаются английскими.
+// Панель «Сохранённая аналитика» на вкладке «История»: заголовок, поля и кнопки. Вложенные таблицы остаются английскими.
 export interface AnalyticsLabels {
   title: string
   lead: string
@@ -93,26 +78,4 @@ export const ANALYTICS_LABELS: AnalyticsLabels = {
   noBaseline: 'Выберите сохранённый baseline, чтобы сравнить транзакции.',
   noOverlay: 'Наложение OpenSearch недоступно: у этого анализа нет корректных метаданных прогона.',
   wholeRunNote: 'Метрики динамики и сравнения транзакций взяты по всему прогону, справочно: у этого анализа заданы стадии нагрузки, окно steady оценивается отдельно, разгон и остановка входят в эти метрики.',
-}
-
-export const EN_ANALYTICS_LABELS: AnalyticsLabels = {
-  title: 'Saved-run analytics',
-  lead: 'Dynamics and comparisons use saved local bundles only. Refreshing this view does not query external sources.',
-  comparableRuns: 'Comparable runs',
-  transactionFilter: 'Transaction filter',
-  transactionRows: 'Transaction rows',
-  refresh: 'Refresh analytics',
-  refreshing: 'Loading analytics…',
-  loading: 'Loading saved analytics…',
-  failed: 'Saved analytics request failed.',
-  exportJson: 'Export analytics JSON',
-  exportHtml: 'Export dynamics HTML',
-  exportAsciidoc: 'Export dynamics AsciiDoc',
-  exportConfluence: 'Export dynamics Confluence',
-  scanTruncated: (limit, bytes) => `Local history scan stopped at configured bounds (up to ${limit} analyses or ${bytes} metadata bytes).`,
-  scanTruncatedNote: 'It may omit comparable runs, so latest-N is limited to the scanned history.',
-  noDynamics: 'N-run dynamics are unavailable because this analysis has no valid run metadata.',
-  noBaseline: 'Select a saved baseline to compare transactions.',
-  noOverlay: 'OpenSearch overlay is unavailable because this analysis has no valid run metadata.',
-  wholeRunNote: 'The dynamics and the transaction comparison use whole-run metrics, for reference only: this analysis has declared load stages and its steady window is evaluated separately, ramp-up and ramp-down are included in these metrics.',
 }

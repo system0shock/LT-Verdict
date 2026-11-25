@@ -85,12 +85,12 @@ const job = (state: string, extra: Record<string, unknown> = {}) => ({
   job_id: 'advice-job', run_id: runId, analysis_id: analysisA, state, reused: false, failure: null, unavailable_reason: null, ...extra,
 })
 
-async function openAdvice(page: Page, setup: Setup, shell: 'new' | 'old' = 'new') {
+async function openAdvice(page: Page, setup: Setup) {
   const posts = await mockApi(page, setup)
-  await page.goto(shell === 'new' ? '/?shell=new' : '/?shell=old')
+  await page.goto('/')
   await page.getByRole('button', { name: 'cm5.jtl' }).click()
   await page.locator(`button[title="${analysisA}"]`).click()
-  if (shell === 'new') await page.locator('#shell-tab-advice').click()
+  await page.locator('#shell-tab-advice').click()
   const panel = page.locator('section[aria-labelledby="advice-title"]')
   await expect(panel).toBeVisible()
   return { posts, panel }
@@ -249,18 +249,9 @@ test('labels from the configuration are rendered as text and no destination or c
   await expect(panel.getByRole('checkbox')).toHaveCount(0)
 })
 
-test('the old interface shows the same selector because the panel is shared', async ({ page }) => {
-  const { posts, panel } = await openAdvice(page, { config: two }, 'old')
-  await panel.getByRole('combobox').selectOption('qwen3.8-max')
-  await panel.getByRole('button', { name: 'Получить рекомендации' }).click()
-  await expect.poll(() => posts.length).toBe(1)
-  expect(posts[0]).toEqual({ model_id: 'qwen3.8-max' })
-  await expect(page.locator('#run-setup')).not.toHaveAttribute('ai-config', /.*/)
-})
-
 test('new analysis: the selector appears only when the toggle is on, and the chosen model goes to the request after the analysis', async ({ page }) => {
   const posts = await realServerWithConfig(page, two)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   const section = page.locator('section[aria-labelledby="setup-ai-title"]')
   await expect(section.getByRole('switch')).not.toBeChecked()
   await expect(section.getByTestId('model-choice')).toHaveCount(0)
@@ -286,7 +277,7 @@ test('new analysis with one model or without configuration: no selector, the req
   for (const config of [one, null]) {
     const fresh = await page.context().newPage()
     const posts = await realServerWithConfig(fresh, config)
-    await fresh.goto('/?shell=new')
+    await fresh.goto('/')
     const section = fresh.locator('section[aria-labelledby="setup-ai-title"]')
     await section.getByRole('switch').check()
     await expect(section.getByRole('combobox')).toHaveCount(0)

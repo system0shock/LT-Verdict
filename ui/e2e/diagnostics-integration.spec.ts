@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createHash } from 'node:crypto'
+import { SETUP_MESSAGES } from '../src/shell/labels'
+import { COMPARE_LABELS } from '../src/shell/labels.compare'
+import { DIAGNOSTICS_LABELS } from '../src/shell/labels.tables'
 
 // The fixture uses finite plain decimals and sorted keys for the snapshot's canonical hash.
 function canonical(value: unknown): string {
@@ -39,13 +42,14 @@ async function analyzeDiagnostics(page: Page, extraLatency: number) {
   // A baseline must be a PASS analysis (ADR 0019), so the runs are judged by a permissive policy.
   const policy = { schema_version: 'policy.v1', policy_id: 'permissive', rules: [{ id: 'p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 100000, scope: { kind: 'overall' } }] }
   await page.getByTestId('policy-file').setInputFiles({ name: 'policy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(policy)) })
-  await expect(page.locator('#run-setup')).toContainText('Policy is valid — permissive')
-  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  await expect(page.locator('#run-setup')).toContainText(SETUP_MESSAGES.policyValid('permissive'))
+  await page.getByTestId('start-analysis').click()
+  await expect(page.locator('#verdict')).toContainText('PASS')
+  await page.locator('#shell-tab-tables').click()
   await expect(page.locator('#diagnostic-results')).toContainText('COMPLETE')
   await expect(page.locator('#diagnostic-results')).toContainText('NOT_ESTIMATED')
   await expect(page.getByTestId('anomaly-episodes').locator('tbody tr')).toHaveCount(1)
-  await expect(page.getByTestId('anomaly-episodes')).toContainText('30.0 s')
-  await expect(page.locator('#verdict')).toContainText('PASS')
+  await expect(page.getByTestId('anomaly-episodes')).toContainText(DIAGNOSTICS_LABELS.durationSec('30,0'))
   const analysisId = await page.locator('button[aria-pressed="true"][title]').getAttribute('title')
   expect(analysisId).toMatch(/^[a-f0-9]{64}$/)
   return analysisId!
@@ -54,20 +58,24 @@ async function analyzeDiagnostics(page: Page, extraLatency: number) {
 test('persists diagnostic evidence and compares two saved windows through the real backend', async ({ page }) => {
   await page.goto('/')
   await analyzeDiagnostics(page, 0)
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
-  await expect(page.getByTestId('baseline-selection')).toContainText('manual')
+  await page.locator('#shell-tab-compare').click()
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
+  await expect(page.getByTestId('baseline-selection')).toContainText(COMPARE_LABELS.mode('manual'))
+  await page.locator('#shell-tab-setup').click()
   const currentId = await analyzeDiagnostics(page, 100)
-  await page.getByLabel('Baseline window ID', { exact: true }).fill('steady')
-  await page.getByLabel('Current window ID', { exact: true }).fill('steady')
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await page.locator('#shell-tab-compare').click()
+  await page.getByLabel(COMPARE_LABELS.baselineWindow, { exact: true }).fill('steady')
+  await page.getByLabel(COMPARE_LABELS.currentWindow, { exact: true }).fill('steady')
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   const compared = page.getByTestId('window-comparison')
   await expect(compared).toContainText('CONDITIONS_UNCONFIRMED')
-  await expect(compared).toContainText('601 samples / 30000 ms')
+  await expect(compared).toContainText(COMPARE_LABELS.windowStats('baseline', 601, 30000))
   await expect(compared).toContainText('server-1')
-  await expect(compared.getByRole('row', { name: /P95 latency/ }).locator('td').nth(3)).toHaveText('100')
+  await expect(compared.getByRole('row', { name: new RegExp(COMPARE_LABELS.metric('response_time_p95_ms')) }).locator('td').nth(3)).toHaveText('100')
   await page.reload()
   await page.getByRole('button', { name: 'diagnostics-100.jtl' }).click()
   await page.locator(`button[title="${currentId}"]`).click()
+  await page.locator('#shell-tab-tables').click()
   await expect(page.getByTestId('anomaly-episodes').locator('tbody tr')).toHaveCount(1)
   await expect(page.locator('#diagnostic-results')).toContainText('NOT_ESTIMATED')
 })

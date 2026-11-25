@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { JOB_LABELS, SHELL_LABELS } from '../src/shell/labels'
 
 const prefixes = ['3fa9c1d2', '9b01e77a', 'c4d2a8f0']
 const runs = prefixes.map((prefix) => {
@@ -68,6 +69,7 @@ test('keeps the short id inside a narrow window for a very long file name', asyn
 
 test('shows when each run was accepted, in the order the server sent', async ({ page }) => {
   const acceptedAt = ['2026-10-07T12:00:05.000Z', '2026-10-07T12:00:00.000Z']
+  const acceptedAtFormat = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'medium' })
   await fixtureApi(page, [
     { ...runs[0], accepted_at: acceptedAt[0] },
     { ...runs[1], accepted_at: acceptedAt[1] },
@@ -78,12 +80,12 @@ test('shows when each run was accepted, in the order the server sent', async ({ 
   const buttons = page.getByTestId('run-list').getByRole('button')
   await expect(buttons).toHaveCount(3)
   for (const [index, value] of acceptedAt.entries()) {
-    const accepted = buttons.nth(index).locator('time')
-    await expect(accepted).toHaveAttribute('datetime', value)
-    await expect(accepted).not.toHaveText('')
+    await expect(buttons.nth(index)).toContainText(`${SHELL_LABELS.runAccepted} ${acceptedAtFormat.format(new Date(value))}`)
     await expect(buttons.nth(index)).toContainText(`jmeter_jtl_csv · ${prefixes[index]}`)
   }
   await expect(buttons.nth(2).locator('time')).toHaveCount(0)
+  await expect(buttons.nth(2)).toContainText('results.jtl')
+  await expect(buttons.nth(2)).not.toContainText(SHELL_LABELS.runAccepted)
   await expect(buttons.nth(2)).toContainText(`jmeter_jtl_csv · ${prefixes[2]}`)
 })
 
@@ -105,15 +107,16 @@ test('lists the newest accepted run first (live server)', async ({ page }) => {
   const names = [`older-${stamp}.jtl`, `newer-${stamp}.jtl`]
   await page.goto('/')
   for (const [index, name] of names.entries()) {
+    await page.locator('#shell-tab-setup').click()
     await page.getByTestId('input-file').setInputFiles({
       name,
       mimeType: 'text/csv',
       buffer: Buffer.from(`timeStamp,elapsed,label,success\n${1767225600000 + index},${100 + index},accepted-order,true\n`),
     })
     const accepted = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/inputs')
-    await page.getByRole('button', { name: 'Analyze run' }).click()
+    await page.getByTestId('start-analysis').click()
     expect((await accepted).status()).toBe(201)
-    await expect(page.locator('#job-status')).toContainText('COMPLETE')
+    await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.COMPLETE)
   }
 
   await page.reload()

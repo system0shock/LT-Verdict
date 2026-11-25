@@ -41,20 +41,20 @@ async function fixtureApi(page: Page, counts: number[]) {
   })
 }
 
-async function open(page: Page, shell: 'new' | 'old', counts: number[]) {
+async function open(page: Page, counts: number[]) {
   await fixtureApi(page, counts)
-  await page.goto(`/?shell=${shell}`)
+  await page.goto('/')
   await page.getByRole('button', { name: 'normalized.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
-  if (shell === 'new') await page.locator('#shell-tab-tables').click()
+  await page.locator('#shell-tab-tables').click()
   await expect(page.locator('#normalized-data')).toBeVisible()
 }
 
 const rows = (page: Page) => page.locator('#normalized-data tbody tr')
 
-test('new shell: 900 time bins start collapsed to 50 rows and grow on request', async ({ page }) => {
-  await open(page, 'new', [900])
+test('900 time bins start collapsed to 50 rows and grow on request', async ({ page }) => {
+  await open(page, [900])
 
   await expect(rows(page)).toHaveCount(50)
   await expect(page.getByTestId('bins-shown')).toHaveText(NORMALIZED_LABELS.shown(50, 900))
@@ -68,8 +68,8 @@ test('new shell: 900 time bins start collapsed to 50 rows and grow on request', 
   await expect(page.locator('#normalized-data').getByRole('region', { name: NORMALIZED_LABELS.region })).toBeFocused()
 })
 
-test('new shell: the block is in Russian', async ({ page }) => {
-  await open(page, 'new', [900])
+test('the normalized block is in Russian', async ({ page }) => {
+  await open(page, [900])
 
   const block = page.locator('#normalized-data')
   await expect(block.getByRole('heading', { level: 2 })).toHaveText(NORMALIZED_LABELS.title)
@@ -82,28 +82,20 @@ test('new shell: the block is in Russian', async ({ page }) => {
   await expect(rows(page).first()).toContainText(NORMALIZED_LABELS.available)
 })
 
-test('new shell: a short list has no show-more controls', async ({ page }) => {
-  await open(page, 'new', [30])
+test('a short list has no show-more controls', async ({ page }) => {
+  await open(page, [30])
 
   await expect(rows(page)).toHaveCount(30)
   await expect(page.getByRole('button', { name: /Показать/ })).toHaveCount(0)
   await expect(page.getByTestId('bins-shown')).toHaveCount(0)
 })
 
-test('new shell: a refreshed list starts collapsed again even after it was expanded', async ({ page }) => {
-  await open(page, 'new', [200, 120])
+test('a refreshed list starts collapsed again even after it was expanded', async ({ page }) => {
+  await open(page, [200, 120])
 
   await page.getByRole('button', { name: NORMALIZED_LABELS.more(50) }).click()
   await expect(rows(page)).toHaveCount(100)
   await page.getByRole('button', { name: NORMALIZED_LABELS.refresh }).click()
   await expect(page.getByTestId('bins-shown')).toHaveText(NORMALIZED_LABELS.shown(50, 120))
   await expect(rows(page)).toHaveCount(50)
-})
-
-test('old interface keeps every row and the English block', async ({ page }) => {
-  await open(page, 'old', [900])
-
-  await expect(rows(page)).toHaveCount(900)
-  await expect(page.locator('#normalized-data h2')).toHaveText('Normalized data')
-  await expect(page.getByRole('button', { name: /Показать/ })).toHaveCount(0)
 })

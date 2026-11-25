@@ -55,7 +55,7 @@ async function pickSavedAnalysis(page: Page) {
 
 async function openNewShellWithResult(page: Page, saved: Record<string, unknown> = result) {
   await fixtureApi(page, saved)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await pickSavedAnalysis(page)
   await expect(page.locator('#verdict')).toBeVisible()
 }
@@ -119,14 +119,6 @@ test('new shell omits capacity and trend sections without their data', async ({ 
   await openTables(page, { ...result, analysis_mode: 'standard', policy_verdict: 'NO_POLICY', evidence: [], capacity_summary: undefined })
   await expect(page.locator('#capacity-results')).toHaveCount(0)
   await expect(page.locator('#trend-results')).toHaveCount(0)
-})
-
-test('old shell retains English capacity and trend regions', async ({ page }) => {
-  await fixtureApi(page)
-  await page.goto('/?shell=old')
-  await pickSavedAnalysis(page)
-  await expect(page.getByRole('region', { name: 'Capacity stages' })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Resource trend checks' })).toBeVisible()
 })
 
 test('overview capacity attention opens and focuses the capacity region', async ({ page }) => {

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { COMPARE_LABELS, EN_COMPARE_LABELS } from '../src/shell/labels.compare'
+import { COMPARE_LABELS } from '../src/shell/labels.compare'
 import { BASELINE_ERROR_LABELS, BASELINE_LABELS } from '../src/shell/labels'
 import type { BaselineCondition, BaselineSelection } from '../src/types'
 
@@ -26,7 +26,6 @@ type CompareOptions = {
   buckets?: boolean
   bucketsError?: boolean
   evidence?: unknown[]
-  shell?: 'new' | 'old'
   precise?: boolean
   slotArm?: string
   verdict?: string
@@ -157,11 +156,11 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
     await route.fulfill({ status, json: body })
   })
 
-  await page.goto(opts.shell === 'old' ? '/?shell=old' : '/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: run.original_filename }).click()
   await page.locator(`button[title="${current.analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
-  if (opts.shell !== 'old') await page.locator('#shell-tab-compare').click()
+  await page.locator('#shell-tab-compare').click()
   return { paths, posts, deletes }
 }
 
@@ -232,17 +231,6 @@ test('numbers and the save time are shown short in Russian, the exact value stay
   await exact.locator('summary').click()
   await expect(exact).toContainText('3493.123456')
   await expect(exact).toContainText('59.997667')
-})
-
-test('the old interface keeps the exact numbers and the raw time', async ({ page }) => {
-  await openCompare(page, { precise: true, baselineMode: 'manual', shell: 'old' })
-  await page.getByRole('button', { name: EN_COMPARE_LABELS.compare, exact: true }).click()
-  await page.getByLabel(EN_COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
-  await page.getByRole('button', { name: EN_COMPARE_LABELS.saveCondition, exact: true }).click()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText(EN_COMPARE_LABELS.conditionSaved('CONFIRMED', preciseTime))
-  await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(2)).toHaveText('3493.123456')
-  await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(4)).toHaveText('674.501109%')
-  await expect(page.getByTestId('baseline-comparison').locator('details').filter({ hasText: COMPARE_LABELS.rawMetricsSummary ?? '' })).toHaveCount(0)
 })
 
 test('USER_CONFIRMED shows the confirmed status line', async ({ page }) => {
@@ -321,40 +309,6 @@ test('a server error stays as the server text marked as English', async ({ page 
   await openCompare(page, { postBaselineFails: true, verdict: 'PASS' })
   await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await expect(page.getByRole('alert').filter({ hasText: 'Server says no.' })).toHaveAttribute('lang', 'en')
-})
-
-test('the old interface keeps the English panel text and no lang attributes', async ({ page }) => {
-  await openCompare(page, { shell: 'old' })
-  await expect(page.getByRole('heading', { name: EN_COMPARE_LABELS.title, exact: true })).toBeVisible()
-  expect(await page.locator('#baseline-panel').getAttribute('lang')).toBeNull()
-  await expect(page.getByRole('button', { name: EN_COMPARE_LABELS.compare, exact: true })).toBeVisible()
-})
-
-test('the old interface keeps the exact English texts of the interpolated lines', async ({ page }) => {
-  // Literal strings copied from the panel as it was before the labels prop, independent of EN_COMPARE_LABELS.
-  await openCompare(page, { shell: 'old', baselineMode: 'statistical', windowReasons: ['BASELINE_WINDOW_EMPTY'] })
-  const panel = page.locator('#baseline-panel')
-  await expect(page.getByTestId('baseline-selection')).toContainText('statistical')
-  await expect(page.getByTestId('baseline-selection')).toContainText(/median-rank-v1 .+ 3 candidates/)
-  await expect(page.getByTestId('baseline-selection')).toContainText('1.5 (lower is more central)')
-  await expect(page.getByTestId('baseline-condition-status')).toHaveText('No saved decision for this exact pair.')
-  await page.getByLabel('Baseline window ID', { exact: true }).fill('w1')
-  await page.getByLabel('Current window ID', { exact: true }).fill('w2')
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
-  await expect(page.getByTestId('window-comparison')).toBeVisible()
-  await expect(page.getByTestId('baseline-comparison')).toContainText(
-    'Planned conditions: UNCONFIRMED. Deltas alone do not prove a version regression or change the policy verdict.',
-  )
-  await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').first()).toHaveText('P95 latency / ms')
-  await expect(page.getByTestId('comparison-error_rate_ratio').locator('td').nth(4)).toHaveText('N/A (ZERO_BASELINE)')
-  const windowBlock = page.getByTestId('window-comparison')
-  await expect(windowBlock).toContainText('INSUFFICIENT_DATA')
-  await expect(windowBlock).toContainText('Baseline: 0 samples / N/A ms. Current: N/A samples / 1000 ms.')
-  await expect(windowBlock).toContainText('Uncertainty: NOT_ESTIMATED. These two observations do not establish a reproducible version regression.')
-  await expect(windowBlock.locator('tbody tr').nth(1).locator('td').first()).toHaveText('response_time_p50_ms / Overall / — / ms')
-  await expect(panel.getByRole('region', { name: 'Baseline metric deltas' })).toBeVisible()
-  await expect(panel.getByRole('region', { name: 'Selected-window metric deltas' })).toBeVisible()
-  expect(await panel.locator('[lang]').count()).toBe(0)
 })
 
 test('the comparison chart block renders ECharts current vs baseline and thresholds in Russian without CSP violations', async ({ page }) => {
@@ -442,9 +396,9 @@ for (const width of [1280, 375, 320]) {
   })
 }
 
-test('the old interface clears the baseline of its series and arm', async ({ page }) => {
-  const { deletes } = await openCompare(page, { shell: 'old', baselineMode: 'manual', slotArm: 'blue' })
-  await page.getByRole('button', { name: 'Clear baseline', exact: true }).click()
+test('clears the baseline of its series and arm', async ({ page }) => {
+  const { deletes } = await openCompare(page, { baselineMode: 'manual', slotArm: 'blue' })
+  await page.getByRole('button', { name: COMPARE_LABELS.clearBaseline, exact: true }).click()
   await expect.poll(() => deletes).toEqual(['?series=S&arm=blue'])
 })
 
@@ -486,12 +440,6 @@ for (const [name, opts] of [
   })
 }
 
-test('the old interface leaves the decision to the server: the button is available for FAIL', async ({ page }) => {
-  await openCompare(page, { shell: 'old', verdict: 'FAIL' })
-  await expect(page.getByRole('button', { name: EN_COMPARE_LABELS.setBaseline, exact: true })).toBeEnabled()
-  await expect(page.getByTestId('baseline-ineligible')).toHaveCount(0)
-})
-
 for (const code of ['BASELINE_CANDIDATE_INVALID', 'BASELINE_CANDIDATE_INCOMPLETE', 'BASELINE_CANDIDATE_NOT_PASS', 'BASELINE_CANDIDATE_TOO_LARGE', 'BASELINE_CANDIDATE_GATES_UNKNOWN']) {
   test(`${code} is a Russian phrase and not marked as English`, async ({ page }) => {
     await openCompare(page, { verdict: 'PASS', postFails: { status: 422, code, message: 'Baseline candidate is unavailable' } })
@@ -501,12 +449,6 @@ for (const code of ['BASELINE_CANDIDATE_INVALID', 'BASELINE_CANDIDATE_INCOMPLETE
     await expect(alert).not.toHaveAttribute('lang', 'en')
   })
 }
-
-test('the old interface keeps the server text of a candidate refusal', async ({ page }) => {
-  await openCompare(page, { shell: 'old', verdict: 'FAIL', postFails: { status: 422, code: 'BASELINE_CANDIDATE_NOT_PASS', message: 'Baseline candidate is not PASS: FAIL' } })
-  await page.getByRole('button', { name: EN_COMPARE_LABELS.setBaseline, exact: true }).click()
-  await expect(page.locator('#baseline-panel').getByRole('alert')).toHaveText('Baseline candidate is not PASS: FAIL')
-})
 
 const mismatch = { status: 'MISMATCH', differing_fields: ['pacing', 'load_model'], baseline_release_id: 'b', current_release_id: 'c' } as const
 

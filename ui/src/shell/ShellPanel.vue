@@ -2,12 +2,11 @@
 import type { ShellTabKey } from './labels'
 import { SHELL_PANEL_ID, shellTabId } from './shell'
 
-defineProps<{ enabled: boolean; activeTab: ShellTabKey }>()
+defineProps<{ activeTab: ShellTabKey }>()
 </script>
 
 <template>
   <div
-    v-if="enabled"
     :id="SHELL_PANEL_ID"
     class="shell-panel"
     role="tabpanel"
@@ -15,5 +14,4 @@ defineProps<{ enabled: boolean; activeTab: ShellTabKey }>()
   >
     <slot />
   </div>
-  <slot v-else />
 </template>

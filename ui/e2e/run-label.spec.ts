@@ -40,7 +40,7 @@ const buttons = (page: Page) => page.getByTestId('run-list').getByRole('button')
 
 test('runs sharing one file name are listed by acceptance time, not by the repeated name', async ({ page }) => {
   await fixtureApi(page, runs)
-  await page.goto('/?shell=new')
+  await page.goto('/')
 
   await expect(buttons(page)).toHaveCount(3)
   const titles: string[] = []
@@ -57,7 +57,7 @@ test('runs sharing one file name are listed by acceptance time, not by the repea
 
 test('a file name that tells runs apart stays in the list', async ({ page }) => {
   await fixtureApi(page, [{ ...runs[0], original_filename: 'first.jtl' }, runs[1]])
-  await page.goto('/?shell=new')
+  await page.goto('/')
 
   await expect(buttons(page).nth(0)).toContainText('first.jtl')
   await expect(buttons(page).nth(1)).toContainText('load.jtl')
@@ -67,7 +67,7 @@ test('a file name that tells runs apart stays in the list', async ({ page }) => 
 
 test('a single run and a run without acceptance time keep the file name', async ({ page }) => {
   await fixtureApi(page, [runs[0]])
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(buttons(page).first()).toContainText('load.jtl')
   await expect(buttons(page).first()).not.toContainText(SHELL_LABELS.runAccepted)
 
@@ -83,7 +83,7 @@ test('a single run and a run without acceptance time keep the file name', async 
 
 test('the header names the open run by time, its policy and arm', async ({ page }) => {
   await fixtureApi(page, runs, { policy_id: 'basic-api-sla', resource_arm: 'blue' })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   const identity = page.locator('.run-identity')
 
   await buttons(page).nth(1).click()
@@ -97,7 +97,7 @@ test('the header names the open run by time, its policy and arm', async ({ page 
 
 test('the header falls back to the policy hash and omits the policy of a NO_POLICY analysis', async ({ page }) => {
   await fixtureApi(page, runs, {})
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await buttons(page).first().click()
   await page.locator(`button[title="${analysisId}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()

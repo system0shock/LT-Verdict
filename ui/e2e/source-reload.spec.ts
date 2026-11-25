@@ -178,7 +178,7 @@ async function setupMockApi(page: Page): Promise<MockState> {
 
 test('reloads profiles via POST /api/sources/reload, refreshes list, and clears removed selections', async ({ page }) => {
   const state = await setupMockApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
 
   await expect(page.locator('#source-profile option')).toHaveCount(2)
   await page.locator('#source-profile').selectOption('prom-old')
@@ -205,7 +205,7 @@ test('shows closed error codes on reload failure without leaking file text or se
     [429, 'RELOAD_TOO_FREQUENT'],
   ]
 
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(page.locator('#source-profile option[value="prom-old"]')).toBeAttached()
 
   for (const [status, code] of cases) {
@@ -227,7 +227,7 @@ test('shows closed error codes on reload failure without leaking file text or se
 
 test('validates selected profile offline and executes profile_query-only probe without expression mode', async ({ page }) => {
   const state = await setupMockApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
 
   await page.locator('#source-profile').selectOption('prom-old')
   await page.getByTestId('validate-sources').click()
@@ -288,7 +288,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`source reload, validate and probe controls pass axe-core in ${theme} theme`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme })
     await setupMockApi(page)
-    await page.goto('/?shell=new')
+    await page.goto('/')
 
     await page.locator('#source-profile').selectOption('prom-old')
     await page.getByTestId('validate-sources').click()
@@ -302,10 +302,10 @@ for (const theme of ['light', 'dark'] as const) {
   })
 }
 
-test('source controls reflow cleanly at 320x568 and legacy ?shell=old stays untouched', async ({ page }) => {
+test('source controls reflow cleanly at 320x568', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 })
   await setupMockApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
 
   await page.locator('#source-profile').selectOption('prom-old')
   await page.getByTestId('validate-sources').click()
@@ -316,12 +316,6 @@ test('source controls reflow cleanly at 320x568 and legacy ?shell=old stays unto
 
   const width = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }))
   expect(width.scroll).toBeLessThanOrEqual(width.client)
-
-  await page.goto('/?shell=old')
-  await expect(page.getByRole('heading', { name: 'Run setup' })).toBeVisible()
-  await expect(page.getByTestId('reload-sources')).toHaveCount(0)
-  await expect(page.getByTestId('validate-sources')).toHaveCount(0)
-  await expect(page.getByTestId('probe-source')).toHaveCount(0)
 })
 
 test('prunes removed profile IDs from pairSlots on reload so they are neither submitted nor resurrected', async ({ page }) => {
@@ -331,7 +325,7 @@ test('prunes removed profile IDs from pairSlots on reload so they are neither su
   const armB: SourceProfile = { id: 'arm-b', source_kind: 'prometheus', transport: 'direct', arm: 'B' }
   state.profiles = [armA1, armA2, armB]
 
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(page.locator('#source-profile option')).toHaveCount(4)
 
   await page.getByTestId('input-file').setInputFiles({ name: 'pair.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
@@ -448,7 +442,7 @@ test('discards stale in-flight validate and probe responses after switching sele
     return defaultProbe(body)
   }
 
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#source-profile').selectOption('prom-old')
   await page.getByTestId('source-probe-query-id').fill('cpu')
   await page.getByTestId('validate-sources').click()
@@ -501,7 +495,7 @@ test('discards stale in-flight validate and probe responses after reloading prof
     return defaultProbe(body)
   }
 
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#source-profile').selectOption('prom-old')
   await page.getByTestId('source-probe-query-id').fill('cpu')
   await page.getByTestId('validate-sources').click()

@@ -37,7 +37,7 @@ async function saveRelease(page: Page, series: string, label: string) {
 
 test.beforeEach(async ({ page }) => {
   // One data directory serves every spec file: remove all releases and baselines, so the order and the limits are the test's own.
-  await page.goto('/?shell=new')
+  await page.goto('/')
   const bootstrap = await (await page.request.get('/api/bootstrap')).json() as { csrf_token: string }
   const headers = { Origin: new URL(page.url()).origin, 'X-LTV-CSRF': bootstrap.csrf_token }
   for (;;) {

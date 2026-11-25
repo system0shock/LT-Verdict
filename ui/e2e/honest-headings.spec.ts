@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { AnalysisResult } from '../src/types'
-import { COMPARE_LABELS, EN_COMPARE_LABELS } from '../src/shell/labels.compare'
+import { COMPARE_LABELS } from '../src/shell/labels.compare'
 import { ruleRows } from '../src/shell/tables'
 import { summarizeVerdict, WINDOW_SHARE_LABEL } from '../src/verdictSummary'
 
@@ -37,11 +37,6 @@ test.describe('the CANDIDATE status is shown as a material delta whose significa
     expect(COMPARE_LABELS.intro).not.toMatch(/кандидат/i)
     expect(COMPARE_LABELS.statusLine('NOT_CONFIRMED' as never)).not.toMatch(/кандидат/i)
     expect(COMPARE_LABELS.statusLine('NOT_CONFIRMED' as never)).toContain('материальная дельта')
-  })
-
-  test('the English labels explain the raw status and leave other statuses as they are', () => {
-    expect(EN_COMPARE_LABELS.windowStatus('CANDIDATE')).toBe('CANDIDATE (material delta, significance not assessed)')
-    expect(EN_COMPARE_LABELS.windowStatus('DESCRIPTIVE')).toBe('DESCRIPTIVE')
   })
 
   test('the baseline candidates (the set of reference runs) keep their name', () => {

@@ -46,7 +46,7 @@ async function adviceApi(page: Page): Promise<AdviceCalls> {
 
 test('a request made at the start asks for the advice once after the analysis, and is not kept for the next run', async ({ page }) => {
   const calls = await adviceApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#input-file').setInputFiles(input)
   await page.locator('#ai-requested').check()
   await expect(page.getByTestId('readiness-will')).toContainText(SETUP_LABELS.willAdvice)
@@ -77,7 +77,7 @@ test('a request made at the start asks for the advice once after the analysis, a
 
 test('without the toggle nothing is sent and the advice tab starts the request by its button', async ({ page }) => {
   const calls = await adviceApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#input-file').setInputFiles(input)
   await page.getByTestId('start-analysis').click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
@@ -99,7 +99,7 @@ test('a refusal of the automatic request is shown on the advice tab', async ({ p
     }
     await route.fulfill({ json: { advice: null, job: null } })
   })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#input-file').setInputFiles(input)
   await page.locator('#ai-requested').check()
   await page.getByTestId('start-analysis').click()

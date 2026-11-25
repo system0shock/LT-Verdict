@@ -3,6 +3,9 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { JOB_LABELS, SETUP_LABELS, SETUP_MESSAGES, SHELL_LABELS } from '../src/shell/labels'
+import { RULES_LABELS } from '../src/shell/labels.rules'
+import { NORMALIZED_LABELS } from '../src/shell/labels.tables'
 
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
 const policies = {
@@ -19,7 +22,7 @@ async function uploadAndAnalyze(page: import('@playwright/test').Page, input: st
   await expect(page.locator('#run-setup')).toContainText(/\.(?:jtl|xml)|simulation\.log/)
   if (policy) await page.getByTestId('policy-file').setInputFiles(policy)
 
-  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByRole('button', { name: SETUP_LABELS.startButton }).click()
   await expect(page.locator('#job-status')).toBeVisible()
   await expect(page.getByTestId('job-progress')).toHaveAttribute('aria-valuenow', /\d+/)
   await expect(page.locator('#verdict')).toBeVisible()
@@ -80,7 +83,7 @@ test.describe.serial('local analysis flow', () => {
 
     await expect(page.getByRole('heading', { name: 'LT Verdict' })).toBeVisible()
     await expect(page.locator('#run-setup')).toBeVisible()
-    await expect(page.getByText('Choose a supported JMeter JTL or Gatling log.')).toBeVisible()
+    await expect(page.getByText(SETUP_LABELS.inputHint)).toBeVisible()
     await expect(page.locator('#verdict')).toHaveCount(0)
   })
 
@@ -88,14 +91,15 @@ test.describe.serial('local analysis flow', () => {
     await page.goto('/')
     await page.getByTestId('policy-file').setInputFiles(policies.pass)
 
-    await expect(page.locator('#run-setup')).toContainText('Policy is valid')
-    await page.getByLabel('Policy ID').fill('slice1-edited')
+    await expect(page.locator('#run-setup')).toContainText(SETUP_MESSAGES.policyValid('slice1-pass'))
+    await page.locator('#shell-tab-rules').click()
+    await page.getByLabel(RULES_LABELS.policyId).fill('slice1-edited')
     const exactThreshold = '0.333333333333333333333333333333333333'
-    await page.getByLabel('Threshold').fill(exactThreshold)
-    await expect(page.locator('#run-setup')).toContainText('slice1-edited')
+    await page.getByLabel(RULES_LABELS.threshold).fill(exactThreshold)
+    await expect(page.locator('#shell-panel')).toContainText('slice1-edited')
 
     const download = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Download policy' }).click()
+    await page.getByRole('button', { name: RULES_LABELS.download }).click()
     const saved = await download
     expect(saved.suggestedFilename()).toBe('policy.json')
     const downloadPath = await saved.path()
@@ -113,9 +117,10 @@ test.describe.serial('local analysis flow', () => {
       buffer: Buffer.from(duplicatePolicy),
     })
 
-    await expect(page.locator('#run-setup')).toContainText('Policy is invalid')
+    await expect(page.locator('#run-setup')).toContainText(SETUP_MESSAGES.policyInvalid)
     await expect(page.locator('#run-setup')).toContainText('/policy_id: duplicate object key')
-    await expect(page.getByLabel('Policy ID')).toHaveCount(0)
+    await page.locator('#shell-tab-rules').click()
+    await expect(page.getByLabel(RULES_LABELS.policyId)).toHaveCount(0)
   })
 
   test('preserves the 1 MiB server limit for imported policies', async ({ page }) => {
@@ -129,9 +134,10 @@ test.describe.serial('local analysis flow', () => {
       buffer: oversizedPolicy,
     })
 
-    await expect(page.locator('#run-setup')).toContainText('Policy is invalid')
+    await expect(page.locator('#run-setup')).toContainText(SETUP_MESSAGES.policyInvalid)
     await expect(page.getByRole('alert')).toContainText('Policy exceeds 1 MiB')
-    await expect(page.getByLabel('Policy ID')).toHaveCount(0)
+    await page.locator('#shell-tab-rules').click()
+    await expect(page.getByLabel(RULES_LABELS.policyId)).toHaveCount(0)
   })
 
   test('analyzes every supported golden input through the browser', async ({ page }) => {
@@ -144,8 +150,9 @@ test.describe.serial('local analysis flow', () => {
       await uploadAndAnalyze(page, input)
       await expect(page.locator('#verdict')).toContainText('NO_POLICY')
     }
-    await expect(page.getByLabel('Start offset (ms)')).toBeVisible()
-    await expect(page.getByLabel('End offset (ms)')).toBeVisible()
+    await page.locator('#shell-tab-tables').click()
+    await expect(page.getByLabel(NORMALIZED_LABELS.startOffset)).toBeVisible()
+    await expect(page.getByLabel(NORMALIZED_LABELS.endOffset)).toBeVisible()
   })
 
   test('renders PASS, FAIL, NO_POLICY and NO_VERDICT independently', async ({ page }) => {
@@ -215,8 +222,8 @@ test.describe.serial('local analysis flow', () => {
       queuedJobId = queued.body.job_id
 
       try {
-        await competing.getByRole('button', { name: 'Analyze run' }).click()
-        await expect(competing.getByTestId('busy-notice')).toContainText('BUSY')
+        await competing.getByRole('button', { name: SETUP_LABELS.startButton }).click()
+        await expect(competing.getByTestId('busy-notice')).toContainText(JOB_LABELS.busyTitle)
       } finally {
         await competing.close()
       }
@@ -226,10 +233,10 @@ test.describe.serial('local analysis flow', () => {
       queuedJobId = undefined
 
       await page.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/csv-5.6.3/input.jtl'))
-      await page.getByRole('button', { name: 'Analyze run' }).click()
-      await expect(page.getByRole('button', { name: 'Cancel analysis' })).toBeVisible()
-      await page.getByRole('button', { name: 'Cancel analysis' }).click()
-      await expect(page.locator('#job-status')).toContainText('CANCELLED')
+      await page.getByRole('button', { name: SETUP_LABELS.startButton }).click()
+      await expect(page.getByRole('button', { name: JOB_LABELS.cancel })).toBeVisible()
+      await page.getByRole('button', { name: JOB_LABELS.cancel }).click()
+      await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.CANCELLED)
     } finally {
       if (queuedJobId) await cancelJob(page, queuedJobId)
       if (activeJobId) await cancelJob(page, activeJobId)
@@ -245,16 +252,16 @@ test.describe.serial('local analysis flow', () => {
         mimeType: 'text/csv',
         buffer: Buffer.from('timeStamp,elapsed,label,success\n1767225600000,7,reload-restore,true\n'),
       })
-      await page.getByRole('button', { name: 'Analyze run' }).click()
-      await expect(page.locator('#job-status')).toContainText('PROCESSING')
+      await page.getByRole('button', { name: SETUP_LABELS.startButton }).click()
+      await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.PROCESSING)
 
       await page.reload()
 
-      await expect(page.locator('#job-status')).toContainText('PROCESSING')
-      await expect(page.getByRole('button', { name: 'Cancel analysis' })).toBeVisible()
+      await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.PROCESSING)
+      await expect(page.getByRole('button', { name: JOB_LABELS.cancel })).toBeVisible()
       await expect(page.getByTestId('run-list').locator('button[aria-pressed="true"]')).toContainText('sustained.jtl')
-      await page.getByRole('button', { name: 'Cancel analysis' }).click()
-      await expect(page.locator('#job-status')).toContainText('CANCELLED')
+      await page.getByRole('button', { name: JOB_LABELS.cancel }).click()
+      await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.CANCELLED)
       await expect.poll(() => activeJobIds(page)).toEqual([])
     } finally {
       for (const id of await activeJobIds(page)) await cancelJob(page, id)
@@ -274,20 +281,26 @@ test.describe.serial('local analysis flow', () => {
 
   test('lists accepted runs and preserves structural parity between themes', async ({ page }) => {
     await uploadAndAnalyze(page, verdictInput, policies.fail)
-    await expect(page.getByRole('navigation')).toContainText('Runs')
+    await expect(page.getByRole('navigation', { name: SHELL_LABELS.navLabel })).toBeVisible()
+    await expect(page.getByText(SHELL_LABELS.runsTitle)).toBeVisible()
     await expect(page.getByTestId('run-list')).toContainText('input.xml')
 
     const lightStructure = await page.locator('main').evaluate((element) =>
       [...element.querySelectorAll('[id]')].map((child) => child.id).join(','),
     )
-    await page.getByRole('button', { name: /Dark theme|Light theme/ }).click()
+    await page.getByRole('button', { name: new RegExp(`${SHELL_LABELS.themeToDark}|${SHELL_LABELS.themeToLight}`) }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', /light|dark/)
     expect(
       await page.locator('main').evaluate((element) =>
         [...element.querySelectorAll('[id]')].map((child) => child.id).join(','),
       ),
     ).toBe(lightStructure)
-    for (const id of ['run-setup', 'job-status', 'verdict', 'summary-metrics', 'policy-results', 'transaction-metrics', 'normalized-data']) {
+    await expect(page.locator('#job-status')).toBeVisible()
+    await expect(page.locator('#verdict')).toBeVisible()
+    await page.locator('#shell-tab-setup').click()
+    await expect(page.locator('#run-setup')).toBeVisible()
+    await page.locator('#shell-tab-tables').click()
+    for (const id of ['summary-metrics', 'policy-results', 'transaction-metrics', 'normalized-data']) {
       await expect(page.locator(`#${id}`)).toBeVisible()
     }
   })

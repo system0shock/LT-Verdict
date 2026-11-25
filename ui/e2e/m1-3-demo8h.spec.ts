@@ -16,7 +16,7 @@ let currentRunId = ''
 let baselineRunId = ''
 
 async function clearSeriesReleasesAndBaselines(page: Page) {
-  await page.goto('/?shell=new')
+  await page.goto('/')
   const bootstrap = await (await page.request.get('/api/bootstrap')).json() as { csrf_token: string }
   const headers = { Origin: new URL(page.url()).origin, 'X-LTV-CSRF': bootstrap.csrf_token }
   for (;;) {
@@ -28,7 +28,7 @@ async function clearSeriesReleasesAndBaselines(page: Page) {
 }
 
 async function analyzeDemoRelease(page: Page, releaseId: string) {
-  await page.goto('/?shell=new')
+  await page.goto('/')
   const base = join(demoDir, releaseId)
   await page.getByTestId('input-file').setInputFiles(join(base, 'load.jtl'))
   await page.getByTestId('policy-file').setInputFiles(join(demoDir, 'policy.json'))
@@ -80,20 +80,13 @@ test.describe.serial('M1.3 demo-8h real server verification (Slices 4, 6, 7)', (
     await saveReleaseAndOpenHistory(page, '2026.09.3')
   })
 
-  test('Slice 7: 1-click opens demo-8h run in new shell, while ?shell=old keeps 2-click', async ({ page }) => {
-    await page.goto('/?shell=new')
+  test('Slice 7: 1-click opens demo-8h run in default shell', async ({ page }) => {
+    await page.goto('/')
     await expect(page.locator('#shell-tab-setup')).toHaveAttribute('aria-selected', 'true')
     await page.locator(`[data-testid="run-list"] li[title="${currentRunId}"] button`).click()
     await expect(page.locator('#shell-tab-overview')).toHaveAttribute('aria-selected', 'true')
     await expect(page.locator('#verdict')).toContainText('FAIL')
     await expect(page.getByTestId('overview-panel')).toBeVisible()
-
-    await page.goto('/?shell=old')
-    await page.locator(`[data-testid="run-list"] li[title="${currentRunId}"] button`).click()
-    await expect(page.getByRole('heading', { name: 'Saved analyses' })).toBeVisible()
-    await expect(page.locator('#verdict')).toHaveCount(0)
-    await page.locator('section[aria-labelledby="analysis-list-title"] li button').first().click()
-    await expect(page.locator('#verdict')).toBeVisible()
   })
 
   test('Slice 4: Compare and History render CSP-safe ECharts on demo-8h data', async ({ page }) => {
@@ -101,7 +94,7 @@ test.describe.serial('M1.3 demo-8h real server verification (Slices 4, 6, 7)', (
       (window as never as { csp: string[] }).csp = []
       document.addEventListener('securitypolicyviolation', (event) => (window as never as { csp: string[] }).csp.push(`${event.violatedDirective} ${event.blockedURI}`))
     })
-    await page.goto('/?shell=new')
+    await page.goto('/')
     await page.locator(`[data-testid="run-list"] li[title="${currentRunId}"] button`).click()
     await expect(page.getByTestId('overview-panel')).toBeVisible()
     await expect(page.getByTestId('verdict-kpis')).toBeVisible()
@@ -148,7 +141,7 @@ test.describe.serial('M1.3 demo-8h real server verification (Slices 4, 6, 7)', (
   })
 
   test('Slice 6: Tables has sub-tabs, sorting and 100% Russian labels on demo-8h data', async ({ page }) => {
-    await page.goto('/?shell=new')
+    await page.goto('/')
     await page.locator(`[data-testid="run-list"] li[title="${currentRunId}"] button`).click()
     await expect(page.getByTestId('overview-panel')).toBeVisible()
     await expect(page.getByTestId('verdict-kpis')).toBeVisible()
@@ -203,7 +196,7 @@ test.describe.serial('M1.3 demo-8h real server verification (Slices 4, 6, 7)', (
       test(`demo-8h Compare, History, Tables pass axe-core and 200% zoom (${size.width}x${size.height}, ${theme})`, async ({ page }) => {
         await page.setViewportSize(size)
         await page.emulateMedia({ colorScheme: theme })
-        await page.goto('/?shell=new')
+        await page.goto('/')
         await page.locator(`[data-testid="run-list"] li[title="${currentRunId}"] button`).click()
         await expect(page.getByTestId('overview-panel')).toBeVisible()
 

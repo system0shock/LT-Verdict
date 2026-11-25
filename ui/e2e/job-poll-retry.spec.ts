@@ -56,15 +56,15 @@ test('recovers from one failed job poll without flooding the server', async ({ p
   api.setPolicy((call) => (call === 1 ? 'fail-503' : call === 2 ? 'hold' : 'failed'))
   await page.goto('/')
 
-  await expect(page.locator('#job-status')).toContainText('PROCESSING')
-  await expect(page.getByTestId('poll-retrying')).toContainText('Connection problem')
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.PROCESSING)
+  await expect(page.getByTestId('poll-retrying')).toContainText(JOB_LABELS.retrying)
   await expect(page.getByTestId('poll-lost')).toHaveCount(0)
   await expect(page.getByRole('alert')).toHaveCount(0)
   await expect.poll(() => api.polls.length).toBe(2)
 
   api.release(processing)
   await expect(page.getByTestId('poll-retrying')).toHaveCount(0)
-  await expect(page.locator('#job-status')).toContainText('FAILED')
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.FAILED)
   await expect(page.locator('#job-status')).toContainText('TEST_DONE')
 
   expect(api.polls).toHaveLength(3)
@@ -80,12 +80,12 @@ test('does not let a late poll response override a cancelled job', async ({ page
 
   await expect(page.getByTestId('poll-retrying')).toBeVisible()
   await expect.poll(() => api.polls.length).toBe(2)
-  await page.getByRole('button', { name: 'Cancel analysis' }).click()
-  await expect(page.locator('#job-status')).toContainText('CANCELLED')
+  await page.getByRole('button', { name: JOB_LABELS.cancel }).click()
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.CANCELLED)
 
   api.release(processing)
   await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 1500)))
-  await expect(page.locator('#job-status')).toContainText('CANCELLED')
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.CANCELLED)
   await expect(page.getByTestId('poll-retrying')).toHaveCount(0)
   expect(api.polls).toHaveLength(2)
   expect(api.deletes).toBe(1)
@@ -98,42 +98,39 @@ test('treats a hung job poll as a failed attempt and polls again', async ({ page
   await page.goto('/')
 
   await expect(page.getByTestId('poll-retrying')).toBeVisible({ timeout: 20_000 })
-  await expect(page.locator('#job-status')).toContainText('FAILED', { timeout: 10_000 })
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.FAILED, { timeout: 10_000 })
   expect(api.polls).toHaveLength(2)
 })
 
-for (const scenario of [
-  { name: 'legacy', path: '/', lost: 'Connection lost', retry: 'Retry', cancel: 'Cancel analysis', processing: 'PROCESSING', failed: 'FAILED' },
-  { name: 'new shell', path: '/?shell=new', lost: 'Связь потеряна', retry: 'Повторить', cancel: JOB_LABELS.cancel, processing: JOB_LABELS.states.PROCESSING, failed: JOB_LABELS.states.FAILED },
-]) {
-  test(`stops after a long outage and offers Retry (${scenario.name})`, async ({ page }) => {
-    await page.clock.install()
-    const api = await fixtureApi(page)
-    api.setPolicy((call) => (call % 2 === 0 ? 'fail-503' : 'fail-network'))
-    await page.goto(scenario.path)
+const scenario = { lost: 'Связь потеряна', retry: JOB_LABELS.retry, cancel: JOB_LABELS.cancel, processing: JOB_LABELS.states.PROCESSING, failed: JOB_LABELS.states.FAILED }
 
-    const lost = page.getByTestId('poll-lost')
-    await expect.poll(async () => {
-      await page.clock.runFor(10_000)
-      return lost.count()
-    }, { timeout: 30_000 }).toBe(1)
-    await expect(lost).toContainText(scenario.lost)
-    await expect(page.locator('#job-status')).toContainText(scenario.processing)
-    await expect(page.getByRole('button', { name: scenario.cancel })).toBeVisible()
-    const callsWhenLost = api.polls.length
-    expect(callsWhenLost).toBe(10)
+test('stops after a long outage and offers Retry', async ({ page }) => {
+  await page.clock.install()
+  const api = await fixtureApi(page)
+  api.setPolicy((call) => (call % 2 === 0 ? 'fail-503' : 'fail-network'))
+  await page.goto('/')
 
-    await page.clock.runFor(300_000)
-    expect(api.polls).toHaveLength(callsWhenLost)
+  const lost = page.getByTestId('poll-lost')
+  await expect.poll(async () => {
+    await page.clock.runFor(10_000)
+    return lost.count()
+  }, { timeout: 30_000 }).toBe(1)
+  await expect(lost).toContainText(scenario.lost)
+  await expect(page.locator('#job-status')).toContainText(scenario.processing)
+  await expect(page.getByRole('button', { name: scenario.cancel })).toBeVisible()
+  const callsWhenLost = api.polls.length
+  expect(callsWhenLost).toBe(10)
 
-    api.setPolicy(() => 'failed')
-    await page.getByRole('button', { name: scenario.retry }).click()
-    await expect.poll(async () => {
-      await page.clock.runFor(1_000)
-      return page.locator('#job-status').innerText()
-    }, { timeout: 30_000 }).toContain(scenario.failed)
-    await expect(lost).toHaveCount(0)
-    await expect(page.getByRole('button', { name: scenario.retry })).toHaveCount(0)
-    expect(api.polls).toHaveLength(callsWhenLost + 1)
-  })
-}
+  await page.clock.runFor(300_000)
+  expect(api.polls).toHaveLength(callsWhenLost)
+
+  api.setPolicy(() => 'failed')
+  await page.getByRole('button', { name: scenario.retry }).click()
+  await expect.poll(async () => {
+    await page.clock.runFor(1_000)
+    return page.locator('#job-status').innerText()
+  }, { timeout: 30_000 }).toContain(scenario.failed)
+  await expect(lost).toHaveCount(0)
+  await expect(page.getByRole('button', { name: scenario.retry })).toHaveCount(0)
+  expect(api.polls).toHaveLength(callsWhenLost + 1)
+})

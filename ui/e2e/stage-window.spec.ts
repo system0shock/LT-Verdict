@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import type { AnalysisResult } from '../src/types'
 import { BASELINE_LABELS, OVERVIEW_LABELS } from '../src/shell/labels'
 import { ADVICE_LABELS } from '../src/shell/labels.advice'
-import { EN_ANALYTICS_LABELS } from '../src/shell/labels.export'
+import { ANALYTICS_LABELS } from '../src/shell/labels.export'
 import { STAGE_DECIDED_PHRASE, STAGE_MARKER, STAGE_REFERENCE_NOTE, summarizeVerdict } from '../src/verdictSummary'
 
 // ADR 0030, PR C: a run with declared stages says aloud that its verdict is by the steady window. The stage_binding is the real
@@ -111,7 +111,7 @@ test.describe('stage window in the verdict summary', () => {
   test('the labels exist: the comparison warning, the evidence type and the whole-run note', () => {
     expect(BASELINE_LABELS.warnings.WHOLE_RUN_METRICS_WITH_STAGES).toContain('по всему прогону, справочно')
     expect(ADVICE_LABELS.evidence.types.stage_binding).toBe('Стадии нагрузки (окно steady)')
-    expect(EN_ANALYTICS_LABELS.wholeRunNote).toContain('whole-run metrics')
+    expect(ANALYTICS_LABELS.wholeRunNote).toContain('по всему прогону, справочно')
   })
 })
 
@@ -130,6 +130,7 @@ async function fixtureApi(page: Page, result: unknown) {
     else if (method === 'GET' && /^\/api\/runs\/[^/]+\/analyses\/[^/]+\/advice$/.test(path)) body = { advice: null, job: null }
     else if (path === '/api/sources') body = { profiles: [] }
     else if (path === '/api/runs') body = { runs: [run], next_after: null }
+    else if (path === '/api/releases') body = { releases: [], series_summary: [], corrupt_count: 0, next_after: null }
     else if (path === '/api/baseline') body = { baseline: null }
     else if (path.endsWith('/analytics')) {
       body = {
@@ -147,7 +148,7 @@ async function fixtureApi(page: Page, result: unknown) {
 }
 
 async function openSaved(page: Page) {
-  await page.goto('/?shell=old')
+  await page.goto('/')
   await page.getByRole('button', { name: 'stages.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
@@ -179,20 +180,22 @@ test.describe('stage window on the screen', () => {
   test('the saved analytics say the metrics are of the whole run only for a staged analysis', async ({ page }) => {
     await fixtureApi(page, staged('PASS', [rule('PASS')]))
     await openSaved(page)
-    await page.getByRole('button', { name: EN_ANALYTICS_LABELS.refresh, exact: true }).click()
-    await expect(page.getByTestId('analytics-whole-run')).toHaveText(EN_ANALYTICS_LABELS.wholeRunNote)
+    await page.locator('#shell-tab-history').click()
+    await page.getByRole('button', { name: ANALYTICS_LABELS.refresh, exact: true }).click()
+    await expect(page.getByTestId('analytics-whole-run')).toHaveText(ANALYTICS_LABELS.wholeRunNote)
 
     const other = await page.context().newPage()
     await fixtureApi(other, plain('PASS', [rule('PASS')]))
     await openSaved(other)
-    await other.getByRole('button', { name: EN_ANALYTICS_LABELS.refresh, exact: true }).click()
-    await expect(other.getByRole('heading', { name: EN_ANALYTICS_LABELS.title })).toBeVisible()
+    await other.locator('#shell-tab-history').click()
+    await other.getByRole('button', { name: ANALYTICS_LABELS.refresh, exact: true }).click()
+    await expect(other.getByRole('heading', { name: ANALYTICS_LABELS.title })).toBeVisible()
     await expect(other.getByTestId('analytics-whole-run')).toHaveCount(0)
   })
 
-  test('the key metrics of the new shell say they are of the whole run only for a staged analysis', async ({ page }) => {
+  test('the key metrics say they are of the whole run only for a staged analysis', async ({ page }) => {
     await fixtureApi(page, staged('PASS', [rule('PASS')]))
-    await page.goto('/?shell=new')
+    await page.goto('/')
     await page.getByRole('button', { name: 'stages.jtl' }).click()
     await page.locator(`button[title="${reference.analysis_id}"]`).click()
     await expect(page.locator('#overview-metrics')).toBeVisible()
@@ -200,7 +203,7 @@ test.describe('stage window on the screen', () => {
 
     await page.unroute('**/api/**')
     await fixtureApi(page, plain('PASS', [rule('PASS')]))
-    await page.goto('/?shell=new')
+    await page.goto('/')
     await page.getByRole('button', { name: 'stages.jtl' }).click()
     await page.locator(`button[title="${reference.analysis_id}"]`).click()
     await expect(page.locator('#overview-metrics')).toBeVisible()

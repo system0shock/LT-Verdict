@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { JOB_LABELS } from '../src/shell/labels'
 
 const firstPageRun = { run_id: `jmeter_jtl_csv-${'1'.repeat(64)}`, source_type: 'jmeter_jtl_csv', sha256: '1'.repeat(64), size_bytes: 100, original_filename: 'early.jtl' }
 const activeRun = { run_id: `jmeter_jtl_csv-${'e'.repeat(64)}`, source_type: 'jmeter_jtl_csv', sha256: 'e'.repeat(64), size_bytes: 100, original_filename: 'late.jtl' }
@@ -46,14 +47,14 @@ test('restores an active job whose run is on a later runs page and cancels it', 
   await fixtureApi(page, 'active')
   await page.goto('/')
 
-  await expect(page.locator('#job-status')).toContainText('PROCESSING')
-  await expect(page.getByRole('button', { name: 'Cancel analysis' })).toBeVisible()
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.PROCESSING)
+  await expect(page.getByRole('button', { name: JOB_LABELS.cancel })).toBeVisible()
   await expect(page.getByTestId('run-list').locator('button[aria-pressed="true"]')).toContainText('late.jtl')
   await expect(page.getByTestId('run-list').getByRole('button', { name: /early\.jtl/ })).toBeDisabled()
 
-  await page.getByRole('button', { name: 'Cancel analysis' }).click()
-  await expect(page.locator('#job-status')).toContainText('CANCELLED')
-  await expect(page.getByRole('button', { name: 'Cancel analysis' })).toHaveCount(0)
+  await page.getByRole('button', { name: JOB_LABELS.cancel }).click()
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.CANCELLED)
+  await expect(page.getByRole('button', { name: JOB_LABELS.cancel })).toHaveCount(0)
   await expect(page.getByTestId('run-list').getByRole('button', { name: /early\.jtl/ })).toBeEnabled()
 })
 
@@ -71,7 +72,7 @@ test('keeps polling the restored job when a later runs page fails to load', asyn
   await page.goto('/')
 
   await expect(page.getByRole('alert')).toContainText('Runs page failed')
-  await expect(page.locator('#job-status')).toContainText('CANCELLED')
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.CANCELLED)
 })
 
 test('does not override a run selected while the active job listing is pending', async ({ page }) => {

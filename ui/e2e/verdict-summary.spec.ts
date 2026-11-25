@@ -467,13 +467,13 @@ test.describe('verdict summary', () => {
     }))
 
     expect(summary.headline).toBe('Вердикт по ёмкости не выдан — границы недостаточно')
-    expect(summary.lead).toBe('Граница ёмкости: BOUNDED [296, 344) requests/s. Подробности по ступеням — в таблице ниже.')
+    expect(summary.lead).toBe('Граница ёмкости: BOUNDED [296, 344) requests/s. Подробности по ступеням — в таблице на вкладке «Таблицы».')
     expect(summary.causes).toHaveLength(1)
     expect(summary.causes[0].code).toBeNull()
     expect(summary.causes[0].text).toContain('не позволяет сравнить её с требуемой ёмкостью')
   })
 
-  test('capacity outcomes show no empty list heading and point to the tables tab in the new shell', () => {
+  test('capacity outcomes show no empty list heading and point to the tables tab', () => {
     const capacity = (verdict: string, bound: string, lower: number | null, upper: number | null) => build({
       analysis_mode: 'capacity_step',
       policy_verdict: verdict,
@@ -484,8 +484,7 @@ test.describe('verdict summary', () => {
       const summary = summarizeVerdict(result)
       expect(summary.linesTitle).toBeNull()
       expect(summary.lines).toEqual([])
-      expect(summary.lead).toContain('в таблице ниже')
-      expect(summarizeVerdict(result, { tabs: true }).lead).toContain('на вкладке «Таблицы»')
+      expect(summary.lead).toContain('в таблице на вкладке «Таблицы»')
     }
   })
 

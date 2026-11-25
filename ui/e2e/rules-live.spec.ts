@@ -13,7 +13,7 @@ const jtlNext = Buffer.from([header, ...Array.from({ length: 30 }, (_, index) =>
   `${1788211917499 + index * 1000},100,GET /c,200,OK,fixture 1-1,text,true,,0,0,1,1,null,0,0,0`)].join('\n') + '\n')
 
 test('live rules template and transaction expansion validate and affect the next analysis', async ({ page }) => {
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-rules').click()
   await page.getByRole('button', { name: RULES_LABELS.templateName('api-basic') }).click()
   await expect(page.getByLabel(RULES_LABELS.policyId)).toHaveValue('template-api-basic')
@@ -73,7 +73,7 @@ test('live trial run applies a draft policy to the open run through the core wit
   const trialJtl = Buffer.from([header, ...rows].join('\n') + '\n')
   const inputs: string[] = []
   page.on('request', (request) => { if (request.method() === 'POST' && request.url().endsWith('/api/inputs')) inputs.push(request.url()) })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   const upload = page.waitForResponse((response) => response.url().endsWith('/api/inputs') && response.request().method() === 'POST')
   await page.getByTestId('input-file').setInputFiles({ name: 'trial.jtl', mimeType: 'text/csv', buffer: trialJtl })
   await page.getByRole('button', { name: SETUP_LABELS.startButton }).click()
@@ -111,7 +111,7 @@ test('live trial run applies a draft policy to the open run through the core wit
 })
 
 test('live server validates the sample minimum fields of the editor', async ({ page }) => {
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-rules').click()
   await page.getByRole('button', { name: RULES_LABELS.templateName('api-throughput') }).click()
   await expect(page.getByLabel(RULES_LABELS.policyId)).toHaveValue('template-api-throughput')

@@ -4,12 +4,10 @@ import AnalysisView from './AnalysisView.vue'
 import AdvicePanel from './AdvicePanel.vue'
 import JenkinsPanel from './JenkinsPanel.vue'
 import AnalyticsPanel from './AnalyticsPanel.vue'
-import GrafanaPanel from './GrafanaPanel.vue'
 import BaselinePanel from './BaselinePanel.vue'
 import HistoryPanel from './shell/HistoryPanel.vue'
 import { analysisSummary, runSummaryFromId } from './shell/history'
 import JobStatusView from './JobStatus.vue'
-import RunSetup from './RunSetup.vue'
 import VerdictCard from './VerdictCard.vue'
 import NewAnalysisPanel from './shell/NewAnalysisPanel.vue'
 import RulesPanel from './shell/RulesPanel.vue'
@@ -26,7 +24,6 @@ import ShellTabs from './shell/ShellTabs.vue'
 import { JOB_LABELS, SETUP_LABELS, SETUP_MESSAGES, SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
 import { NORMALIZED_LABELS, type TablesSubTabKey } from './shell/labels.tables'
 import { tablesTargetSubTab } from './shell/tables'
-import { browserStorage, resolveNewShell } from './shell/shell'
 import {
   ApiError,
   bootstrap,
@@ -52,53 +49,11 @@ import { summarizeVerdict } from './verdictSummary'
 import type { AttentionTarget } from './shell/overview'
 import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, Release, ReleaseAnalysis, RunSummary, SourceCheckResponse, SourceProbeResponse, SourceProfile, SourceRequest, SourceStepMode, StageProposalResponse, Theme } from './types'
 import { COMPARE_LABELS } from './shell/labels.compare'
-import { ANALYTICS_LABELS, DOWNLOAD_LABELS, EN_ANALYTICS_LABELS, EN_DOWNLOAD_LABELS, EXPORT_LABELS } from './shell/labels.export'
+import { ANALYTICS_LABELS, DOWNLOAD_LABELS, EXPORT_LABELS } from './shell/labels.export'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-const shellNew = resolveNewShell(window.location.search, browserStorage())
-const uploadLabels = shellNew
-  ? UPLOAD_LABELS
-  : { cancel: 'Cancel upload', cancelled: 'Upload cancelled. No analysis was started; choose the file again if needed.' }
 const activeTab = ref<ShellTabKey>(SHELL_DEFAULT_TAB)
 const tablesSubTab = ref<TablesSubTabKey>('all')
-const legacyHref = window.location.pathname + '?shell=old'
-const chrome = shellNew
-  ? { noRun: SHELL_LABELS.noRun, completed: SHELL_LABELS.completed, toDark: SHELL_LABELS.themeToDark, toLight: SHELL_LABELS.themeToLight, runsTitle: SHELL_LABELS.runsTitle, runsEmpty: SHELL_LABELS.runsEmpty, runsMore: SHELL_LABELS.runsMore, analysesTitle: SHELL_LABELS.analysesTitle, analysisItem: SHELL_LABELS.analysisItem, analysesEmpty: SHELL_LABELS.analysesEmpty, analysesMore: SHELL_LABELS.analysesMore }
-  : { noRun: 'No run selected', completed: 'Completed', toDark: 'Dark theme', toLight: 'Light theme', runsTitle: 'Accepted runs', runsEmpty: 'No runs yet', runsMore: 'More runs', analysesTitle: 'Saved analyses', analysisItem: 'Analysis', analysesEmpty: 'No saved analyses for this run.', analysesMore: 'More analyses' }
-const jobLabels = shellNew
-  ? JOB_LABELS
-  : {
-      retrying: 'Connection problem. Retrying the job status request...', lost: 'Connection lost. The job status is no longer updating, but the job may still be running on the server.', retry: 'Retry',
-      states: {}, uploading: 'UPLOADING', uploaded: (percent: number) => `${percent}% uploaded`, bytes: (processed: string, total: string) => `${processed} / ${total} bytes`,
-      busyTitle: '⚠ BUSY', busyText: 'The local analysis queue is full. Cancel a queued job or wait, then try again.', cancel: 'Cancel analysis',
-    }
-const downloadLabels = shellNew ? DOWNLOAD_LABELS : EN_DOWNLOAD_LABELS
-const analyticsLabels = shellNew ? ANALYTICS_LABELS : EN_ANALYTICS_LABELS
-type SetupMessages = { [K in keyof typeof SETUP_MESSAGES]: (typeof SETUP_MESSAGES)[K] extends string ? string : (id: string) => string }
-const legacySetupMessages: SetupMessages = {
-  contextTooMany: 'OpenSearch context accepts at most 16 files.',
-  profilesTooMany: 'Online source accepts at most 16 profiles.',
-  autoRequired: 'Online source requires step, margin, and max idle gap in milliseconds.',
-  autoNotInteger: 'Step, margin, and max idle gap must be safe integer milliseconds.',
-  stepWholeSeconds: 'Source step must be whole seconds from 1000 to 60000 ms.',
-  marginRange: 'Margin must be at most 3 600 000 ms and a multiple of the step.',
-  idleGap: 'Max idle gap must be at least the step and a multiple of it.',
-  marginRangeAuto: 'Margin must be at most 3 600 000 ms.',
-  idleGapAuto: 'Max idle gap must be at least the step and a whole number of seconds.',
-  explicitRequired: 'Online source requires start, end, and step in UTC epoch milliseconds.',
-  explicitNotInteger: 'Source times and step must be safe integer milliseconds.',
-  explicitOrder: 'Source end must be after a non-negative start.',
-  explicitDivisible: 'Source range must be divisible by its step.',
-  explicitTooManyCells: 'Source range may hold at most 100000 cells (range divided by step): increase the step or shorten the period.',
-  diagnosticNeedsSnapshot: 'Correlation plan requires a matching resource snapshot.',
-  capacityNeedsSnapshot: 'Capacity plan requires a matching resource snapshot.',
-  trendNeedsSnapshot: 'Trend plan requires a matching resource snapshot.',
-  policyValidating: 'Validating policy…',
-  policyInvalid: 'Policy is invalid',
-  policyMalformed: 'Policy is not valid JSON.',
-  policyValid: (id) => `Policy is valid — ${id}`,
-}
-const setupMsg: SetupMessages = shellNew ? SETUP_MESSAGES : legacySetupMessages
 const MAX_SOURCE_CELLS = 100_000
 const POLL_FAST_WINDOW_MS = 10_000
 const POLL_FAST_DELAY_MS = 500
@@ -108,7 +63,6 @@ const POLL_MAX_BACKOFF_MS = 10_000
 const POLL_MAX_FAILURES = 10
 const POLL_REQUEST_TIMEOUT_MS = 10_000
 const POLL_MAX_FAILURE_DURATION_MS = 120_000
-const shownIn = (tab: ShellTabKey) => !shellNew || activeTab.value === tab
 const apiReady = ref(false)
 const inputFile = ref<File | null>(null)
 const resourceFile = ref<File | null>(null)
@@ -193,12 +147,12 @@ let uploadAbort: AbortController | null = null
 const verdictSummary = computed(() => {
   if (!result.value) return null
   const analysis = analyses.value.find((item) => item.analysis_id === selectedAnalysisId.value)
-  return summarizeVerdict(result.value, { policySha256: analysis?.policy_sha256, policyId: analysis?.policy_id, tabs: shellNew })
+  return summarizeVerdict(result.value, { policySha256: analysis?.policy_sha256, policyId: analysis?.policy_id })
 })
 watch(activeTab, () => { tabRevision += 1 })
 // Under 960 px the side column stacks above the workspace: scroll to the workspace, not to the page top.
 watch([activeTab, selectedAnalysisId], () => {
-  if (shellNew) window.scrollTo(0, window.scrollY + (document.querySelector('.workspace')?.getBoundingClientRect().top ?? -window.scrollY))
+  window.scrollTo(0, window.scrollY + (document.querySelector('.workspace')?.getBoundingClientRect().top ?? -window.scrollY))
 })
 const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
 const selectedReference = computed(() => result.value && selectedAnalysisId.value
@@ -219,36 +173,36 @@ const preferredSeries = ref<string>()
 const httpSourceProfiles = computed(() => sourceProfiles.value.filter((profile) => profile.source_kind !== 'postgresql'))
 const postgresProfiles = computed(() => sourceProfiles.value.filter((profile) => profile.source_kind === 'postgresql' && profile.transport === 'jdbc'))
 const sourceRequestState = computed<{ request: SourceRequest | null; error: string }>(() => {
-  if (sourceContextFiles.value.length > 16) return { request: null, error: setupMsg.contextTooMany }
+  if (sourceContextFiles.value.length > 16) return { request: null, error: SETUP_MESSAGES.contextTooMany }
   const profileIds = [...sourceProfileIds.value].sort()
   if (!profileIds.length) return { request: null, error: '' }
-  if (profileIds.length > 16) return { request: null, error: setupMsg.profilesTooMany }
+  if (profileIds.length > 16) return { request: null, error: SETUP_MESSAGES.profilesTooMany }
   const stepAuto = sourceStepMode.value === 'auto'
   if (sourceWindowOrigin.value === 'auto') {
-    if (!sourceStep.value || !sourceMargin.value || !sourceMaxIdleGap.value) return { request: null, error: setupMsg.autoRequired }
+    if (!sourceStep.value || !sourceMargin.value || !sourceMaxIdleGap.value) return { request: null, error: SETUP_MESSAGES.autoRequired }
     const step = Number(sourceStep.value)
     const margin = Number(sourceMargin.value)
     const maxIdleGap = Number(sourceMaxIdleGap.value)
-    if (![step, margin, maxIdleGap].every(Number.isSafeInteger)) return { request: null, error: setupMsg.autoNotInteger }
-    if (!wholeSeconds(step)) return { request: null, error: setupMsg.stepWholeSeconds }
+    if (![step, margin, maxIdleGap].every(Number.isSafeInteger)) return { request: null, error: SETUP_MESSAGES.autoNotInteger }
+    if (!wholeSeconds(step)) return { request: null, error: SETUP_MESSAGES.stepWholeSeconds }
     // ADR 0014: в режиме auto запас и простой не обязаны быть кратны шагу, простой остаётся целым числом секунд.
-    if (margin < 0 || margin > 3_600_000 || (!stepAuto && margin % step !== 0)) return { request: null, error: stepAuto ? setupMsg.marginRangeAuto : setupMsg.marginRange }
-    if (maxIdleGap < step || maxIdleGap % (stepAuto ? 1000 : step) !== 0) return { request: null, error: stepAuto ? setupMsg.idleGapAuto : setupMsg.idleGap }
+    if (margin < 0 || margin > 3_600_000 || (!stepAuto && margin % step !== 0)) return { request: null, error: stepAuto ? SETUP_MESSAGES.marginRangeAuto : SETUP_MESSAGES.marginRange }
+    if (maxIdleGap < step || maxIdleGap % (stepAuto ? 1000 : step) !== 0) return { request: null, error: stepAuto ? SETUP_MESSAGES.idleGapAuto : SETUP_MESSAGES.idleGap }
     const request: SourceRequest = stepAuto
       ? { schema_version: 'source-request.v4', profile_ids: profileIds, window: { origin: 'auto', step_ms: step, step_mode: 'auto', margin_ms: margin, max_idle_gap_ms: maxIdleGap } }
       : { schema_version: 'source-request.v3', profile_ids: profileIds, window: { origin: 'auto', step_ms: step, margin_ms: margin, max_idle_gap_ms: maxIdleGap } }
     return { request, error: '' }
   }
-  if (!sourceStart.value || !sourceEnd.value || !sourceStep.value) return { request: null, error: setupMsg.explicitRequired }
+  if (!sourceStart.value || !sourceEnd.value || !sourceStep.value) return { request: null, error: SETUP_MESSAGES.explicitRequired }
   const start = Number(sourceStart.value)
   const end = Number(sourceEnd.value)
   const step = Number(sourceStep.value)
-  if (![start, end, step].every(Number.isSafeInteger)) return { request: null, error: setupMsg.explicitNotInteger }
-  if (start < 0 || end <= start) return { request: null, error: setupMsg.explicitOrder }
-  if (!wholeSeconds(step)) return { request: null, error: setupMsg.stepWholeSeconds }
-  if ((end - start) % step !== 0) return { request: null, error: setupMsg.explicitDivisible }
+  if (![start, end, step].every(Number.isSafeInteger)) return { request: null, error: SETUP_MESSAGES.explicitNotInteger }
+  if (start < 0 || end <= start) return { request: null, error: SETUP_MESSAGES.explicitOrder }
+  if (!wholeSeconds(step)) return { request: null, error: SETUP_MESSAGES.stepWholeSeconds }
+  if ((end - start) % step !== 0) return { request: null, error: SETUP_MESSAGES.explicitDivisible }
   // Сервер не ограничивает число ячеек явного окна при step_mode auto: шаг подберёт планировщик.
-  if (!stepAuto && (end - start) / step > MAX_SOURCE_CELLS) return { request: null, error: setupMsg.explicitTooManyCells }
+  if (!stepAuto && (end - start) / step > MAX_SOURCE_CELLS) return { request: null, error: SETUP_MESSAGES.explicitTooManyCells }
   const request: SourceRequest = stepAuto
     ? { schema_version: 'source-request.v4', profile_ids: profileIds, window: { origin: 'explicit', start_epoch_ms: start, end_epoch_ms: end, step_ms: step, step_mode: 'auto' } }
     : { schema_version: 'source-request.v3', profile_ids: profileIds, window: { origin: 'explicit', start_epoch_ms: start, end_epoch_ms: end, step_ms: step } }
@@ -534,24 +488,24 @@ function updatePolicy(draft: Policy) {
 
 async function validateDraft(draft: Policy | File): Promise<Policy | null> {
   const revision = ++policyRevision
-  policyStatus.value = setupMsg.policyValidating
+  policyStatus.value = SETUP_MESSAGES.policyValidating
   try {
     const validation = await validatePolicy(draft)
     if (revision !== policyRevision) return null
     if (!validation.valid) {
       policyErrors.value = validation.errors
-      policyStatus.value = setupMsg.policyInvalid
+      policyStatus.value = SETUP_MESSAGES.policyInvalid
       return null
     }
     policy.value = validation.policy
     policyErrors.value = []
-    policyStatus.value = setupMsg.policyValid(validation.policy.policy_id)
+    policyStatus.value = SETUP_MESSAGES.policyValid(validation.policy.policy_id)
     return validation.policy
   } catch (failure) {
     if (revision === policyRevision) {
-      policyStatus.value = setupMsg.policyInvalid
+      policyStatus.value = SETUP_MESSAGES.policyInvalid
       if (failure instanceof ApiError && failure.code === 'MALFORMED_JSON') {
-        policyErrors.value = [{ code: 'MALFORMED_JSON', json_pointer: '', message: setupMsg.policyMalformed }]
+        policyErrors.value = [{ code: 'MALFORMED_JSON', json_pointer: '', message: SETUP_MESSAGES.policyMalformed }]
       } else {
         showError(failure)
       }
@@ -590,7 +544,7 @@ async function ensureUploadedInput(file: File, isCurrent: () => boolean): Promis
 }
 
 async function requestStageProposal() {
-  if (!shellNew || !inputFile.value || proposingStages.value || working.value || (uploadProgress.value > 0 && !job.value) || postgresCapturePhase.value || trialBusy.value) return
+  if (!inputFile.value || proposingStages.value || working.value || (uploadProgress.value > 0 && !job.value) || postgresCapturePhase.value || trialBusy.value) return
   const file = inputFile.value
   const revision = ++stageProposalRevision
   proposingStages.value = true
@@ -634,15 +588,15 @@ async function analyze(pairSlots?: string[][]) {
     return
   }
   if (diagnosticFile.value && !resourceFile.value) {
-    errorMessage.value = setupMsg.diagnosticNeedsSnapshot
+    errorMessage.value = SETUP_MESSAGES.diagnosticNeedsSnapshot
     return
   }
   if (capacityFile.value && !resourceFile.value) {
-    errorMessage.value = setupMsg.capacityNeedsSnapshot
+    errorMessage.value = SETUP_MESSAGES.capacityNeedsSnapshot
     return
   }
   if (trendFile.value && !resourceFile.value) {
-    errorMessage.value = setupMsg.trendNeedsSnapshot
+    errorMessage.value = SETUP_MESSAGES.trendNeedsSnapshot
     return
   }
   const file = inputFile.value
@@ -675,7 +629,7 @@ async function analyze(pairSlots?: string[][]) {
     if (revision !== analysisRevision) return
     const accepted = await ensureUploadedInput(file, () => revision === analysisRevision)
     if (revision !== analysisRevision) return
-    const stagesText = shellNew ? stagesJson.value.trim() : ''
+    const stagesText = stagesJson.value.trim()
     const stagesBlob = stagesText ? new Blob([stagesText], { type: 'application/json' }) : null
     // Пара плеч: тот же загруженный вход, по заданию на плечо, строго по очереди; одиночный запуск - один проход цикла.
     const requests = pairSlots ? pairSourceRequests(sourceRequestState.value.request!, pairSlots) : [sourceRequestState.value.request]
@@ -793,7 +747,7 @@ async function pollJob(revision: number, tabAtStart = tabRevision) {
   if (adviceRevision === revision) adviceAutoFor.value = selectedAnalysisId.value
   tablesSubTab.value = 'all'
   result.value = loaded
-  if (shellNew && !trialBusy.value && tabRevision === tabAtStart) activeTab.value = 'overview'
+  if (!trialBusy.value && tabRevision === tabAtStart) activeTab.value = 'overview'
   completedAt.value = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date())
   await refreshAnalyses(job.value.run_id)
   if (revision !== analysisRevision || !result.value) return
@@ -858,19 +812,19 @@ function cancelUpload() {
   uploadAbort = null
   uploading.value = false
   controller.abort()
-  if (shellNew) activeTab.value = 'setup'
+  activeTab.value = 'setup'
   void nextTick(() => document.getElementById('input-file')?.focus())
 }
 
-const acceptedAtFormat = new Intl.DateTimeFormat(shellNew ? 'ru-RU' : undefined, { dateStyle: 'medium', timeStyle: shellNew ? 'medium' : 'short' })
-// New shell: a file name repeated by every listed run tells nothing, the acceptance time stands in for it.
+const acceptedAtFormat = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'medium' })
+// A file name repeated by every listed run tells nothing, the acceptance time stands in for it.
 const fileNameTellsRunsApart = computed(() => runs.value.length < 2 || new Set(runs.value.map((run) => run.original_filename)).size > 1)
-const timeInTitle = (run: RunSummary) => shellNew && !fileNameTellsRunsApart.value && !!run.accepted_at
+const timeInTitle = (run: RunSummary) => !fileNameTellsRunsApart.value && !!run.accepted_at
 const runTitle = (run: RunSummary) => timeInTitle(run) ? `${SHELL_LABELS.runAccepted} ${acceptedAtFormat.format(new Date(run.accepted_at!))}` : run.original_filename
 const selectedAnalysis = computed(() => analyses.value.find((item) => item.analysis_id === selectedAnalysisId.value))
 const analysisContext = computed(() => {
   const analysis = selectedAnalysis.value
-  if (!shellNew || !analysis) return ''
+  if (!analysis) return ''
   const parts = analysis.policy_verdict === 'NO_POLICY' ? [] : [`${SHELL_LABELS.runPolicy} ${analysis.policy_id ?? analysis.policy_sha256.slice(0, 8)}`]
   if (analysis.resource_arm) parts.push(`${SHELL_LABELS.runArm} ${analysis.resource_arm}`)
   return parts.join(' · ')
@@ -906,7 +860,7 @@ async function selectRun(run: RunSummary, options: { autoOpen?: boolean } = {}) 
   try {
     await refreshAnalyses(run.run_id)
     if (revision !== analysisRevision) return
-    if (shellNew && options.autoOpen !== false && analyses.value.length > 0) {
+    if (options.autoOpen !== false && analyses.value.length > 0) {
       await selectAnalysis(analyses.value[0], { tabAtStart })
     }
   } catch (failure) {
@@ -932,7 +886,7 @@ async function selectAnalysis(analysis: AnalysisSummary, options: { tabAtStart?:
   const runId = currentRun.value?.run_id
   if (!runId) return
   const tabAtStart = options.tabAtStart ?? tabRevision
-  if (shellNew && selectedAnalysisId.value === analysis.analysis_id) {
+  if (selectedAnalysisId.value === analysis.analysis_id) {
     if (result.value) {
       if (options.switchTab !== false) activeTab.value = 'overview'
       return
@@ -963,7 +917,7 @@ async function selectAnalysis(analysis: AnalysisSummary, options: { tabAtStart?:
       if (revision !== analysisRevision || selectedAnalysisId.value !== analysis.analysis_id) return
       tablesSubTab.value = 'all'
       result.value = loaded
-      if (shellNew && options.switchTab !== false && !trialBusy.value && tabRevision === tabAtStart) {
+      if (options.switchTab !== false && !trialBusy.value && tabRevision === tabAtStart) {
         activeTab.value = 'overview'
       }
       if (loaded.run_validity !== 'INVALID') await refreshBuckets()
@@ -1041,7 +995,6 @@ function showBaselineSeries(series: string) {
 }
 
 async function showVerdict() {
-  if (!shellNew) return
   activeTab.value = 'overview'
   await nextTick()
   const verdict = document.getElementById('verdict')
@@ -1053,10 +1006,10 @@ const deepFocus = ref<{ stageId?: string; seriesId?: string; nonce: number } | n
 let deepFocusNonce = 0
 
 async function jumpTo(target: AttentionTarget) {
-  if (shellNew && target.tab === 'tables' && tablesSubTab.value !== 'all') {
+  if (target.tab === 'tables' && tablesSubTab.value !== 'all') {
     tablesSubTab.value = tablesTargetSubTab(result.value, target.targetId)
   }
-  if (shellNew && target.tab === 'deep' && (target.stageId || target.seriesId)) {
+  if (target.tab === 'deep' && (target.stageId || target.seriesId)) {
     deepFocusNonce += 1
     deepFocus.value = { stageId: target.stageId, seriesId: target.seriesId, nonce: deepFocusNonce }
   }
@@ -1070,49 +1023,20 @@ async function jumpTo(target: AttentionTarget) {
     : element.querySelector<HTMLElement>('[tabindex="0"]')
   focusable?.focus({ preventScroll: true })
 }
-
-function focusPolicy() {
-  document.getElementById('policy-file')?.focus()
-}
 </script>
 
 <template>
-  <div
-    class="app-shell"
-    :class="{ shell: shellNew }"
-  >
+  <div class="app-shell shell">
     <aside class="sidebar side-navigation">
       <h1>LT Verdict</h1>
-      <nav
-        v-if="!shellNew"
-        aria-label="Application"
-      >
-        <button
-          type="button"
-          class="nav-item nav-item--active"
-          aria-current="page"
-        >
-          Runs
-        </button>
-        <button
-          type="button"
-          class="nav-item"
-          @click="focusPolicy"
-        >
-          Policies
-        </button>
-      </nav>
-      <ShellTabs
-        v-else
-        v-model="activeTab"
-      />
+      <ShellTabs v-model="activeTab" />
       <section
         class="run-list-section"
         aria-labelledby="run-list-title"
-        :lang="shellNew ? 'ru' : undefined"
+        lang="ru"
       >
         <h2 id="run-list-title">
-          {{ chrome.runsTitle }}
+          {{ SHELL_LABELS.runsTitle }}
         </h2>
         <ul
           data-testid="run-list"
@@ -1138,7 +1062,7 @@ function focusPolicy() {
             v-if="runs.length === 0"
             class="muted"
           >
-            {{ chrome.runsEmpty }}
+            {{ SHELL_LABELS.runsEmpty }}
           </li>
         </ul>
         <button
@@ -1146,17 +1070,17 @@ function focusPolicy() {
           type="button"
           @click="refreshRuns(nextRunAfter ?? undefined)"
         >
-          {{ chrome.runsMore }}
+          {{ SHELL_LABELS.runsMore }}
         </button>
       </section>
       <section
         v-if="currentRun"
         class="run-list-section"
         aria-labelledby="analysis-list-title"
-        :lang="shellNew ? 'ru' : undefined"
+        lang="ru"
       >
         <h2 id="analysis-list-title">
-          {{ chrome.analysesTitle }}
+          {{ SHELL_LABELS.analysesTitle }}
         </h2>
         <ul class="run-list">
           <li
@@ -1170,7 +1094,7 @@ function focusPolicy() {
               :aria-pressed="selectedAnalysisId === analysis.analysis_id"
               @click="selectAnalysis(analysis)"
             >
-              <span>{{ chrome.analysisItem }} {{ analysis.analysis_id.slice(0, 12) }}</span>
+              <span>{{ SHELL_LABELS.analysisItem }} {{ analysis.analysis_id.slice(0, 12) }}</span>
               <small>{{ analysis.policy_verdict }} · {{ analysis.run_validity }}<span v-if="analysis.policy_id"> · {{ analysis.policy_id }}</span></small>
             </button>
           </li>
@@ -1178,7 +1102,7 @@ function focusPolicy() {
             v-if="analyses.length === 0"
             class="muted"
           >
-            {{ chrome.analysesEmpty }}
+            {{ SHELL_LABELS.analysesEmpty }}
           </li>
         </ul>
         <button
@@ -1186,7 +1110,7 @@ function focusPolicy() {
           type="button"
           @click="refreshAnalyses(undefined, nextAnalysisAfter ?? undefined)"
         >
-          {{ chrome.analysesMore }}
+          {{ SHELL_LABELS.analysesMore }}
         </button>
       </section>
     </aside>
@@ -1194,16 +1118,16 @@ function focusPolicy() {
     <div class="workspace">
       <header
         class="app-header top-header"
-        :lang="shellNew ? 'ru' : undefined"
+        lang="ru"
       >
         <div class="run-identity">
-          <strong>{{ currentRun ? runTitle(currentRun) : chrome.noRun }}</strong>
+          <strong>{{ currentRun ? runTitle(currentRun) : SHELL_LABELS.noRun }}</strong>
           <span
             v-if="currentRun"
             class="mono"
           >{{ currentRun.source_type }} · {{ currentRun.run_id.slice(0, 24) }}…</span>
           <span v-if="analysisContext">{{ analysisContext }}</span>
-          <span v-if="completedAt">{{ chrome.completed }} {{ completedAt }}</span>
+          <span v-if="completedAt">{{ SHELL_LABELS.completed }} {{ completedAt }}</span>
         </div>
         <a
           v-if="verdictSummary"
@@ -1217,19 +1141,14 @@ function focusPolicy() {
         <button
           type="button"
           class="theme-toggle"
-          :aria-label="theme === 'light' ? chrome.toDark : chrome.toLight"
+          :aria-label="theme === 'light' ? SHELL_LABELS.themeToDark : SHELL_LABELS.themeToLight"
           @click="theme = theme === 'light' ? 'dark' : 'light'"
         >
           <span aria-hidden="true">{{ theme === 'light' ? '◐' : '◑' }}</span>
-          {{ theme === 'light' ? chrome.toDark : chrome.toLight }}
+          {{ theme === 'light' ? SHELL_LABELS.themeToDark : SHELL_LABELS.themeToLight }}
         </button>
         <a
-          v-if="shellNew"
-          class="shell-legacy-link"
-          :href="legacyHref"
-        >{{ SHELL_LABELS.legacyLink }}</a>
-        <a
-          v-if="shellNew && result && selectedAnalysisId"
+          v-if="result && selectedAnalysisId"
           class="button-secondary shell-export-link"
           :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=html`"
           download
@@ -1237,18 +1156,14 @@ function focusPolicy() {
       </header>
 
       <main>
-        <ShellPanel
-          :enabled="shellNew"
-          :active-tab="activeTab"
-        >
+        <ShellPanel :active-tab="activeTab">
           <VerdictCard
-            v-if="verdictSummary && shownIn('overview')"
+            v-if="verdictSummary && activeTab === 'overview'"
             :summary="verdictSummary"
-            :show-thresholds="shellNew"
           />
 
           <OverviewPanel
-            v-if="shellNew && result && selectedAnalysisId && shownIn('overview')"
+            v-if="result && selectedAnalysisId && activeTab === 'overview'"
             :key="result.run_id + ':' + selectedAnalysisId"
             :result="result"
             :run-id="result.run_id"
@@ -1258,7 +1173,7 @@ function focusPolicy() {
           />
 
           <DeepAnalysisPanel
-            v-if="shellNew && result && selectedAnalysisId && shownIn('deep')"
+            v-if="result && selectedAnalysisId && activeTab === 'deep'"
             :key="result.run_id + ':' + selectedAnalysisId"
             :result="result"
             :run-id="result.run_id"
@@ -1269,7 +1184,7 @@ function focusPolicy() {
           />
 
           <PodHeatmap
-            v-if="shellNew && result && selectedAnalysisId && shownIn('deep')"
+            v-if="result && selectedAnalysisId && activeTab === 'deep'"
             :key="'pods:' + result.run_id + ':' + selectedAnalysisId"
             :run-id="result.run_id"
             :analyses="analyses"
@@ -1277,7 +1192,7 @@ function focusPolicy() {
           />
 
           <p
-            v-if="shellNew && shownIn('overview') && !result"
+            v-if="activeTab === 'overview' && !result"
             class="notice notice-info"
             lang="ru"
           >
@@ -1285,16 +1200,15 @@ function focusPolicy() {
           </p>
 
           <p
-            v-if="shellNew && shownIn('deep') && !result"
+            v-if="activeTab === 'deep' && !result"
             class="notice notice-info"
             lang="ru"
           >
             {{ SHELL_LABELS.overviewEmpty }}
           </p>
 
-          <component
-            :is="shellNew ? NewAnalysisPanel : RunSetup"
-            v-show="shownIn('setup')"
+          <NewAnalysisPanel
+            v-show="activeTab === 'setup'"
             :input-file="inputFile"
             :resource-file="resourceFile"
             :diagnostic-file="diagnosticFile"
@@ -1316,28 +1230,27 @@ function focusPolicy() {
             :source-margin="sourceMargin"
             :source-max-idle-gap="sourceMaxIdleGap"
             :source-request-error="sourceRequestState.error"
-            :reloading-sources="shellNew ? reloadingSources : undefined"
-            :source-reload-status="shellNew ? sourceReloadStatus : undefined"
-            :source-reload-error="shellNew ? sourceReloadError : undefined"
-            :validating-sources="shellNew ? validatingSources : undefined"
-            :source-validation="shellNew ? sourceValidation : undefined"
-            :source-validation-error="shellNew ? sourceValidationError : undefined"
-            :probing-source="shellNew ? probingSource : undefined"
-            :source-probe-result="shellNew ? sourceProbeResult : undefined"
-            :source-probe-error="shellNew ? sourceProbeError : undefined"
+            :reloading-sources="reloadingSources"
+            :source-reload-status="sourceReloadStatus"
+            :source-reload-error="sourceReloadError"
+            :validating-sources="validatingSources"
+            :source-validation="sourceValidation"
+            :source-validation-error="sourceValidationError"
+            :probing-source="probingSource"
+            :source-probe-result="sourceProbeResult"
+            :source-probe-error="sourceProbeError"
             :policy="policy"
             :policy-status="policyStatus"
             :policy-errors="policyErrors"
             :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase || trialBusy || proposingStages"
-            :ai-requested="shellNew ? aiRequested : undefined"
-            :ai-config="shellNew ? aiConfig : undefined"
-            :ai-model="shellNew ? aiModel : undefined"
-            :stages-json="shellNew ? stagesJson : undefined"
-            :stage-proposal="shellNew ? stageProposal : undefined"
-            :stage-proposal-error="shellNew ? stageProposalError : undefined"
-            :stages-errors="shellNew ? stagesErrors : undefined"
-            :proposing-stages="shellNew ? proposingStages : undefined"
-
+            :ai-requested="aiRequested"
+            :ai-config="aiConfig"
+            :ai-model="aiModel"
+            :stages-json="stagesJson"
+            :stage-proposal="stageProposal"
+            :stage-proposal-error="stageProposalError"
+            :stages-errors="stagesErrors"
+            :proposing-stages="proposingStages"
             @input="selectInput"
             @resources="selectResources"
             @diagnostics="selectDiagnostics"
@@ -1361,7 +1274,6 @@ function focusPolicy() {
             @source-margin="sourceMargin = $event"
             @source-max-idle-gap="sourceMaxIdleGap = $event"
             @policy-file="selectPolicyFile"
-            @update-policy="updatePolicy"
             @open-rules="activeTab = 'rules'"
             @ai-requested="aiRequested = $event"
             @ai-model="aiModel = $event"
@@ -1385,42 +1297,41 @@ function focusPolicy() {
             :busy="queueBusy"
             :uploading="uploading"
             :upload-cancelled="uploadCancelled"
-            :upload-labels="uploadLabels"
-            :upload-lang="shellNew ? 'ru' : undefined"
+            :upload-labels="UPLOAD_LABELS"
+            upload-lang="ru"
             :poll-issue="pollIssue"
-            :labels="jobLabels"
-            :notice-lang="shellNew ? 'ru' : undefined"
+            :labels="JOB_LABELS"
+            notice-lang="ru"
             @cancel="cancel"
             @cancel-upload="cancelUpload"
             @retry="retryPoll"
           />
 
           <JenkinsPanel
-            v-if="apiReady && shownIn('setup')"
+            v-if="apiReady && activeTab === 'setup'"
             @imported="selectRun($event); refreshRuns()"
           />
 
           <BaselinePanel
             v-if="apiReady"
-            v-show="shownIn('compare')"
+            v-show="activeTab === 'compare'"
             :selection="selectedReference"
             :filename="currentRun?.original_filename ?? ''"
             :working="working"
-            :labels="shellNew ? COMPARE_LABELS : undefined"
-            :lang="shellNew ? 'ru' : undefined"
+            :labels="COMPARE_LABELS"
+            lang="ru"
             :version="baselineVersion"
             :preferred-series="preferredSeries"
             :facts="baselineFacts"
             :result="result"
-            :use-echarts="shellNew"
             @active-series="baselineSeries = $event"
           />
 
           <HistoryPanel
-            v-if="apiReady && shellNew"
-            v-show="shownIn('history')"
+            v-if="apiReady"
+            v-show="activeTab === 'history'"
             :selection="selectedReference"
-            :active="shownIn('history')"
+            :active="activeTab === 'history'"
             :version="baselineVersion"
             :working="working"
             @open="openReference($event, 'overview')"
@@ -1431,10 +1342,10 @@ function focusPolicy() {
 
           <div
             v-if="result && selectedAnalysisId"
-            v-show="!shellNew || activeTab === 'history'"
+            v-show="activeTab === 'history'"
             class="bucket-controls"
-            :aria-label="downloadLabels.group"
-            :lang="shellNew ? 'ru' : undefined"
+            :aria-label="DOWNLOAD_LABELS.group"
+            lang="ru"
           >
             <a
               v-for="format in ['json', 'html', 'asciidoc', 'confluence', 'svg']"
@@ -1442,89 +1353,88 @@ function focusPolicy() {
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=${format}`"
               download
-            >{{ downloadLabels.format(format) }}</a>
+            >{{ DOWNLOAD_LABELS.format(format) }}</a>
             <a
               v-if="result.evidence.some(item => item.type === 'resource_binding')"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/resource-snapshot`"
               download
-            >{{ downloadLabels.resourceSnapshot }}</a>
+            >{{ DOWNLOAD_LABELS.resourceSnapshot }}</a>
             <a
               v-if="result.capacity_summary"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/capacity-plan`"
               download
-            >{{ downloadLabels.capacityPlan }}</a>
+            >{{ DOWNLOAD_LABELS.capacityPlan }}</a>
             <a
               v-if="result.capacity_summary"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/capacity`"
               download
-            >{{ downloadLabels.capacityResult }}</a>
+            >{{ DOWNLOAD_LABELS.capacityResult }}</a>
             <a
               v-if="result.evidence.some(item => item.type === 'trend_summary')"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/trend-plan`"
               download
-            >{{ downloadLabels.trendPlan }}</a>
+            >{{ DOWNLOAD_LABELS.trendPlan }}</a>
             <a
               v-if="result.evidence.some(item => item.type === 'trend_summary')"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/trend`"
               download
-            >{{ downloadLabels.trendResult }}</a>
+            >{{ DOWNLOAD_LABELS.trendResult }}</a>
             <a
               v-for="(context, index) in downloadableSourceContexts"
               :key="context.profile_id"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/source-context${downloadableSourceContexts.length === 1 ? '' : `/${index + 1}`}`"
               download
-            >{{ downloadLabels.openSearchContext(downloadableSourceContexts.length === 1 ? null : context.profile_id) }}</a>
+            >{{ DOWNLOAD_LABELS.openSearchContext(downloadableSourceContexts.length === 1 ? null : context.profile_id) }}</a>
             <a
               v-if="postgresContext?.pre_sha256"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-pre`"
               download
-            >{{ downloadLabels.postgresPre }}</a>
+            >{{ DOWNLOAD_LABELS.postgresPre }}</a>
             <a
               v-if="postgresContext?.post_sha256"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-post`"
               download
-            >{{ downloadLabels.postgresPost }}</a>
+            >{{ DOWNLOAD_LABELS.postgresPost }}</a>
             <a
               v-if="postgresContext"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-context`"
               download
-            >{{ downloadLabels.postgresContext }}</a>
+            >{{ DOWNLOAD_LABELS.postgresContext }}</a>
             <a
               v-if="postgresContext?.pg_profile_html_sha256"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/pg-profile`"
               download
-            >{{ downloadLabels.pgProfile }}</a>
+            >{{ DOWNLOAD_LABELS.pgProfile }}</a>
           </div>
 
           <AnalyticsPanel
             v-if="selectedReference"
-            v-show="!shellNew || activeTab === 'history'"
+            v-show="activeTab === 'history'"
             :selection="selectedReference"
             :working="working"
             :series="baselineSeries"
-            :labels="analyticsLabels"
-            :lang="shellNew ? 'ru' : undefined"
+            :labels="ANALYTICS_LABELS"
+            lang="ru"
             :whole-run="result?.evidence.some((item) => item.type === 'stage_binding')"
             @loaded="chartMarkers = $event?.overlay?.markers ?? []"
           />
 
           <AdvicePanel
             v-if="selectedReference"
-            v-show="shownIn('advice')"
+            v-show="activeTab === 'advice'"
             :selection="selectedReference"
             :auto-start="adviceAutoFor !== null && adviceAutoFor === selectedAnalysisId"
             :result="result"
-            :linkable="shellNew"
             :ai-config="aiConfig"
             :ai-model="aiModel"
             @ai-model="aiModel = $event"
@@ -1532,43 +1442,35 @@ function focusPolicy() {
             @navigate="jumpTo"
           />
 
-          <GrafanaPanel
-            v-if="selectedReference && !shellNew"
-            :selection="selectedReference"
-          />
-
           <TablesPanel
-            v-if="shellNew && result && shownIn('tables')"
+            v-if="result && activeTab === 'tables'"
             v-model="tablesSubTab"
             :result="result"
           />
           <div
-            v-if="result && shownIn('tables')"
+            v-if="result && activeTab === 'tables'"
             id="tables-subpanel"
             class="tables-subpanel"
           >
-            <template v-if="shellNew">
-              <CapacityTable
-                v-if="tablesSubTab === 'all' || tablesSubTab === 'capacity'"
-                :result="result"
-              />
-              <RuleChecksTable
-                v-if="tablesSubTab === 'all' || tablesSubTab === 'rules'"
-                :result="result"
-              />
-              <TransactionsTable
-                v-if="tablesSubTab === 'all' || tablesSubTab === 'transactions'"
-                :result="result"
-              />
-              <TrendTable
-                v-if="tablesSubTab === 'all' || tablesSubTab === 'trends'"
-                :result="result"
-              />
-            </template>
+            <CapacityTable
+              v-if="tablesSubTab === 'all' || tablesSubTab === 'capacity'"
+              :result="result"
+            />
+            <RuleChecksTable
+              v-if="tablesSubTab === 'all' || tablesSubTab === 'rules'"
+              :result="result"
+            />
+            <TransactionsTable
+              v-if="tablesSubTab === 'all' || tablesSubTab === 'transactions'"
+              :result="result"
+            />
+            <TrendTable
+              v-if="tablesSubTab === 'all' || tablesSubTab === 'trends'"
+              :result="result"
+            />
             <AnalysisView
               :result="result"
-              :shell-tables="shellNew"
-              :visible-group="shellNew ? tablesSubTab : 'all'"
+              :visible-group="tablesSubTab"
               :buckets="buckets"
               :markers="chartMarkers"
               :rollup="rollup"
@@ -1581,29 +1483,22 @@ function focusPolicy() {
               @refresh-buckets="refreshBuckets"
             />
             <p
-              v-if="result.run_validity !== 'INVALID' && (!shellNew || tablesSubTab === 'all' || tablesSubTab === 'normalized')"
+              v-if="result.run_validity !== 'INVALID' && (tablesSubTab === 'all' || tablesSubTab === 'normalized')"
               class="muted"
-              :lang="shellNew ? 'ru' : undefined"
+              lang="ru"
             >
-              <template v-if="shellNew">
-                {{ NORMALIZED_LABELS.pageSummary(buckets.length, bucketPageFrom, bucketRollup) }}
-              </template>
-              <template v-else>
-                Showing {{ buckets.length }} buckets from {{ bucketPageFrom.toLocaleString() }} ms
-                ({{ bucketRollup }} s rollup; maximum 500 per page).
-              </template>
+              {{ NORMALIZED_LABELS.pageSummary(buckets.length, bucketPageFrom, bucketRollup) }}
               <button
                 v-if="bucketNextFrom !== null"
                 type="button"
                 @click="refreshBuckets(bucketNextFrom)"
               >
-                {{ shellNew ? NORMALIZED_LABELS.nextPage : 'Next bucket page' }}
+                {{ NORMALIZED_LABELS.nextPage }}
               </button>
             </p>
           </div>
           <RulesPanel
-            v-if="shellNew"
-            v-show="shownIn('rules')"
+            v-show="activeTab === 'rules'"
             :policy="policy"
             :policy-status="policyStatus"
             :policy-errors="policyErrors"

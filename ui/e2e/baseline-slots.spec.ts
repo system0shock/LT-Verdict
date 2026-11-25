@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { BASELINE_ERROR_LABELS } from '../src/shell/labels'
-import { COMPARE_LABELS, EN_COMPARE_LABELS } from '../src/shell/labels.compare'
+import { COMPARE_LABELS } from '../src/shell/labels.compare'
 import { ANALYTICS_LABELS } from '../src/shell/labels.export'
 import type { BaselineSelection, BaselineSlotView } from '../src/types'
 
@@ -13,7 +13,7 @@ const references: Record<string, { run_id: string; analysis_id: string }> = {
 }
 
 type Failure = { status: number; code: string; message: string; limit?: number }
-type Options = { series?: string[]; shell?: 'old'; failures?: Record<string, Failure> }
+type Options = { series?: string[]; failures?: Record<string, Failure> }
 
 const selection = (series: string, mode: 'manual' | 'statistical' = 'manual'): BaselineSelection => ({
   schema_version: 'local-baseline.v1', series, mode,
@@ -80,11 +80,11 @@ async function openCompare(page: Page, opts: Options = {}) {
     else throw new Error(`Unexpected UI request ${method} ${path}`)
     await route.fulfill({ json: body })
   })
-  await page.goto(opts.shell === 'old' ? '/?shell=old' : '/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: run.original_filename }).click()
   await page.locator(`button[title="${current.analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
-  if (opts.shell !== 'old') await page.locator('#shell-tab-compare').click()
+  await page.locator('#shell-tab-compare').click()
   return requests
 }
 
@@ -158,23 +158,11 @@ test('the 422 codes of baseline slots are Russian phrases, not marked as English
   expect(await alert.innerText()).toContain('4096')
 })
 
-test('an unknown code keeps the server text marked as English, the old interface keeps the server text', async ({ page }) => {
+test('an unknown code keeps the server text marked as English', async ({ page }) => {
   await openCompare(page, { failures: { 'GET comparison': { status: 422, code: 'FUTURE_CODE', message: 'Server says no.' } } })
   await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   await expect(page.getByRole('alert')).toHaveText('Server says no.')
   await expect(page.getByRole('alert')).toHaveAttribute('lang', 'en')
-})
-
-test('the old interface shows the server text of a slot code', async ({ page }) => {
-  await openCompare(page, { shell: 'old', failures: { 'GET comparison': { status: 422, code: 'BASELINE_SERIES_CONFLICT', message: 'Series differs from the release series' } } })
-  await page.getByRole('button', { name: EN_COMPARE_LABELS.compare, exact: true }).click()
-  await expect(page.getByRole('alert')).toHaveText('Series differs from the release series')
-})
-
-test('the old interface lists the slots in English', async ({ page }) => {
-  await openCompare(page, { shell: 'old' })
-  await expect(page.getByTestId('baseline-slots').getByRole('radio')).toHaveCount(2)
-  await expect(page.getByTestId('baseline-slots')).toContainText(EN_COMPARE_LABELS.slotsLegend)
 })
 
 test('saved analytics ask for the series of the active baseline', async ({ page }) => {

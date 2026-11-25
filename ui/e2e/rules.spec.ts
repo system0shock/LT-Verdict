@@ -58,7 +58,7 @@ async function fixtureApi(page: Page, validated: Array<Record<string, unknown>> 
 
 async function openWithResult(page: Page, many = false, validated: Array<Record<string, unknown>> = []) {
   await fixtureApi(page, validated, { many })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: run.original_filename }).click()
   await page.locator(`button[title="${analysisId}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
@@ -68,7 +68,7 @@ async function openWithResult(page: Page, many = false, validated: Array<Record<
 test('template validation, editable thresholds, hints, summary link, and one editor', async ({ page }) => {
   const validated: Array<Record<string, unknown>> = []
   await fixtureApi(page, validated)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(page.locator('#shell-tab-rules')).not.toContainText(SHELL_LABELS.pendingBadge)
   await page.locator('#shell-tab-rules').click()
   await expect(page.getByRole('button', { name: RULES_LABELS.perTxButton })).toBeDisabled()
@@ -94,7 +94,7 @@ test('template validation, editable thresholds, hints, summary link, and one edi
 test('unknown draft fields survive an editor change', async ({ page }) => {
   const validated: Array<Record<string, unknown>> = []
   await fixtureApi(page, validated)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-rules').click()
   await page.getByTestId('rules-policy-file').setInputFiles({ name: 'policy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...basicPolicy, defaults: { min_samples: 50 }, platform_extra: true })) })
   await page.getByLabel(RULES_LABELS.threshold).first().fill('900')
@@ -110,7 +110,7 @@ const loadPolicy = (page: Page, policy: unknown) => page.getByTestId('rules-poli
 test('rule minimum is edited per rule, removed when empty, and hidden for throughput_rps', async ({ page }) => {
   const validated: Array<Record<string, unknown>> = []
   await fixtureApi(page, validated)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-rules').click()
   await loadPolicy(page, samplePolicy)
   await expect(page.getByLabel(RULES_LABELS.samples.ruleMinField)).toHaveCount(2)
@@ -131,7 +131,7 @@ test('rule minimum is edited per rule, removed when empty, and hidden for throug
 test('unfinished keyboard entry does not clear the stored minimum', async ({ page }) => {
   const validated: Array<Record<string, unknown>> = []
   await fixtureApi(page, validated)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-rules').click()
   await loadPolicy(page, { ...basicPolicy, rules: [{ ...basicPolicy.rules[0], min_samples: 50 }, basicPolicy.rules[1]] })
   const field = page.locator('#rule-min-samples-0')
@@ -152,7 +152,7 @@ test('unfinished keyboard entry does not clear the stored minimum', async ({ pag
 test('switching a rule to throughput_rps drops its minimum', async ({ page }) => {
   const validated: Array<Record<string, unknown>> = []
   await fixtureApi(page, validated)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-rules').click()
   await loadPolicy(page, { ...basicPolicy, rules: [{ ...basicPolicy.rules[0], min_samples: 50 }] })
   await expect(page.locator('#rule-min-samples-0')).toHaveValue('50')
@@ -165,7 +165,7 @@ test('switching a rule to throughput_rps drops its minimum', async ({ page }) =>
 test('policy defaults are edited, empty defaults disappear, and other defaults survive', async ({ page }) => {
   const validated: Array<Record<string, unknown>> = []
   await fixtureApi(page, validated)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-rules').click()
   await loadPolicy(page, basicPolicy)
   const last = () => validated.at(-1) as { defaults?: Record<string, unknown> }
@@ -189,7 +189,7 @@ test('policy defaults are edited, empty defaults disappear, and other defaults s
 test('gap tolerance defaults are shown, edited, keep zero, and survive other edits', async ({ page }) => {
   const validated: Array<Record<string, unknown>> = []
   await fixtureApi(page, validated)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-rules').click()
   // Mirrors docs/contracts/policy/v1/examples/valid/platform-gap-tolerance.json: rule-level tolerance must survive the edit.
   const platformRules = [
@@ -222,7 +222,7 @@ test('gap tolerance defaults are shown, edited, keep zero, and survive other edi
 
 test('an out-of-range gap tolerance shows the server error with its JSON pointer', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-rules').click()
   await loadPolicy(page, basicPolicy)
   await page.getByLabel(RULES_LABELS.tolerance.fractionField).fill('1')
@@ -238,7 +238,7 @@ test('an out-of-range gap tolerance shows the server error with its JSON pointer
 
 test('an out-of-range minimum shows the server error with its JSON pointer', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-rules').click()
   await loadPolicy(page, basicPolicy)
   await page.locator('#rule-min-samples-1').fill('2000000')
@@ -249,27 +249,12 @@ test('an out-of-range minimum shows the server error with its JSON pointer', asy
 
 test('server error pointer is marked English inside the rules panel', async ({ page }) => {
   await fixtureApi(page, [], { error: true })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-rules').click()
   await page.getByRole('button', { name: RULES_LABELS.templateName('api-basic') }).click()
   const error = page.locator('#rules-panel .field__errors li').filter({ hasText: '/rules/0/foo: Unknown field foo' })
   await expect(error).toBeVisible()
   await expect(error).toHaveAttribute('lang', 'en')
-})
-
-test('the old interface keeps the English editor', async ({ page }) => {
-  const validated: Array<Record<string, unknown>> = []
-  await fixtureApi(page, validated)
-  await page.goto('/?shell=old')
-  await page.getByTestId('policy-file').setInputFiles({ name: 'policy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...basicPolicy, rules: [{ ...basicPolicy.rules[0], min_samples: 50 }, basicPolicy.rules[1]] })) })
-  await expect(page.getByText('Policy draft')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Add rule' })).toBeVisible()
-  await expect(page.locator('[id^="rule-threshold-hint-"]')).toHaveCount(0)
-  await expect(page.locator('#policy-sample-floor, #policy-min-samples, #policy-max-missing-fraction, #policy-max-gap-cells, [id^="rule-min-samples-"]')).toHaveCount(0)
-  // Hidden fields are kept untouched: switching the metric and back keeps min_samples in the old editor.
-  await page.locator('#rule-metric-0').selectOption('throughput_rps')
-  await page.locator('#rule-metric-0').selectOption('response_time_p95_ms')
-  await expect.poll(() => (validated.at(-1) as { rules: Array<{ min_samples?: number }> }).rules[0].min_samples).toBe(50)
 })
 
 test('expansion lists skipped labels, posts only new rules, and preserves unique ids', async ({ page }) => {
@@ -306,7 +291,7 @@ test('expansion refuses a result that would exceed the rule limit', async ({ pag
 test('expanding for a different run replaces the earlier generated rules', async ({ page }) => {
   const validated: Array<Record<string, unknown>> = []
   await fixtureApi(page, validated, { twoRuns: true })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: run.original_filename }).click()
   await page.locator(`button[title="${analysisId}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
@@ -331,7 +316,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`rules tab has no serious axe violations in ${theme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme })
     await fixtureApi(page)
-    await page.goto('/?shell=new')
+    await page.goto('/')
     await page.locator('#shell-tab-rules').click()
     await page.getByRole('button', { name: RULES_LABELS.templateName('api-basic') }).click()
     const axe = await new AxeBuilder({ page }).analyze()

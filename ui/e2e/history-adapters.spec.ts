@@ -115,7 +115,7 @@ async function openHistory(page: Page, opts: Options = {}) {
     else throw new Error(`Unexpected UI request ${method} ${path}`)
     await route.fulfill({ status, json: body })
   })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   if (!opts.noSelection) {
     await page.getByRole('button', { name: run.original_filename }).click()
     await page.locator(`button[title="${current.analysis_id}"]`).click()

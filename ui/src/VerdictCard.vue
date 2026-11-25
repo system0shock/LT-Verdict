@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { VerdictSummary } from './verdictSummary'
 
-withDefaults(defineProps<{ summary: VerdictSummary; showThresholds?: boolean }>(), { showThresholds: false })
+defineProps<{ summary: VerdictSummary }>()
 </script>
 
 <template>
@@ -31,7 +31,7 @@ withDefaults(defineProps<{ summary: VerdictSummary; showThresholds?: boolean }>(
       <p>{{ summary.lead }}</p>
 
       <div
-        v-if="showThresholds && summary.kpis.length"
+        v-if="summary.kpis.length"
         class="verdict-kpis"
         data-testid="verdict-kpis"
         role="region"

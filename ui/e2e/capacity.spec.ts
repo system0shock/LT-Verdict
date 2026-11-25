@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
+import { DOWNLOAD_LABELS } from '../src/shell/labels.export'
+import { CAPACITY_LABELS } from '../src/shell/labels.tables'
 
 const reference = { run_id: 'capacity-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'capacity.jtl' }
@@ -26,6 +28,7 @@ async function fixtureApi(page: Page) {
     else if (method === 'GET' && /^\/api\/runs\/[^/]+\/analyses\/[^/]+\/advice$/.test(path)) body = { advice: null, job: null }
     else if (path === '/api/sources') body = { profiles: [] }
     else if (path === '/api/runs') body = { runs: [run], next_after: null }
+    else if (path === '/api/releases') body = { releases: [], series_summary: [], corrupt_count: 0, next_after: null }
     else if (path === '/api/baseline') body = { baseline: null }
     else if (path.endsWith('/analyses')) body = { analyses: [{ analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: 'PASS', run_validity: 'VALID' }], next_after: null }
     else if (path.endsWith('/result')) body = result
@@ -44,12 +47,12 @@ test('submits capacity with its resource snapshot and blocks a plan without one'
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles({ name: 'capacity.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
   await page.getByTestId('capacity-plan-file').setInputFiles({ name: 'capacity.json', mimeType: 'application/json', buffer: Buffer.from('{"capacity":"selected"}') })
-  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('Capacity plan requires a matching resource snapshot.')
+  await expect(page.getByTestId('start-analysis')).toBeDisabled()
+  await expect(page.locator('[data-testid="readiness-item"][data-key="resources"]')).toHaveAttribute('data-level', 'block')
 
   await page.getByTestId('resource-snapshot-file').setInputFiles({ name: 'resource.json', mimeType: 'application/json', buffer: Buffer.from('{"resource":"selected"}') })
   const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
-  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  await page.getByTestId('start-analysis').click()
   const submitted = (await request).postDataBuffer()!.toString()
   expect(submitted).toContain('name="resource_snapshot"; filename="resource.json"')
   expect(submitted).toContain('name="capacity_plan"; filename="capacity.json"')
@@ -59,17 +62,20 @@ test('renders saved capacity facts unchanged after reload', async ({ page }) => 
   await page.goto('/')
   await page.getByRole('button', { name: 'capacity.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
-  const saved = page.getByTestId('capacity-results')
   await expect(page.locator('#verdict h2')).toHaveText('Вердикт по ёмкости не выдан — границы недостаточно')
-  await expect(saved).toContainText('BOUNDED [296, 344)')
-  await expect(saved).toContainText('KNEE_DETECTOR_NOT_IMPLEMENTED')
+  await page.locator('#shell-tab-tables').click()
+  const saved = page.getByTestId('capacity-results')
+  await expect(saved).toContainText(CAPACITY_LABELS.boundText('BOUNDED', '296', '344', 'requests/s'))
+  await expect(saved).toContainText(CAPACITY_LABELS.kneeNotImplemented)
   await expect(saved.getByRole('row', { name: /ramp-300/ })).toContainText('296')
   await expect(saved.getByRole('row', { name: /ramp-350/ })).toContainText('344')
-  await expect(page.getByRole('link', { name: 'Download capacity plan' })).toHaveAttribute('href', `/api/runs/${reference.run_id}/analyses/${reference.analysis_id}/capacity-plan`)
-  await expect(page.getByRole('link', { name: 'Download capacity result' })).toHaveAttribute('href', `/api/runs/${reference.run_id}/analyses/${reference.analysis_id}/capacity`)
+  await page.locator('#shell-tab-history').click()
+  await expect(page.getByRole('link', { name: DOWNLOAD_LABELS.capacityPlan })).toHaveAttribute('href', `/api/runs/${reference.run_id}/analyses/${reference.analysis_id}/capacity-plan`)
+  await expect(page.getByRole('link', { name: DOWNLOAD_LABELS.capacityResult })).toHaveAttribute('href', `/api/runs/${reference.run_id}/analyses/${reference.analysis_id}/capacity`)
 
   await page.reload()
   await page.getByRole('button', { name: 'capacity.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
-  await expect(page.getByTestId('capacity-results')).toContainText('BOUNDED [296, 344)')
+  await page.locator('#shell-tab-tables').click()
+  await expect(page.getByTestId('capacity-results')).toContainText(CAPACITY_LABELS.boundText('BOUNDED', '296', '344', 'requests/s'))
 })

@@ -32,7 +32,6 @@ export const SHELL_LABELS = {
   completed: 'Завершён',
   themeToDark: 'Тёмная тема',
   themeToLight: 'Светлая тема',
-  legacyLink: 'Старый интерфейс',
   runsTitle: 'Принятые прогоны',
   runsEmpty: 'Прогонов пока нет',
   runsMore: 'Ещё прогоны',

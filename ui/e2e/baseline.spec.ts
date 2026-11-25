@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import { BASELINE_LABELS } from '../src/shell/labels'
+import { BASELINE_LABELS, SETUP_LABELS, SETUP_MESSAGES, SHELL_LABELS } from '../src/shell/labels'
 import { COMPARE_LABELS } from '../src/shell/labels.compare'
+import { DOWNLOAD_LABELS } from '../src/shell/labels.export'
 
 // A baseline must be a PASS analysis, so every run here is analyzed with a policy; few samples need the floor lowered to 1.
 const policyBody = (id: string, threshold: number) => JSON.stringify({
@@ -18,28 +19,32 @@ const POLICIES = {
 async function attachPolicy(page: Page, policy: keyof typeof POLICIES) {
   const { id, body } = POLICIES[policy]
   await page.getByTestId('policy-file').setInputFiles({ name: 'policy.json', mimeType: 'application/json', buffer: Buffer.from(body) })
-  await expect(page.locator('#run-setup')).toContainText(`Policy is valid — ${id}`)
+  await expect(page.locator('#run-setup')).toContainText(SETUP_MESSAGES.policyValid(id))
 }
 
 async function analyze(page: Page, name: string, elapsed: number, timestamp: number, policy: keyof typeof POLICIES = 'permissive') {
+  await page.locator('#shell-tab-setup').click()
   await page.getByTestId('input-file').setInputFiles({
     name,
     mimeType: 'text/csv',
     buffer: Buffer.from(`timeStamp,elapsed,label,success\n${timestamp},${elapsed},baseline-test,true\n`),
   })
   await attachPolicy(page, policy)
-  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  await page.getByRole('button', { name: SETUP_LABELS.startButton, exact: true }).click()
   await expect(page.locator('#verdict')).toContainText(POLICIES[policy].verdict)
-  const href = await page.getByRole('link', { name: 'Download JSON', exact: true }).getAttribute('href')
+  await page.locator('#shell-tab-history').click()
+  const href = await page.getByRole('link', { name: DOWNLOAD_LABELS.format('json'), exact: true }).getAttribute('href')
   const match = href?.match(/^\/api\/runs\/([^/]+)\/analyses\/([a-f0-9]{64})\/report/)
   expect(match).toBeTruthy()
+  await page.locator('#shell-tab-compare').click()
   return { run_id: match![1]!, analysis_id: match![2]! }
 }
 
-async function openAnalysis(page: Page, filename: string, analysisId: string) {
+async function openAnalysis(page: Page, filename: string, analysisId: string, expectedVerdict = 'PASS') {
   await page.getByTestId('run-list').getByRole('button').filter({ hasText: filename }).click()
-  await page.getByRole('button', { name: `Analysis ${analysisId.slice(0, 12)}`, exact: false }).click()
-  await expect(page.locator('#verdict')).toContainText('PASS')
+  await page.locator(`button[title="${analysisId}"]`).click()
+  await expect(page.locator('#verdict')).toContainText(expectedVerdict)
+  await page.locator('#shell-tab-compare').click()
 }
 
 test.beforeEach(async ({ page }) => {
@@ -54,70 +59,73 @@ test.beforeEach(async ({ page }) => {
   }
   await page.request.delete('/api/baseline', { headers })
   await page.reload()
+  await page.locator('#shell-tab-compare').click()
 })
 
 test('pins manual baseline across reload and compares changed achieved load without another job', async ({ page }, testInfo) => {
   const baseline = await analyze(page, 'baseline-manual.jtl', 100, 1767225600000)
-  await page.getByLabel('Comparison series', { exact: true }).fill('Checkout / test environment')
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByLabel(COMPARE_LABELS.seriesLabel, { exact: true }).fill('Checkout / test environment')
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await expect(page.getByTestId('baseline-selection')).toContainText(baseline.analysis_id)
   await page.reload()
-  await expect(page.getByTestId('baseline-selection')).toContainText('manual')
+  await page.locator('#shell-tab-compare').click()
+  await expect(page.getByTestId('baseline-selection')).toContainText(COMPARE_LABELS.mode('manual'))
   await expect(page.getByTestId('baseline-selection')).toContainText(baseline.analysis_id)
   const current = await analyze(page, 'baseline-current.jtl', 200, 1767225601000)
   let jobs = 0
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/jobs') jobs += 1
   })
-  await page.getByLabel('Confirmed same planned test conditions', { exact: true }).check()
-  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('подтверждено')
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   const p95 = page.getByTestId('comparison-response_time_p95_ms')
   await expect(p95).toContainText('100')
   await expect(p95).toContainText('200')
   await expect(p95.locator('td').nth(3)).toHaveText('100')
-  await expect(p95.locator('td').nth(4)).toHaveText('100%')
+  await expect(p95.locator('td').nth(4)).toHaveText('100 %')
   const throughput = page.getByTestId('comparison-throughput_rps')
   await expect(throughput.locator('td').nth(3)).toHaveText('-5')
-  await expect(throughput.locator('td').nth(4)).toHaveText('-50%')
+  await expect(throughput.locator('td').nth(4)).toHaveText('-50 %')
   await expect(page.getByTestId('comparison-error_rate_ratio')).toContainText('ZERO_BASELINE')
-  await expect(page.getByTestId('baseline-comparison')).toContainText('USER_CONFIRMED')
+  await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('USER_CONFIRMED'))
   await expect(page.getByTestId('baseline-warnings')).toHaveCount(0)
-  await page.getByText('Baseline/current charts', { exact: true }).click()
-  await page.getByRole('button', { name: 'Load comparison charts', exact: true }).click()
-  await expect(page.getByTestId('baseline-comparison').getByRole('img', { name: 'P95 latency', exact: true })).toBeVisible()
-  await expect(page.getByTestId('baseline-comparison')).toContainText('Solid: current · dashed: baseline')
+  await expect(page.getByTestId('compare-cursor-chart')).toBeVisible()
+  await expect(page.getByTestId('compare-track-p95')).toBeVisible()
+  await expect(page.getByTestId('compare-chart-legend')).toHaveText(COMPARE_LABELS.chartsLegend)
+  await page.locator('#shell-tab-overview').click()
   await expect(page.locator('#verdict')).toContainText('PASS')
+  await page.locator('#shell-tab-compare').click()
   expect(jobs).toBe(0)
 
   await page.reload()
   await openAnalysis(page, 'baseline-current.jtl', current.analysis_id)
-  await expect(page.getByLabel('Confirmed same planned test conditions', { exact: true })).toBeChecked()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
+  await expect(page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true })).toBeChecked()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('подтверждено')
 
   await openAnalysis(page, 'baseline-manual.jtl', baseline.analysis_id)
-  await page.getByLabel('Not confirmed', { exact: true }).check()
-  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved NOT_CONFIRMED')
-  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+  await page.getByLabel(COMPARE_LABELS.conditionNotConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('не подтверждено')
+  await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
 
   await openAnalysis(page, 'baseline-current.jtl', current.analysis_id)
-  await expect(page.getByLabel('Confirmed same planned test conditions', { exact: true })).toBeChecked()
-  await page.getByLabel('Unknown', { exact: true }).check()
-  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
+  await expect(page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true })).toBeChecked()
+  await page.getByLabel(COMPARE_LABELS.conditionUnknown, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
   await page.reload()
   await openAnalysis(page, 'baseline-current.jtl', current.analysis_id)
-  await expect(page.getByLabel('Unknown', { exact: true })).toBeChecked()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved UNKNOWN')
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
-  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+  await expect(page.getByLabel(COMPARE_LABELS.conditionUnknown, { exact: true })).toBeChecked()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('неизвестно')
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
 
   const audit = await new AxeBuilder({ page }).include('#baseline-panel').analyze()
   expect(audit.violations).toEqual([])
   await page.locator('#baseline-panel').screenshot({ path: testInfo.outputPath('baseline-desktop.png') })
-  await page.getByRole('button', { name: 'Dark theme', exact: true }).click()
+  await page.getByRole('button', { name: SHELL_LABELS.themeToDark, exact: true }).click()
   await page.setViewportSize({ width: 500, height: 1000 })
   const layout = await page.evaluate(() => ({
     viewport: window.innerWidth,
@@ -131,16 +139,16 @@ test('pins manual baseline across reload and compares changed achieved load with
   }))
   expect(layout.width, JSON.stringify(layout)).toBeLessThanOrEqual(layout.viewport)
   await page.locator('#baseline-panel').screenshot({ path: testInfo.outputPath('baseline-dark-mobile.png') })
-  await page.getByRole('button', { name: 'Clear baseline', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.clearBaseline, exact: true }).click()
   await expect(page.getByTestId('baseline-selection')).toHaveCount(0)
   await expect(page.getByTestId('baseline-comparison')).toHaveCount(0)
 })
 
 test('warns when a run is compared with itself', async ({ page }) => {
   await analyze(page, 'baseline-self.jtl', 100, 1767225650000)
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
-  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
   await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
     BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_ANALYSIS,
   ])
@@ -149,27 +157,27 @@ test('warns when a run is compared with itself', async ({ page }) => {
 test('selects the middle real run statistically and confirms a new compared pair', async ({ page }) => {
   await page.locator('#baseline-panel summary').click()
   await analyze(page, 'stat-fast.jtl', 100, 1767225700000)
-  await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.addCandidate, exact: true }).click()
   const middle = await analyze(page, 'stat-middle.jtl', 110, 1767225701000)
-  await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
-  await page.getByLabel('Same planned test conditions', { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.addCandidate, exact: true }).click()
+  await page.getByLabel(COMPARE_LABELS.sameConditions, { exact: true }).check()
   await analyze(page, 'stat-slow.jtl', 1000, 1767225702000)
-  await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
-  await expect(page.getByLabel('Same planned test conditions', { exact: true })).not.toBeChecked()
-  await expect(page.getByRole('button', { name: 'Select statistically', exact: true })).toBeDisabled()
-  await page.getByLabel('Same planned test conditions', { exact: true }).check()
-  await page.getByRole('button', { name: 'Select statistically', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.addCandidate, exact: true }).click()
+  await expect(page.getByLabel(COMPARE_LABELS.sameConditions, { exact: true })).not.toBeChecked()
+  await expect(page.getByRole('button', { name: COMPARE_LABELS.selectStatistically, exact: true })).toBeDisabled()
+  await page.getByLabel(COMPARE_LABELS.sameConditions, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.selectStatistically, exact: true }).click()
   await expect(page.getByTestId('baseline-selection')).toContainText(middle.analysis_id)
-  await expect(page.getByTestId('baseline-selection')).toContainText('statistical')
+  await expect(page.getByTestId('baseline-selection')).toContainText(COMPARE_LABELS.mode('statistical'))
   await expect(page.getByTestId('baseline-selection')).toContainText('median-rank-v1')
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
-  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
   await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
     BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
   ])
   await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(3)).toHaveText('890')
   await openAnalysis(page, 'stat-middle.jtl', middle.analysis_id)
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
     BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_ANALYSIS,
     BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
@@ -177,40 +185,41 @@ test('selects the middle real run statistically and confirms a new compared pair
   await analyze(page, 'stat-new.jtl', 2000, 1767225703000)
   await expect(page.getByTestId('baseline-selection')).toContainText(middle.analysis_id)
   await expect(page.getByTestId('baseline-comparison')).toHaveCount(0)
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
-  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
   await expect(page.getByTestId('baseline-warnings')).toHaveCount(0)
-  await page.getByLabel('Confirmed same planned test conditions', { exact: true }).check()
-  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
-  await expect(page.getByTestId('baseline-comparison')).toContainText('USER_CONFIRMED')
-  await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(3)).toHaveText('1890')
+  await page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('подтверждено')
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('USER_CONFIRMED'))
+  await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(3)).toHaveText(/1\s?890/)
   await expect(page.getByTestId('baseline-candidates').locator('li')).toHaveCount(3)
   await page.reload()
+  await page.locator('#shell-tab-compare').click()
   await expect(page.getByTestId('baseline-selection')).toContainText(middle.analysis_id)
 })
 
 test('changing a window id shows the decision of the new pair', async ({ page }) => {
   await analyze(page, 'baseline-window-a.jtl', 100, 1767225750000)
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await analyze(page, 'baseline-window-b.jtl', 200, 1767225751000)
-  await page.getByLabel('Baseline window ID', { exact: true }).fill('before')
-  await page.getByLabel('Current window ID', { exact: true }).fill('after')
-  await page.getByLabel('Confirmed same planned test conditions', { exact: true }).check()
-  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
-  await page.getByLabel('Current window ID', { exact: true }).fill('other')
-  await expect(page.getByLabel('Unknown', { exact: true })).toBeChecked()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('No saved decision for this exact pair.')
-  await page.getByLabel('Current window ID', { exact: true }).fill('after')
-  await expect(page.getByLabel('Confirmed same planned test conditions', { exact: true })).toBeChecked()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
+  await page.getByLabel(COMPARE_LABELS.baselineWindow, { exact: true }).fill('before')
+  await page.getByLabel(COMPARE_LABELS.currentWindow, { exact: true }).fill('after')
+  await page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('подтверждено')
+  await page.getByLabel(COMPARE_LABELS.currentWindow, { exact: true }).fill('other')
+  await expect(page.getByLabel(COMPARE_LABELS.conditionUnknown, { exact: true })).toBeChecked()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText(COMPARE_LABELS.conditionNone)
+  await page.getByLabel(COMPARE_LABELS.currentWindow, { exact: true }).fill('after')
+  await expect(page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true })).toBeChecked()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('подтверждено')
 })
 
 test('does not allow replacing the baseline while a condition decision is being saved', async ({ page }) => {
   await analyze(page, 'baseline-busy-a.jtl', 100, 1767225760000)
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await analyze(page, 'baseline-busy-b.jtl', 200, 1767225761000)
   let started = false
   let release!: () => void
@@ -221,19 +230,19 @@ test('does not allow replacing the baseline while a condition decision is being 
     await held
     await route.continue()
   })
-  await page.getByLabel('Confirmed same planned test conditions', { exact: true }).check()
-  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
+  await page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
   await expect.poll(() => started).toBe(true)
-  await expect(page.getByRole('button', { name: 'Set as baseline', exact: true })).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Clear baseline', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: COMPARE_LABELS.clearBaseline, exact: true })).toBeDisabled()
   release()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
-  await expect(page.getByRole('button', { name: 'Set as baseline', exact: true })).toBeEnabled()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('подтверждено')
+  await expect(page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true })).toBeEnabled()
 })
 
 test('shows the empty-window hint for the empty side and the incompatibility hint for an incompatible baseline', async ({ page }) => {
   await analyze(page, 'baseline-hints-a.jtl', 100, 1767225770000)
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   const current = await analyze(page, 'baseline-hints-b.jtl', 200, 1767225771000)
   const baseline = (await (await page.request.get('/api/baseline')).json()).baselines[0].baseline
   const emptyWindowMetrics = [
@@ -306,9 +315,9 @@ test('shows the empty-window hint for the empty side and the incompatibility hin
       },
     } })
   })
-  await page.getByLabel('Baseline window ID', { exact: true }).fill('steady')
-  await page.getByLabel('Current window ID', { exact: true }).fill('steady')
-  const compare = page.getByRole('button', { name: 'Compare selected analysis', exact: true })
+  await page.getByLabel(COMPARE_LABELS.baselineWindow, { exact: true }).fill('steady')
+  await page.getByLabel(COMPARE_LABELS.currentWindow, { exact: true }).fill('steady')
+  const compare = page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true })
   await compare.click()
   await expect(page.getByTestId('baseline-empty-window')).toContainText(BASELINE_LABELS.emptyWindowHint)
   await expect(page.getByTestId('baseline-empty-window')).toContainText(BASELINE_LABELS.emptyBaselineWindow)
@@ -336,13 +345,13 @@ test('shows the empty-window hint for the empty side and the incompatibility hin
 test('explains the incompatibility hint when a mixed-semantics candidate set is rejected', async ({ page }) => {
   await page.locator('#baseline-panel summary').click()
   await analyze(page, 'mixed-fast.jtl', 100, 1767225790000)
-  await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.addCandidate, exact: true }).click()
   await analyze(page, 'mixed-middle.jtl', 110, 1767225791000)
-  await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
-  await page.getByLabel('Same planned test conditions', { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.addCandidate, exact: true }).click()
+  await page.getByLabel(COMPARE_LABELS.sameConditions, { exact: true }).check()
   await analyze(page, 'mixed-slow.jtl', 1000, 1767225792000)
-  await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
-  await page.getByLabel('Same planned test conditions', { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.addCandidate, exact: true }).click()
+  await page.getByLabel(COMPARE_LABELS.sameConditions, { exact: true }).check()
   await page.route('**/api/baseline', async (route) => {
     if (route.request().method() !== 'POST') return route.continue()
     await route.fulfill({ status: 422, json: {
@@ -353,39 +362,39 @@ test('explains the incompatibility hint when a mixed-semantics candidate set is 
       },
     } })
   })
-  await page.getByRole('button', { name: 'Select statistically', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.selectStatistically, exact: true }).click()
   await expect(page.locator('#baseline-panel [role="alert"]')).toContainText('BASELINE_MIXED_SEMANTICS')
   await expect(page.getByTestId('baseline-incompatible')).toContainText(BASELINE_LABELS.incompatibleHint)
 })
 
 test('refuses an analysis that is not PASS as a manual baseline and keeps the pinned one', async ({ page }) => {
   const kept = await analyze(page, 'baseline-pass.jtl', 80, 1767225780000)
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await expect(page.getByTestId('baseline-selection')).toContainText(kept.analysis_id)
   await analyze(page, 'baseline-fail.jtl', 90, 1767225781000, 'failing')
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
-  await expect(page.locator('#baseline-panel [role="alert"]')).toContainText('BASELINE_CANDIDATE_NOT_PASS')
+  await expect(page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true })).toBeDisabled()
+  await expect(page.getByTestId('baseline-ineligible')).toHaveText(COMPARE_LABELS.ineligible('BASELINE_CANDIDATE_NOT_PASS'))
   await expect(page.getByTestId('baseline-selection')).toContainText(kept.analysis_id)
 })
 
 test('failed replacement keeps the last confirmed baseline visible', async ({ page }) => {
   const original = await analyze(page, 'baseline-keep.jtl', 50, 1767225800000)
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await expect(page.getByTestId('baseline-selection')).toContainText(original.analysis_id)
   await analyze(page, 'baseline-rejected.jtl', 60, 1767225801000)
   await page.route('**/api/baseline', async (route) => {
     if (route.request().method() !== 'POST') return route.continue()
     await route.fulfill({ status: 403, json: { error: { code: 'FORBIDDEN', message: 'Replacement was rejected', details: [] } } })
   })
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await expect(page.locator('#baseline-panel [role="alert"]')).toContainText('Replacement was rejected')
   await expect(page.getByTestId('baseline-selection')).toContainText(original.analysis_id)
 })
 
 test('ignores a comparison response after selecting another run', async ({ page }) => {
   await analyze(page, 'baseline-stale.jtl', 70, 1767225900000)
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
-  await expect(page.getByTestId('baseline-selection')).toContainText('manual')
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
+  await expect(page.getByTestId('baseline-selection')).toContainText(COMPARE_LABELS.mode('manual'))
   let started = false
   let finished = false
   let release!: () => void
@@ -397,54 +406,43 @@ test('ignores a comparison response after selecting another run', async ({ page 
     await route.fulfill({ response })
     finished = true
   })
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   await expect.poll(() => started).toBe(true)
   await page.getByRole('button', { name: 'baseline-stale.jtl' }).click()
   release()
   await expect.poll(() => finished).toBe(true)
+  await page.locator('#shell-tab-compare').click()
   await expect(page.getByTestId('baseline-comparison')).toHaveCount(0)
 })
 
-test('the new shell compare tab shows the same numbers in Russian', async ({ page }) => {
+test('the compare tab shows the same numbers in Russian as the comparison API', async ({ page }) => {
   const baselineFile = 'baseline-newshell-a.jtl'
   const currentFile = 'baseline-newshell-b.jtl'
   const baseline = await analyze(page, baselineFile, 100, 1767225950000)
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await expect(page.getByTestId('baseline-selection')).toContainText(baseline.analysis_id)
   const current = await analyze(page, currentFile, 200, 1767225951000)
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
-  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
-  const rowCells = async (metric: string) => page.getByTestId(`comparison-${metric}`).locator('td').allInnerTexts()
-  const oldP95 = (await rowCells('response_time_p95_ms')).slice(1)
-  const oldThroughput = (await rowCells('throughput_rps')).slice(1)
-  expect(oldP95).toEqual(['100', '200', '100', '100%'])
-
-  await page.goto('/?shell=new')
-  await page.getByRole('button', { name: currentFile }).click()
-  await page.locator(`button[title="${current.analysis_id}"]`).click()
-  await expect(page.locator('#verdict')).toBeVisible()
-  await page.locator('#shell-tab-compare').click()
   await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
   await expect(page.getByTestId('baseline-warnings')).toHaveCount(0)
-  // The Russian panel shows the numbers short ("100 %", "3 493,12"): same values, other format.
-  const asNumbers = (cells: string[]) => cells.map((cell) => Number(cell.replace(/[\s%]/g, '').replace(',', '.')))
-  for (const [now, old] of [[await rowCells('response_time_p95_ms'), oldP95], [await rowCells('throughput_rps'), oldThroughput]]) {
-    asNumbers(now.slice(1)).forEach((value, index) => expect(value).toBeCloseTo(asNumbers(old)[index], 1))
-  }
+  const rowCells = async (metric: string) => page.getByTestId(`comparison-${metric}`).locator('td').allInnerTexts()
+  const nowP95 = await rowCells('response_time_p95_ms')
+  const nowThroughput = await rowCells('throughput_rps')
 
   const slotSeries = (await (await page.request.get('/api/baseline')).json()).baselines[0].series as string
   const response = await page.request.get(`/api/runs/${current.run_id}/analyses/${current.analysis_id}/comparison?series=${encodeURIComponent(slotSeries)}`)
   expect(response.ok()).toBeTruthy()
-  const comparison = await response.json() as { metrics: Array<{ metric: string; delta: string | null; delta_percent: string | null }> }
+  const comparison = await response.json() as { metrics: Array<{ metric: string; baseline: string | null; current: string | null; delta: string | null; delta_percent: string | null }> }
+  const asNumbers = (cells: string[]) => cells.map((cell) => Number(cell.replace(/[\s%]/g, '').replace(',', '.')))
+  for (const [now, metricName] of [[nowP95, 'response_time_p95_ms'], [nowThroughput, 'throughput_rps']] as const) {
+    const apiMetric = comparison.metrics.find((item) => item.metric === metricName)!
+    const apiValues = [apiMetric.baseline, apiMetric.current, apiMetric.delta, apiMetric.delta_percent].map((v) => Number(v))
+    asNumbers(now.slice(1)).forEach((value, index) => expect(value).toBeCloseTo(apiValues[index]!, 1))
+  }
   const p95 = comparison.metrics.find((metric) => metric.metric === 'response_time_p95_ms')
-  expect([p95?.delta, `${p95?.delta_percent}%`]).toEqual(oldP95.slice(2))
+  expect([p95?.delta, `${p95?.delta_percent}%`]).toEqual(['100', '100%'])
 
-  await page.locator('#shell-tab-setup').click()
-  await page.getByRole('button', { name: baselineFile }).click()
-  await page.locator(`button[title="${baseline.analysis_id}"]`).click()
-  await expect(page.locator('#verdict')).toBeVisible()
-  await page.locator('#shell-tab-compare').click()
+  await openAnalysis(page, baselineFile, baseline.analysis_id)
   await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
     BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_ANALYSIS,
@@ -453,30 +451,30 @@ test('the new shell compare tab shows the same numbers in Russian', async ({ pag
 
 test('keeps one baseline per series and clears only the series that was cleared', async ({ page }) => {
   const first = await analyze(page, 'baseline-slots-a.jtl', 100, 1767226000000)
-  await page.getByLabel('Comparison series', { exact: true }).fill('Series A')
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByLabel(COMPARE_LABELS.seriesLabel, { exact: true }).fill('Series A')
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await expect(page.getByTestId('baseline-selection')).toContainText(first.analysis_id)
   const second = await analyze(page, 'baseline-slots-b.jtl', 120, 1767226001000)
-  await page.getByLabel('Comparison series', { exact: true }).fill('Series B')
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByLabel(COMPARE_LABELS.seriesLabel, { exact: true }).fill('Series B')
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await expect(page.getByTestId('baseline-selection')).toContainText(second.analysis_id)
   await expect(page.getByTestId('baseline-slots').getByRole('radio')).toHaveCount(2)
   const current = await analyze(page, 'baseline-slots-c.jtl', 200, 1767226002000)
 
   await page.getByTestId('baseline-slots').getByRole('radio', { name: /^Series B\b/ }).check()
-  await page.getByLabel('Confirmed same planned test conditions', { exact: true }).check()
-  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
-  await expect(page.getByTestId('baseline-comparison')).toContainText('USER_CONFIRMED')
+  await page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('подтверждено')
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('USER_CONFIRMED'))
   await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(3)).toHaveText('80')
 
   await page.getByTestId('baseline-slots').getByRole('radio', { name: /^Series A\b/ }).check()
   await expect(page.getByTestId('baseline-selection')).toContainText(first.analysis_id)
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('No saved decision')
-  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText(COMPARE_LABELS.conditionNone)
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(3)).toHaveText('100')
-  await page.getByRole('button', { name: 'Clear baseline', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.clearBaseline, exact: true }).click()
   await expect(page.getByTestId('baseline-selection')).toHaveCount(0)
   await expect(page.getByTestId('baseline-slots').getByRole('radio')).toHaveCount(1)
 
@@ -484,7 +482,7 @@ test('keeps one baseline per series and clears only the series that was cleared'
   await openAnalysis(page, 'baseline-slots-c.jtl', current.analysis_id)
   await expect(page.getByTestId('baseline-slots').getByRole('radio')).toHaveCount(1)
   await expect(page.getByTestId('baseline-selection')).toContainText(second.analysis_id)
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('подтверждено')
 })
 
 async function mutationHeaders(page: Page) {
@@ -492,15 +490,15 @@ async function mutationHeaders(page: Page) {
   return { Origin: new URL(page.url()).origin, 'X-LTV-CSRF': bootstrap.csrf_token }
 }
 
-async function openInNewShell(page: Page, filename: string, analysisId: string) {
-  await page.goto('/?shell=new')
+async function openInCompare(page: Page, filename: string, analysisId: string) {
+  await page.goto('/')
   await page.getByRole('button', { name: filename }).click()
   await page.locator(`button[title="${analysisId}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
   await page.locator('#shell-tab-compare').click()
 }
 
-test('a failing analysis cannot be pinned from the new shell and the server still refuses it', async ({ page }) => {
+test('a failing analysis cannot be pinned from the UI and the server still refuses it', async ({ page }) => {
   const failing = await analyze(page, 'baseline-r9-fail.jtl', 90, 1767226100000, 'failing')
   const refused = await page.request.post('/api/baseline', {
     headers: await mutationHeaders(page),
@@ -508,17 +506,17 @@ test('a failing analysis cannot be pinned from the new shell and the server stil
   })
   expect(refused.status()).toBe(422)
   expect((await refused.json() as { error: { code: string } }).error.code).toBe('BASELINE_CANDIDATE_NOT_PASS')
-  await openInNewShell(page, 'baseline-r9-fail.jtl', failing.analysis_id)
+  await openInCompare(page, 'baseline-r9-fail.jtl', failing.analysis_id)
   await expect(page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true })).toBeDisabled()
-  await expect(page.getByTestId('baseline-ineligible')).toHaveText(COMPARE_LABELS.ineligible!('BASELINE_CANDIDATE_NOT_PASS'))
+  await expect(page.getByTestId('baseline-ineligible')).toHaveText(COMPARE_LABELS.ineligible('BASELINE_CANDIDATE_NOT_PASS'))
 })
 
 test('different policies of the baseline and the current analysis show the policy warning in words', async ({ page }) => {
   await analyze(page, 'baseline-r9-policy-a.jtl', 100, 1767226200000)
-  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await expect(page.getByTestId('baseline-selection')).toBeVisible()
   const other = await analyze(page, 'baseline-r9-policy-b.jtl', 120, 1767226201000, 'failing')
-  await openInNewShell(page, 'baseline-r9-policy-b.jtl', other.analysis_id)
+  await openInCompare(page, 'baseline-r9-policy-b.jtl', other.analysis_id)
   await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([BASELINE_LABELS.warnings.POLICY_DIFFERS])
 })
@@ -541,7 +539,7 @@ test('releases with different profiles show the profile warning and the profile 
     }
     const pinned = await page.request.post('/api/baseline', { headers, data: { mode: 'manual', series, reference: base } })
     expect(pinned.status()).toBe(200)
-    await openInNewShell(page, 'baseline-r9-profile-b.jtl', current.analysis_id)
+    await openInCompare(page, 'baseline-r9-profile-b.jtl', current.analysis_id)
     await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
     await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([BASELINE_LABELS.warnings.PROFILE_MISMATCH])
     await expect(page.getByTestId('baseline-profile')).toContainText('паузы (pacing)')

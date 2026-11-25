@@ -119,7 +119,7 @@ async function fixtureApi(page: Page, result: unknown = failing, page500: Bucket
 
 async function openOverview(page: Page, result: unknown = failing, page500?: BucketSource) {
   const paths = await fixtureApi(page, result, page500)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'overview.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
@@ -539,7 +539,7 @@ test('a failed run does not request the load series', async ({ page }) => {
 test('a failed load request is reported in place of the chart', async ({ page }) => {
   await fixtureApi(page)
   await page.route('**/buckets?rollup=60*', (route) => route.fulfill({ status: 500, json: { error: { code: 'X', message: 'Buckets exploded' } } }))
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'overview.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
 
@@ -556,17 +556,6 @@ test('the overview asks the server for nothing beyond the existing endpoints', a
   expect(paths.filter((entry) => entry.endsWith('/result'))).toHaveLength(1)
   expect(overviewQueries(paths)).toEqual(['rollup=60&limit=500'])
   expect(paths.filter((entry) => entry.endsWith('/buckets'))).toHaveLength(3)
-})
-
-test('old interface has no overview panel and keeps its own charts', async ({ page }) => {
-  await fixtureApi(page)
-  await page.goto('/')
-  await page.getByRole('button', { name: 'overview.jtl' }).click()
-  await page.locator(`button[title="${reference.analysis_id}"]`).click()
-
-  await expect(page.locator('#verdict')).toBeVisible()
-  await expect(page.getByTestId('overview-panel')).toHaveCount(0)
-  await expect(page.locator('.load-charts')).toHaveCount(1)
 })
 
 test('the other tabs do not render the overview panel', async ({ page }) => {

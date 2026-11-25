@@ -105,11 +105,6 @@
   flex-wrap: wrap;
 }
 
-.shell .shell-legacy-link {
-  display: inline-flex;
-  align-items: center;
-}
-
 .shell .shell-export-link {
   border: 1px solid var(--control-border);
   border-radius: 4px;

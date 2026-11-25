@@ -68,7 +68,7 @@ const requestOf = (body: string) => body.match(/\{"schema_version":"source-reque
 
 async function openPair(page: Page) {
   const calls = await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(page.locator('#source-profile option')).toHaveCount(profiles.length + 1)
   await page.getByTestId('input-file').setInputFiles(load)
   await page.getByLabel(SETUP_LABELS.pairToggleLabel).check()
@@ -164,7 +164,7 @@ test('blocks the pair while the step mode is auto and releases it when the mode 
 
 test('leaves the single launch alone when the pair switch is off', async ({ page }) => {
   const calls = await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(page.locator('#source-profile option')).toHaveCount(profiles.length + 1)
   await page.getByTestId('input-file').setInputFiles(load)
   await expect(readiness(page, 'arms')).toHaveCount(0)

@@ -158,7 +158,7 @@ async function podApi(page: Page, analyses: unknown[], behaviour: Behaviour) {
 }
 
 async function openDeep(page: Page, selected = analysisA) {
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'pods.jtl' }).click()
   await page.locator(`button[title="${selected}"]`).click()
   await page.locator('#shell-tab-deep').click()

@@ -70,8 +70,9 @@ test('scrollable table wrappers are keyboard focusable regions with unique names
   await page.getByRole('button', { name: 'table-focus.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
+  await page.locator('#shell-tab-tables').click()
 
-  const wraps = await page.locator('.table-wrap').evaluateAll((elements) =>
+  const wraps = await page.locator('#shell-panel .table-wrap:visible').evaluateAll((elements) =>
     elements.map((element) => ({
       id: element.closest('section')?.id ?? element.closest('[data-testid]')?.getAttribute('data-testid') ?? '',
       scrolls: element.scrollWidth > element.clientWidth,
@@ -80,7 +81,7 @@ test('scrollable table wrappers are keyboard focusable regions with unique names
       label: element.getAttribute('aria-label') ?? '',
     })),
   )
-  expect(wraps.length).toBeGreaterThanOrEqual(10)
+  expect(wraps.length).toBeGreaterThanOrEqual(8)
   expect(wraps.filter((wrap) => wrap.scrolls && (wrap.tabindex !== '0' || wrap.role !== 'region' || wrap.label.trim() === ''))).toEqual([])
   expect(new Set(wraps.map((wrap) => wrap.label)).size).toBe(wraps.length)
 

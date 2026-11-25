@@ -22,7 +22,7 @@ async function mockAdvice(page: import('@playwright/test').Page) {
 }
 
 test('the new analysis screen has a toggle off by default and no consent wording', async ({ page }) => {
-  await page.goto('/?shell=new')
+  await page.goto('/')
   const section = page.locator('section[aria-labelledby="setup-ai-title"]')
   await expect(section).toBeVisible()
   await expect(section.getByRole('checkbox')).toHaveCount(0)
@@ -36,7 +36,7 @@ test('the new analysis screen has a toggle off by default and no consent wording
 
 test('the advice tab has no checkbox, an enabled button and one request without a consent field', async ({ page }) => {
   const posts = await mockAdvice(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#input-file').setInputFiles(input)
   await page.getByTestId('start-analysis').click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
@@ -61,7 +61,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`both AI sections have no serious axe violations in ${theme}`, async ({ page }) => {
     await mockAdvice(page)
     await page.emulateMedia({ colorScheme: theme })
-    await page.goto('/?shell=new')
+    await page.goto('/')
     const setup = await new AxeBuilder({ page }).include('section[aria-labelledby="setup-ai-title"]').analyze()
     expect(setup.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious').map((item) => item.id)).toEqual([])
     await page.locator('#input-file').setInputFiles(input)

@@ -3,15 +3,15 @@ import { computed, ref, watch } from 'vue'
 import { getSavedAnalytics } from './api'
 import type { AnalysisReference } from './types'
 import type { SavedAnalytics } from './analyticsTypes'
-import { EN_ANALYTICS_LABELS, type AnalyticsLabels } from './shell/labels.export'
+import { ANALYTICS_LABELS, type AnalyticsLabels } from './shell/labels.export'
 import MetricPackSummary from './MetricPackSummary.vue'
 import OpenSearchOverlay from './OpenSearchOverlay.vue'
 import RunDynamicsTable from './RunDynamicsTable.vue'
 import TransactionComparisonTable from './TransactionComparisonTable.vue'
 
 // `series` is the series of the active baseline (BaselinePanel): the server picks the baseline of the comparison by it.
-// `labels` and `lang` switch the panel texts to Russian in the new shell; the tables below stay English and are marked as such.
-const props = withDefaults(defineProps<{ selection: AnalysisReference | null; working: boolean; series?: string; labels?: AnalyticsLabels; lang?: string; wholeRun?: boolean }>(), { series: undefined, wholeRun: false, labels: () => EN_ANALYTICS_LABELS, lang: undefined })
+// `labels` and `lang` default to Russian panel texts; the nested tables stay English and are marked as such.
+const props = withDefaults(defineProps<{ selection: AnalysisReference | null; working: boolean; series?: string; labels?: AnalyticsLabels; lang?: string; wholeRun?: boolean }>(), { series: undefined, wholeRun: false, labels: () => ANALYTICS_LABELS, lang: 'ru' })
 const foreignLang = computed(() => (props.lang ? 'en' : undefined))
 const emit = defineEmits<{ loaded: [analytics: SavedAnalytics | null] }>()
 const limit = ref(10)

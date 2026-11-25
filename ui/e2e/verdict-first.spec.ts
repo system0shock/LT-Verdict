@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { SAMPLE_TEXT } from '../src/verdictReasons'
+import { TABLES_LABELS } from '../src/shell/labels.tables'
 import { expect, test, type Page } from '@playwright/test'
 
 const reference = { run_id: 'verdict-run', analysis_id: 'a'.repeat(64) }
@@ -73,13 +74,14 @@ test('shows no verdict block and no header chip before a result exists', async (
   await expect(page.getByTestId('verdict-chip')).toHaveCount(0)
 })
 
-test('puts the verdict above the run form and explains FAIL in words', async ({ page }) => {
+test('puts the verdict at the top of overview and explains FAIL in words', async ({ page }) => {
   await fixtureApi(page, failing)
   await openSaved(page)
 
   const verdict = await page.locator('#verdict').boundingBox()
-  const form = await page.locator('#run-setup').boundingBox()
-  expect(verdict!.y).toBeLessThan(form!.y)
+  const overview = await page.getByTestId('overview-panel').boundingBox()
+  expect(verdict!.y).toBeLessThan(overview!.y)
+  await expect(page.locator('#run-setup')).toBeHidden()
   await expect(page.getByTestId('verdict-badge')).toHaveText('FAIL')
   await expect(page.locator('#verdict h2')).toHaveText('Прогон не проходит — нарушено проверок: 1 из 2')
   const lines = page.getByTestId('verdict-lines')
@@ -126,12 +128,13 @@ test('labels a small-sample PASS in the card, the chip and the rules table', asy
   await expect(page.locator('#verdict')).toContainText(SAMPLE_TEXT.lead(1).trim())
   await expect(page.getByTestId('verdict-lines')).toContainText(new RegExp(SAMPLE_TEXT.detail(30, 50).replace(/^[^\w\u0400-\u04ff]+/, '').replace(/\s+/g, '\\s+')))
 
+  await page.locator('#shell-tab-tables').click()
   const table = page.locator('#policy-results')
   const rows = page.locator('#policy-results tbody tr')
-  await expect(table.locator('thead')).toContainText('Sample')
+  await expect(table.locator('thead')).toContainText('Выборка')
   await expect(rows).toHaveCount(2)
-  await expect(rows.nth(0)).toContainText(/30 \/ 50.*SMALL_SAMPLE/)
-  await expect(rows.nth(1)).toContainText('NOT_GATED')
+  await expect(rows.nth(0)).toContainText(`${TABLES_LABELS.sampleOf('30', '50')} · ${TABLES_LABELS.sampleModeText.SMALL_SAMPLE}`)
+  await expect(rows.nth(1)).toContainText(TABLES_LABELS.sampleModeText.NOT_GATED)
   await expect(table).not.toContainText(/undefined|NaN/)
 })
 

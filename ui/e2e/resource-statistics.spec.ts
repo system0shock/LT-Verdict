@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { RESOURCE_TABLES_LABELS, TABLES_LABELS } from '../src/shell/labels.tables'
 
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
 const resourceInput = Buffer.from('timeStamp,elapsed,label,success\n1000,1000,checkout,false\n2000,1000,checkout,false\n3000,1000,checkout,false\n4000,1000,checkout,false\n')
@@ -32,33 +33,36 @@ test('shows resource failures and missing cells after reloading a saved analysis
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(snapshot)),
   })
-  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByTestId('start-analysis').click()
+  await expect(page.locator('#verdict')).toBeVisible()
+  await page.locator('#shell-tab-tables').click()
 
   await expect(page.locator('#resource-results')).toBeVisible()
   await expect(page.locator('#resource-results')).toContainText('cpu-limit')
-  await expect(page.locator('#resource-results')).toContainText('FAIL')
+  await expect(page.locator('#resource-results')).toContainText(TABLES_LABELS.statusText.FAIL)
   await expect(page.locator('#resource-results')).toContainText('memory-limit')
-  await expect(page.locator('#resource-results')).toContainText('NO_VERDICT')
-  await expect(page.locator('#resource-results')).toContainText('Missing cells')
+  await expect(page.locator('#resource-results')).toContainText(TABLES_LABELS.statusText.NO_VERDICT)
+  await expect(page.locator('#resource-results')).toContainText(RESOURCE_TABLES_LABELS.summaryHeads[8]!)
   await expect(page.locator('#resource-results')).toContainText('4')
-  await expect(page.locator('#resource-results')).toContainText('Business verdict')
-  await expect(page.locator('#resource-results')).toContainText('Resource verdict')
+  await expect(page.locator('#resource-results')).toContainText(RESOURCE_TABLES_LABELS.windowPolicyHeads[3]!)
+  await expect(page.locator('#resource-results')).toContainText(RESOURCE_TABLES_LABELS.windowPolicyHeads[4]!)
   await expect(page.locator('#resource-results')).toContainText('evaluation')
   await expect(page.locator('#resource-results')).toContainText('server-1')
   await expect(page.locator('#resource-results')).toContainText('system')
   await expect(page.locator('#resource-results')).toContainText('interval_mean')
-  await expect(page.locator('#resource-results')).toContainText('Resource binding')
+  await expect(page.locator('#resource-results')).toContainText(RESOURCE_TABLES_LABELS.bindingSummary)
   await expect(page.locator('#resource-results')).toContainText('not_verified_by_core')
   await expect(page.locator('#policy-results')).toContainText('evaluation')
-  await expect(page.locator('#policy-results')).toContainText('Overall')
+  await expect(page.locator('#policy-results')).toContainText(TABLES_LABELS.scopeOverall)
 
   const analysis = page.locator('button[aria-pressed="true"][title]')
   const analysisId = await analysis.getAttribute('title')
   await page.reload()
   await page.getByRole('button', { name: 'resource-input.jtl' }).click()
   await page.locator(`button[title="${analysisId}"]`).click()
+  await page.locator('#shell-tab-tables').click()
   await expect(page.locator('#resource-results')).toContainText('memory-limit')
-  await expect(page.locator('#resource-results')).toContainText('NO_VERDICT')
+  await expect(page.locator('#resource-results')).toContainText(TABLES_LABELS.statusText.NO_VERDICT)
 })
 
 test('counts an SLA resource failure in the verdict without a business policy', async ({ page }) => {
@@ -80,8 +84,9 @@ test('counts an SLA resource failure in the verdict without a business policy', 
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(snapshot)),
   })
-  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByTestId('start-analysis').click()
 
   await expect(page.locator('#verdict h2')).toHaveText('Прогон не проходит — нарушено проверок: 1 из 1')
+  await page.locator('#shell-tab-tables').click()
   await expect(page.locator('#resource-results')).toContainText('cpu-limit')
 })

@@ -142,7 +142,7 @@ test('proposes stages on real server, requires explicit confirmation, caches upl
   })
 
   const bootstrapped = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/bootstrap' && res.ok())
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await bootstrapped
   await page.locator('#input-file').setInputFiles(anchorJtl)
   await page.locator('#policy-file').setInputFiles({
@@ -201,7 +201,7 @@ test('proposes stages on real server, requires explicit confirmation, caches upl
 test('user can edit proposed JSON before launching and POST /api/jobs receives the edited stages', async ({ page }) => {
   const calls = await mockStageApi(page)
   const bootstrapped = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/bootstrap' && res.ok())
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await bootstrapped
   await page.locator('#input-file').setInputFiles({ name: 'run-a.jtl', mimeType: 'text/csv', buffer: Buffer.from('a') })
 
@@ -230,7 +230,7 @@ test('NOT_DETECTED refusal keeps textarea unchanged and displays Russian reason 
     proposal: null,
   }))
   const bootstrapped = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/bootstrap' && res.ok())
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await bootstrapped
   await page.locator('#input-file').setInputFiles({ name: 'ramp.jtl', mimeType: 'text/csv', buffer: Buffer.from('ramp') })
 
@@ -247,7 +247,7 @@ test('NOT_DETECTED refusal keeps textarea unchanged and displays Russian reason 
 test('selecting another input file invalidates cached run_id and explanation', async ({ page }) => {
   const calls = await mockStageApi(page)
   const bootstrapped = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/bootstrap' && res.ok())
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await bootstrapped
 
   await page.locator('#input-file').setInputFiles({ name: 'run-a.jtl', mimeType: 'text/csv', buffer: Buffer.from('a') })
@@ -266,7 +266,7 @@ test('selecting another input file invalidates cached run_id and explanation', a
 test('422 INVALID_STAGES renders field errors with English island and does not start job', async ({ page }) => {
   const badStages = await readFile(invalidNoSteady, 'utf8')
   const bootstrapped = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/bootstrap' && res.ok())
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await bootstrapped
   await page.locator('#input-file').setInputFiles(anchorJtl)
   await page.getByTestId('stages-json').fill(badStages)
@@ -284,7 +284,7 @@ test('422 INVALID_STAGES renders field errors with English island and does not s
 test('empty or whitespace stages textarea submits POST /api/jobs without stages part', async ({ page }) => {
   const calls = await mockStageApi(page)
   const bootstrapped = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/bootstrap' && res.ok())
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await bootstrapped
   await page.locator('#input-file').setInputFiles({ name: 'run-a.jtl', mimeType: 'text/csv', buffer: Buffer.from('a') })
   await page.getByTestId('stages-json').fill('   \n  ')
@@ -344,7 +344,7 @@ test('renders Russian warnings and D14 stretch facts in explanation', async ({ p
     ],
   }))
   const bootstrapped = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/bootstrap' && res.ok())
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await bootstrapped
   await page.locator('#input-file').setInputFiles({ name: 'run-a.jtl', mimeType: 'text/csv', buffer: Buffer.from('a') })
   await page.getByTestId('stages-propose').click()
@@ -387,7 +387,7 @@ test('stage proposal UI passes axe-core in light and dark themes and avoids hori
   })
 
   const bootstrapped = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/bootstrap' && res.ok())
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await bootstrapped
   await page.locator('#input-file').setInputFiles({ name: 'run-a.jtl', mimeType: 'text/csv', buffer: Buffer.from('a') })
   await page.getByTestId('stages-propose').click()

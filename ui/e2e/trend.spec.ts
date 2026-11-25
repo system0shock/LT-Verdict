@@ -1,4 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
+import { SETUP_LABELS } from '../src/shell/labels'
+import { DOWNLOAD_LABELS } from '../src/shell/labels.export'
+import { TREND_LABELS } from '../src/shell/labels.tables'
 
 const reference = { run_id: 'trend-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'trend.jtl' }
@@ -46,6 +49,7 @@ async function fixtureApi(page: Page) {
     else if (method === 'GET' && /^\/api\/runs\/[^/]+\/analyses\/[^/]+\/advice$/.test(path)) body = { advice: null, job: null }
     else if (path === '/api/sources') body = { profiles: [] }
     else if (path === '/api/runs') body = { runs: [run], next_after: null }
+    else if (path === '/api/releases') body = { releases: [], series_summary: [], corrupt_count: 0, next_after: null }
     else if (path === '/api/baseline') body = { baseline: null }
     else if (path.endsWith('/analyses')) body = { analyses: [{ analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' }], next_after: null }
     else if (path.endsWith('/result')) body = result
@@ -64,12 +68,12 @@ test('submits a trend plan with its resource snapshot and blocks a plan without 
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles({ name: 'trend.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
   await page.getByTestId('trend-plan-file').setInputFiles({ name: 'trend.json', mimeType: 'application/json', buffer: Buffer.from('{"trend":"selected"}') })
-  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('Trend plan requires a matching resource snapshot.')
+  await expect(page.getByRole('button', { name: SETUP_LABELS.startButton, exact: true })).toBeDisabled()
+  await expect(page.locator('#readiness-status')).toContainText(SETUP_LABELS.resourcesRequired(SETUP_LABELS.planNames.trend))
 
   await page.getByTestId('resource-snapshot-file').setInputFiles({ name: 'resource.json', mimeType: 'application/json', buffer: Buffer.from('{"resource":"selected"}') })
   const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
-  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  await page.getByRole('button', { name: SETUP_LABELS.startButton, exact: true }).click()
   const submitted = (await request).postDataBuffer()!.toString()
   expect(submitted).toContain('name="resource_snapshot"; filename="resource.json"')
   expect(submitted).toContain('name="trend_plan"; filename="trend.json"')
@@ -79,20 +83,25 @@ test('renders saved trend facts unchanged after reload', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'trend.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
+  await expect(page.locator('#verdict')).toBeVisible()
+  await page.locator('#shell-tab-tables').click()
   const saved = page.getByTestId('trend-results')
-  await expect(saved.locator('#trend-results-title')).toHaveText('Saved trend facts')
-  await expect(saved).toContainText('Checks: 2 · Observed: 1 · Not material: 1 · Insufficient cells: 0 · Unavailable: 0')
-  await expect(saved).toContainText('Method: slope-materiality.v1 · Uncertainty: not estimated (NOT_ESTIMATED)')
-  await expect(saved.getByRole('row', { name: /cpu-trend/ })).toContainText('TREND_OBSERVED')
-  await expect(saved.getByRole('row', { name: /cpu-trend/ })).toContainText('0.0135')
-  await expect(saved.getByRole('row', { name: /cpu-trend/ })).toContainText('2.0625')
-  await expect(saved.getByRole('row', { name: /heap-trend/ })).toContainText('NO_MATERIAL_TREND')
-  await expect(page.getByRole('link', { name: 'Download trend plan' })).toHaveAttribute('href', `/api/runs/${reference.run_id}/analyses/${reference.analysis_id}/trend-plan`)
-  await expect(page.getByRole('link', { name: 'Download trend result' })).toHaveAttribute('href', `/api/runs/${reference.run_id}/analyses/${reference.analysis_id}/trend`)
+  await expect(saved.locator('#trend-results-title')).toHaveText(TREND_LABELS.title)
+  await expect(saved.getByTestId('trend-summary')).toHaveText(TREND_LABELS.summary(2, 1, 1, 0, 0))
+  await expect(saved).toContainText(TREND_LABELS.method)
+  await expect(saved.getByRole('row', { name: /cpu-trend/ })).toContainText(TREND_LABELS.statusText.TREND_OBSERVED)
+  await expect(saved.getByRole('row', { name: /cpu-trend/ })).toContainText('0,0135')
+  await expect(saved.getByRole('row', { name: /cpu-trend/ })).toContainText('2,0625')
+  await expect(saved.getByRole('row', { name: /heap-trend/ })).toContainText(TREND_LABELS.statusText.NO_MATERIAL_TREND)
+  await page.locator('#shell-tab-history').click()
+  await expect(page.getByRole('link', { name: DOWNLOAD_LABELS.trendPlan })).toHaveAttribute('href', `/api/runs/${reference.run_id}/analyses/${reference.analysis_id}/trend-plan`)
+  await expect(page.getByRole('link', { name: DOWNLOAD_LABELS.trendResult })).toHaveAttribute('href', `/api/runs/${reference.run_id}/analyses/${reference.analysis_id}/trend`)
 
   await page.reload()
   await page.getByRole('button', { name: 'trend.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
-  await expect(page.getByTestId('trend-results')).toContainText('Checks: 2 · Observed: 1 · Not material: 1 · Insufficient cells: 0 · Unavailable: 0')
-  await expect(page.getByTestId('trend-results').getByRole('row', { name: /cpu-trend/ })).toContainText('0.0135')
+  await expect(page.locator('#verdict')).toBeVisible()
+  await page.locator('#shell-tab-tables').click()
+  await expect(page.getByTestId('trend-summary')).toHaveText(TREND_LABELS.summary(2, 1, 1, 0, 0))
+  await expect(page.getByTestId('trend-results').getByRole('row', { name: /cpu-trend/ })).toContainText('0,0135')
 })

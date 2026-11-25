@@ -62,7 +62,7 @@ async function pickSavedAnalysis(page: Page) {
 
 async function openNewShellWithResult(page: Page, result: typeof failing | typeof noPolicy = failing) {
   const paths = await fixtureApi(page, result)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await pickSavedAnalysis(page)
   await expect(page.locator('#verdict')).toBeVisible()
   return paths
@@ -142,14 +142,6 @@ test('samples sorting changes row order and sort state', async ({ page }) => {
   await expect(page.getByTestId('tx-row').first()).toContainText('login')
 })
 
-test('old interface retains its English regions', async ({ page }) => {
-  await fixtureApi(page)
-  await page.goto('/')
-  await pickSavedAnalysis(page)
-  await expect(page.locator('#policy-results').getByRole('region', { name: 'Policy results' })).toBeVisible()
-  await expect(page.locator('#transaction-metrics').getByRole('region', { name: 'Transaction metrics' })).toBeVisible()
-})
-
 test('overview attention opens and focuses the rules region', async ({ page }) => {
   await openNewShellWithResult(page)
   await page.getByTestId('attention-item').first().getByTestId('attention-open').click()
@@ -214,15 +206,6 @@ test('resource checks show the service and the coverage of platform rules', asyn
   const snapshot = table.getByRole('row').filter({ hasText: 'cpu-limit' })
   await expect(snapshot.getByTestId('resource-check-service')).toHaveText('—')
   await expect(snapshot.getByTestId('resource-check-coverage')).toHaveText('—')
-})
-
-test('the old interface shows the same service and coverage columns', async ({ page }) => {
-  await fixtureApi(page, withPlatformChecks)
-  await page.goto('/')
-  await pickSavedAnalysis(page)
-  const table = page.locator('#resource-results').getByRole('region', { name: 'Resource policy checks' })
-  await expect(table.getByRole('columnheader')).toHaveText(['Window', 'Rule', 'Service', 'Series', 'Operator', 'Threshold', 'Effect', 'Status', 'Reason', 'Coverage (observed / expected)'])
-  await expect(table.getByRole('row').filter({ hasText: 'cpu-share/orders' }).getByTestId('resource-check-coverage')).toContainText('19 / 20 (95 %)')
 })
 
 test('resource checks of a snapshot without platform rules keep their columns', async ({ page }) => {
@@ -313,7 +296,7 @@ test('tables sub-tabs switch sections with keyboard and keep 100% Russian labels
   await expect(page.locator('#normalized-data')).toBeVisible()
 })
 
-test('regression: shellTables formats bucket rps/errors in ru-RU and localizes postgres changes & anomaly direction while preserving old shell', async ({ page }) => {
+test('regression: formats bucket rps/errors in ru-RU and localizes postgres changes & anomaly direction', async ({ page }) => {
   const withBucketsAndContext = {
     ...failing,
     evidence: [
@@ -347,7 +330,7 @@ test('regression: shellTables formats bucket rps/errors in ru-RU and localizes p
     await route.fulfill({ json: body })
   })
 
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await pickSavedAnalysis(page)
   await page.locator('#shell-tab-tables').click()
   const rowCells = page.locator('#normalized-data tbody tr').first().locator('td')
@@ -355,11 +338,4 @@ test('regression: shellTables formats bucket rps/errors in ru-RU and localizes p
   await expect(rowCells.nth(2)).toHaveText((1200).toLocaleString('ru-RU'))
   await expect(page.getByTestId('postgres-context')).toContainText(`${POSTGRES_LABELS.changes.inserted}: 10, ${POSTGRES_LABELS.changes.updated}: 42, ${POSTGRES_LABELS.changes.deleted}: 7`)
   await expect(page.getByTestId('anomaly-episodes')).toContainText(DIAGNOSTICS_LABELS.directions.increase)
-
-  await page.goto('/?shell=old')
-  await pickSavedAnalysis(page)
-  const oldRowCells = page.locator('#normalized-data tbody tr').first().locator('td')
-  await expect(oldRowCells.nth(1)).toHaveText('1500.00')
-  await expect(page.getByTestId('postgres-context')).toContainText('inserted: 10, updated: 42, deleted: 7')
-  await expect(page.getByTestId('anomaly-episodes')).toContainText('increase')
 })

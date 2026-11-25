@@ -50,9 +50,9 @@ async function fixtureApi(page: Page, saved: Record<string, unknown>) {
   })
 }
 
-async function open(page: Page, saved: Record<string, unknown>, shell: 'new' | 'old' = 'new') {
+async function open(page: Page, saved: Record<string, unknown>) {
   await fixtureApi(page, saved)
-  await page.goto(`/?shell=${shell}`)
+  await page.goto('/')
   await page.getByRole('button', { name: 'capacity-screens.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
@@ -104,7 +104,7 @@ test('capacity table folds evidence ids into a collapsible basis block', async (
   for (const id of evidenceIds) await expect(row.getByText(id)).toBeVisible()
 })
 
-test('new shell: resource statistics are formatted and empty values are a dash', async ({ page }) => {
+test('resource statistics are formatted and empty values are a dash', async ({ page }) => {
   await open(page, result('PASS', [resourceSummary]))
   await page.locator('#shell-tab-tables').click()
 
@@ -116,14 +116,6 @@ test('new shell: resource statistics are formatted and empty values are a dash',
   await expect(row).toContainText('1 234 567,8912')
   await expect(row.locator('td', { hasText: '0,95' }).first()).toHaveAttribute('title', longRatio)
   await expect(row.locator('td').nth(13)).toHaveText('—')
-})
-
-test('old shell keeps the raw resource values', async ({ page }) => {
-  await open(page, result('PASS', [resourceSummary]), 'old')
-
-  const row = page.getByRole('region', { name: 'Resource summaries' }).locator('tbody tr').first()
-  await expect(row).toContainText(longRatio)
-  await expect(row).toContainText('Not available (null)')
 })
 
 // Блок ёмкости на «Обзоре»: граница словами, итог, ступени графиком и таблицей.
@@ -221,12 +213,6 @@ test('a standard result has no capacity block', async ({ page }) => {
   await open(page, { ...result('PASS'), analysis_mode: 'standard', capacity_summary: undefined })
 
   await expect(page.getByTestId('metric-tile').first()).toBeVisible()
-  await expect(page.getByTestId('capacity-block')).toHaveCount(0)
-})
-
-test('old interface does not render the capacity block', async ({ page }) => {
-  await open(page, blockResult('PASS'), 'old')
-
   await expect(page.getByTestId('capacity-block')).toHaveCount(0)
 })
 

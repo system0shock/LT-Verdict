@@ -90,7 +90,7 @@ const trialButton = (page: Page) => page.getByRole('button', { name: RULES_LABEL
 
 async function openRules(page: Page, selectRun: boolean, options: Options = {}) {
   const api = await fixtureApi(page, options)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   if (selectRun) await page.getByRole('button', { name: run.original_filename }).click()
   await page.locator('#shell-tab-rules').click()
   await page.getByRole('button', { name: RULES_LABELS.templateName('api-basic') }).click()
@@ -146,7 +146,7 @@ test('trial is blocked without a run and a double click sends one job', async ({
 
 test('trial is blocked while the draft has no policy', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: run.original_filename }).click()
   await page.locator('#shell-tab-rules').click()
   await expect(trialButton(page)).toBeDisabled()
@@ -180,7 +180,7 @@ test('editing the draft while the trial is polling drops the summary of the olde
 
 test('a failed trial job does not present the previously open analysis as the trial result', async ({ page }) => {
   const { calls } = await fixtureApi(page, { jobFinal: 'FAILED' })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: run.original_filename }).click()
   await page.locator(`button[title="${oldAnalysisId}"]`).click()
   await expect(page.locator('#verdict')).toContainText('NO_POLICY')

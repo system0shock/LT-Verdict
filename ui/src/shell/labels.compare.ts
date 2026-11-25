@@ -1,7 +1,5 @@
 // Строки вкладки «Сравнение» (срез U5a): панель baseline и график сравнения.
-// EN_COMPARE_LABELS дословно повторяет прежний английский текст старого интерфейса,
-// COMPARE_LABELS подставляется только в новой оболочке. Предупреждения, подсказка пустого окна
-// и подсказка старых правил остаются в BASELINE_LABELS (labels.ts) и здесь не дублируются.
+// Предупреждения, подсказка пустого окна и подсказка старых правил остаются в BASELINE_LABELS (labels.ts) и здесь не дублируются.
 // Коды причин и статусов, которых нет в таблицах ниже, выводятся как есть.
 import type { BaselineComparison } from '../types'
 import { BASELINE_ERROR_LABELS, pluralRu } from './labels'
@@ -51,8 +49,8 @@ export interface CompareLabels {
   candidatesHint: string
   selectStatistically: string
   requestFailed: string
-  // Пояснение рядом с недоступной кнопкой «Назначить baseline» по коду допуска (в прежнем интерфейсе null: кнопка доступна, отказывает сервер).
-  ineligible: ((code: string) => string) | null
+  // Пояснение рядом с недоступной кнопкой «Назначить baseline» по коду допуска.
+  ineligible: (code: string) => string
   // Строка о заявленных профилях условий пары релизов (поле comparison.profile); null, если профиля пары нет.
   profileLine: (profile: NonNullable<BaselineComparison['profile']>) => string
   // Фраза словаря для кода 422 (`limit` из `error.limit`) или null: тогда показывается сообщение сервера.
@@ -67,8 +65,8 @@ export interface CompareLabels {
   absoluteHead: string
   relativeHead: string
   roundingNote: string
-  // Блок точных значений общих метрик; в старом интерфейсе null: блока нет.
-  rawMetricsSummary: string | null
+  // Блок точных значений общих метрик.
+  rawMetricsSummary: string
   windowTitle: string
   windowStatus: (status: string) => string
   windowStats: (side: 'baseline' | 'current', samples: number | null, durationMs: number | null) => string
@@ -112,126 +110,7 @@ export interface CompareLabels {
   chartsCursorText: (time: string, rps: string, errors: string, p95: string) => string
   chartsThresholdMark: (value: string, unit: string) => string
   // Значение атрибута lang для английских фрагментов внутри русской панели (ошибки сервера, внутренности графика).
-  // В старом интерфейсе не задано: атрибута нет.
-  foreignLang: string | undefined
-}
-
-const EN_METRICS: Record<string, string> = {
-  response_time_p95_ms: 'P95 latency',
-  response_time_p99_ms: 'P99 latency',
-  throughput_rps: 'Throughput',
-  error_rate_ratio: 'Error rate',
-}
-
-export const EN_COMPARE_LABELS: CompareLabels = {
-  title: 'Baseline comparison',
-  intro: 'A fixed saved analysis, selected manually or statistically. New runs do not replace it.',
-  seriesLabel: 'Comparison series',
-  seriesHint: 'Name the scenario and test conditions (up to 128 UTF-8 bytes). A name alone does not prove comparability.',
-  seriesDefault: 'Selected test series',
-  loading: 'Loading baseline…',
-  noBaseline: 'No baseline selected. Open a saved analysis to assign one.',
-  slotsLegend: 'Active baselines (one per series)',
-  noBaselineFor: (series) => `No baseline for series “${series}”.`,
-  mode: (mode) => mode,
-  runWord: 'Run',
-  analysisWord: 'Analysis',
-  candidatesLine: (algorithm, count) => `${algorithm} · ${count} candidates`,
-  scoresSummary: 'Selection scores',
-  scoreLine: (id, score) => `${id}: ${score} (lower is more central)`,
-  baselineWindow: 'Baseline window ID',
-  currentWindow: 'Current window ID',
-  minChange: 'Minimum change (%)',
-  minErrorDelta: 'Minimum error-rate delta (ratio)',
-  windowHint: 'Optional: enter both window IDs to compare their saved metrics. Leave both empty for overall metrics. '
-    + 'Matching names do not establish the same planned load, request mix or test conditions. '
-    + 'Materiality thresholds must be greater than zero; an error-rate delta of 0.001 is 0.1 percentage points.',
-  conditionsLegend: 'Planned conditions for this exact pair',
-  conditionConfirmed: 'Confirmed same planned test conditions',
-  conditionNotConfirmed: 'Not confirmed',
-  conditionUnknown: 'Unknown',
-  conditionsHint: 'This decision is saved only for the displayed baseline/current analyses and, when entered, both window IDs. '
-    + 'It changes interpretation, not metric deltas, SLA or the policy verdict.',
-  conditionLoading: 'Loading saved condition decision…',
-  conditionSaved: (decision, updatedAt) => `Saved ${decision} at ${updatedAt}`,
-  conditionNone: 'No saved decision for this exact pair.',
-  saveCondition: 'Save condition decision',
-  savingCondition: 'Saving condition decision…',
-  setBaseline: 'Set as baseline',
-  compare: 'Compare selected analysis',
-  comparing: 'Comparing…',
-  clearBaseline: 'Clear baseline',
-  statSummary: 'Statistical selection',
-  statText: 'Select 3–20 different runs from the same planned test conditions. '
-    + 'The central real run is chosen using P95, throughput and error-rate ranks. '
-    + 'This heuristic does not establish a stable norm or statistical significance. Do not add the run you are testing as a candidate.',
-  addCandidate: 'Add selected candidate',
-  remove: 'Remove',
-  removeAria: (filename) => `Remove candidate ${filename}`,
-  sameConditions: 'Same planned test conditions',
-  candidatesHint: 'Confirm scenario/mix, environment/dataset, load model, targets, pacing and generator limits. '
-    + 'Achieved RPS may differ. Invalid or incomplete candidates are rejected, not silently omitted. '
-    + 'This confirms the candidate set only; confirm each compared pair in the planned-conditions form.',
-  selectStatistically: 'Select statistically',
-  requestFailed: 'Baseline request failed.',
-  errorText: () => null,
-  ineligible: null,
-  profileLine: (profile) => (profile.status === 'MATCH' ? 'Release profile: match' : `Release profile: differs: ${profile.differing_fields.join(', ')}`),
-  metricsTitle: 'Overall metrics against baseline',
-  statusLine: (comparability) => `Planned conditions: ${comparability}`,
-  deltasNote: 'Deltas alone do not prove a version regression or change the policy verdict.',
-  deltasRegion: 'Baseline metric deltas',
-  metricHead: 'Metric / unit',
-  baselineHead: 'Baseline',
-  currentHead: 'Current',
-  absoluteHead: 'Absolute delta',
-  relativeHead: 'Relative delta',
-  roundingNote: 'Display rounded to 6 decimal places. Error rate uses ratio units: 0.01 = 1%.',
-  rawMetricsSummary: null,
-  windowTitle: 'Selected-window observations',
-  windowStatus: (status) => (status === 'CANDIDATE' ? 'CANDIDATE (material delta, significance not assessed)' : status),
-  windowStats: (side, samples, durationMs) =>
-    `${side === 'baseline' ? 'Baseline' : 'Current'}: ${samples ?? 'N/A'} samples / ${durationMs ?? 'N/A'} ms.`,
-  uncertaintyNote: 'Uncertainty: NOT_ESTIMATED. These two observations do not establish a reproducible version regression.',
-  windowRegion: 'Selected-window metric deltas',
-  windowMetricHead: 'Metric / entity / unit',
-  statusHead: 'Status / reason',
-  rawSummary: 'Raw window comparison evidence',
-  overall: 'Overall',
-  metric: (metric) => EN_METRICS[metric] ?? metric,
-  unit: (unit) => unit,
-  na: 'N/A',
-  naReason: (reason) => `N/A (${reason})`,
-  value: (value) => value ?? 'N/A',
-  deltaValue: (value, reason) => value ?? `N/A (${reason})`,
-  percentValue: (value, reason) => (value === null ? `N/A (${reason})` : `${value}%`),
-  exact: () => undefined,
-  reasons: (reasons) => reasons.join(', ') || '—',
-  reasonOrDash: (reason) => reason ?? '—',
-  chartsSummary: 'Baseline/current charts',
-  chartsNote: 'Relative time from each load start; this view does not align stages or prove equal test conditions. '
-    + 'OpenSearch events remain in their individual run views.',
-  chartsBin: 'Comparison bin width',
-  chartsStepUnit: 's',
-  chartsLoad: 'Load comparison charts',
-  chartsLoading: 'Loading saved buckets…',
-  chartsUnavailable: 'Chart comparison unavailable.',
-  chartsTruncated: 'Showing the first 500 bins per run. Later bins are omitted; use a wider bin or the individual run view.',
-  chartsAria: 'Current vs baseline load charts on a shared relative time axis',
-  chartsAxisLabel: 'Time from run start',
-  chartsLegend: 'Solid: current · dashed: baseline. Relative time from each run start; gaps are not interpolated.',
-  chartsCurrent: 'Current',
-  chartsBaseline: 'Baseline',
-  chartsEmpty: 'No load bucket data available for comparison.',
-  chartsIncompatible: 'Chart comparison is unavailable because metric definitions are incompatible.',
-  chartsPartial: 'Showing a partial run history: the bucket loading limit was reached.',
-  chartsCursorLabel: 'Comparison time cursor',
-  chartsCursorHint: 'Use Left and Right arrow keys to move the cursor across intervals, Home and End to jump to the ends.',
-  chartsCursorNone: 'cursor not selected',
-  chartsCursorTime: (time) => `Offset from run start: ${time}`,
-  chartsCursorText: (time, rps, errors, p95) => `${time}: RPS ${rps}, errors ${errors}, p95 ${p95}`,
-  chartsThresholdMark: (value, unit) => `threshold ${value} ${unit}`,
-  foreignLang: undefined,
+  foreignLang: string
 }
 
 const RU_METRICS: Record<string, string> = {

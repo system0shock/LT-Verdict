@@ -157,13 +157,12 @@ async function fixtureApi(page: Page, result: unknown) {
   })
 }
 
-async function openOverview(page: Page, result: unknown, shell: 'new' | 'old' = 'new') {
+async function openOverview(page: Page, result: unknown) {
   await fixtureApi(page, result)
-  await page.goto(`/?shell=${shell}`)
+  await page.goto('/')
   await page.getByRole('button', { name: 'incidents.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
-  if (shell === 'new') await expect(page.getByTestId('overview-panel')).toBeVisible()
-  else await expect(page.locator('#verdict')).toBeVisible()
+  await expect(page.getByTestId('overview-panel')).toBeVisible()
 }
 
 test('pure adapters: SETUP_LABELS, U1 dedup, incidentView, trends, platformTiles, KPIs, sparkline option', () => {
@@ -222,7 +221,7 @@ test('renders <=7 incident cards, U1 residual attention, overflow disclosure, co
     (window as never as { csp: string[] }).csp = []
     document.addEventListener('securitypolicyviolation', (event) => (window as never as { csp: string[] }).csp.push(`${event.violatedDirective} ${event.blockedURI}`))
   })
-  await openOverview(page, showcaseResult, 'new')
+  await openOverview(page, showcaseResult)
 
   // Verdict KPIs
   await expect(page.getByTestId('verdict-kpis')).toBeVisible()
@@ -250,7 +249,7 @@ test('renders <=7 incident cards, U1 residual attention, overflow disclosure, co
   await expect(page.getByTestId('overview-platform-tile')).toHaveCount(2)
   await expect.poll(() => page.getByTestId('track-p95').locator('svg text').allTextContents()).toEqual(expect.arrayContaining([expect.stringContaining('порог 250')]))
 
-  // Bottom tail removed from Overview in ?shell=new
+  // Bottom tail removed from Overview
   await expect(page.getByLabel('Скачивание анализа')).toBeHidden()
   await expect(page.getByRole('heading', { name: 'Saved-run analytics' })).toHaveCount(0)
 
@@ -262,29 +261,23 @@ test('renders <=7 incident cards, U1 residual attention, overflow disclosure, co
   expect(await page.evaluate(() => (window as never as { csp: string[] }).csp)).toEqual([])
 })
 
-test('handles NOT_EVALUATED, empty EVALUATED, absent incidents backward compatibility, and ?shell=old freeze', async ({ page }) => {
-  await openOverview(page, { ...showcaseResult, run_validity: 'INVALID', policy_verdict: 'NO_VERDICT', incidents: { schema_version: 'incident.v1', method: 'incident-synthesis.v1', status: 'NOT_EVALUATED', reason_code: 'RUN_NOT_VALID', overview_limit: 7, total_count: 0, omitted_count: 0, items: [] } }, 'new')
+test('handles NOT_EVALUATED, empty EVALUATED, and absent incidents backward compatibility', async ({ page }) => {
+  await openOverview(page, { ...showcaseResult, run_validity: 'INVALID', policy_verdict: 'NO_VERDICT', incidents: { schema_version: 'incident.v1', method: 'incident-synthesis.v1', status: 'NOT_EVALUATED', reason_code: 'RUN_NOT_VALID', overview_limit: 7, total_count: 0, omitted_count: 0, items: [] } })
   await expect(page.getByTestId('incidents-not-evaluated')).toContainText('RUN_NOT_VALID')
 
-  await openOverview(page, { ...showcaseResult, policy_verdict: 'PASS', findings: [], evidence: [overall], incidents: { schema_version: 'incident.v1', method: 'incident-synthesis.v1', status: 'EVALUATED', overview_limit: 7, total_count: 0, omitted_count: 0, items: [] } }, 'new')
+  await openOverview(page, { ...showcaseResult, policy_verdict: 'PASS', findings: [], evidence: [overall], incidents: { schema_version: 'incident.v1', method: 'incident-synthesis.v1', status: 'EVALUATED', overview_limit: 7, total_count: 0, omitted_count: 0, items: [] } })
   await expect(page.getByTestId('incidents-empty')).toContainText(OVERVIEW_LABELS.incidentsEmpty)
 
-  await openOverview(page, { ...showcaseResult, policy_verdict: 'PASS', findings: [], evidence: [overall], incidents: { schema_version: 'incident.v1', method: 'incident-synthesis.v1', status: 'EVALUATED', overview_limit: 0, total_count: 2, omitted_count: 1, items: [makeIncident(1, 'RESOURCE', { in_overview: false })] } }, 'new')
+  await openOverview(page, { ...showcaseResult, policy_verdict: 'PASS', findings: [], evidence: [overall], incidents: { schema_version: 'incident.v1', method: 'incident-synthesis.v1', status: 'EVALUATED', overview_limit: 0, total_count: 2, omitted_count: 1, items: [makeIncident(1, 'RESOURCE', { in_overview: false })] } })
   await expect(page.getByTestId('incidents-empty')).toHaveCount(0)
   await expect(page.getByTestId('incidents-more')).toBeVisible()
   await expect(page.getByTestId('incidents-omitted')).toContainText('1')
 
   const withoutIncidents = { ...showcaseResult, evidence: showcaseResult.evidence.filter((e) => (e as { type: string }).type !== 'resource_binding') }
   delete (withoutIncidents as { incidents?: unknown }).incidents
-  await openOverview(page, withoutIncidents, 'new')
+  await openOverview(page, withoutIncidents)
   await expect(page.getByTestId('overview-incidents')).toHaveCount(0)
   await expect(page.getByTestId('attention-item').first()).toHaveAttribute('data-kind', 'violation')
-
-  await openOverview(page, showcaseResult, 'old')
-  await expect(page.getByTestId('verdict-kpis')).toHaveCount(0)
-  await expect(page.getByTestId('overview-panel')).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Download JSON', exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Saved-run analytics' })).toBeVisible()
 })
 
 for (const theme of ['light', 'dark'] as const) {
@@ -292,7 +285,7 @@ for (const theme of ['light', 'dark'] as const) {
     test(`incidents overview has no serious axe violations, no horizontal scroll, and >=44px controls (${width}px, ${theme})`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 })
       await page.emulateMedia({ colorScheme: theme })
-      await openOverview(page, showcaseResult, 'new')
+      await openOverview(page, showcaseResult)
 
       const scrollOk = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
       expect(scrollOk).toBe(true)

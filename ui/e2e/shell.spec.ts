@@ -53,7 +53,7 @@ async function pickSavedAnalysis(page: Page) {
 
 async function openNewShellWithResult(page: Page) {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await pickSavedAnalysis(page)
   await expect(page.locator('#verdict')).toBeVisible()
 }
@@ -61,12 +61,13 @@ async function openNewShellWithResult(page: Page) {
 const tabByKey = (page: Page, key: string) => page.locator(`#shell-tab-${key}`)
 const label = (key: string) => SHELL_TABS.find((tab) => tab.key === key)!.label
 
-test('the new interface exposes eight tabs, New analysis first and selected, with a labelled panel', async ({ page }) => {
+test('the interface exposes eight tabs by default with empty localStorage, New analysis first and selected, and a labelled panel', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
 
   const tablist = page.getByRole('tablist', { name: SHELL_LABELS.navLabel })
   await expect(tablist).toBeVisible()
+  expect(await page.evaluate(() => window.localStorage.length)).toBe(0)
   await expect(page.getByRole('tab')).toHaveText(
     SHELL_TABS.map((tab) => new RegExp(`^${tab.label}`)),
   )
@@ -86,7 +87,7 @@ test('the new interface exposes eight tabs, New analysis first and selected, wit
 
 test('arrow keys, Home and End move between tabs with a roving tabindex', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   const tabs = page.getByRole('tab')
   await tabs.first().focus()
 
@@ -118,7 +119,7 @@ test('arrow keys, Home and End move between tabs with a roving tabindex', async 
 
 test('Tab leaves the tab list instead of walking through every tab', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await tabByKey(page, 'setup').focus()
 
   await page.keyboard.press('Tab')
@@ -130,7 +131,7 @@ test('Tab leaves the tab list instead of walking through every tab', async ({ pa
 
 test('tabs show the existing panels and never fake data', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
 
   await expect(page.locator('#run-setup')).toBeVisible()
   await expect(page.getByText(SHELL_LABELS.overviewEmpty)).toBeHidden()
@@ -150,7 +151,7 @@ test('tabs show the existing panels and never fake data', async ({ page }) => {
 
 test('choosing a saved analysis opens the overview and every tab keeps its own content', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(tabByKey(page, 'setup')).toHaveAttribute('aria-selected', 'true')
 
   await pickSavedAnalysis(page)
@@ -185,25 +186,20 @@ test('the header chip stays visible on every tab and returns to the verdict card
   await expect(page.locator('#verdict')).toBeInViewport()
 })
 
-test('the header shows the run in Russian and links back to the old interface', async ({ page }) => {
+test('the header shows the run in Russian', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   const header = page.getByRole('banner')
 
   await expect(header).toContainText(SHELL_LABELS.noRun)
   await pickSavedAnalysis(page)
   await expect(header).toContainText('shell.jtl')
-
-  await page.getByRole('link', { name: SHELL_LABELS.legacyLink }).click()
-  await expect(page).toHaveURL(/\?shell=old$/)
-  await expect(page.getByRole('navigation', { name: 'Application' })).toBeVisible()
-  await expect(page.getByRole('tablist')).toHaveCount(0)
 })
 
 test('the theme follows the system, toggles in memory and is never stored', async ({ page }) => {
   await fixtureApi(page)
   await page.emulateMedia({ colorScheme: 'dark' })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   const shell = page.locator('.shell')
 
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
@@ -253,22 +249,15 @@ for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 800 }]) 
   })
 }
 
-test('the run lists are in Russian in the new shell and unchanged in the old one', async ({ page }) => {
+test('the run lists are in Russian', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(page.getByRole('heading', { name: SHELL_LABELS.runsTitle })).toBeVisible()
   await expect(page.getByText('Accepted runs')).toHaveCount(0)
   await page.getByRole('button', { name: 'shell.jtl' }).click()
   await expect(page.getByRole('heading', { name: SHELL_LABELS.analysesTitle })).toBeVisible()
   await expect(page.locator(`button[title="${reference.analysis_id}"]`)).toContainText(SHELL_LABELS.analysisItem)
   await expect(page.getByText('Saved analyses')).toHaveCount(0)
-
-  await page.goto('/?shell=old')
-  await expect(page.getByRole('heading', { name: 'Accepted runs' })).toBeVisible()
-  await page.getByRole('button', { name: 'shell.jtl' }).click()
-  await expect(page.getByRole('heading', { name: 'Saved analyses' })).toBeVisible()
-  await expect(page.locator(`button[title="${reference.analysis_id}"]`)).toContainText('Analysis')
-  await expect(page.getByText(SHELL_LABELS.runsTitle)).toHaveCount(0)
 })
 
 test('the sticky header does not cover the verdict card after the chip jump', async ({ page }) => {
@@ -286,21 +275,14 @@ test('the sticky header does not cover the verdict card after the chip jump', as
   expect(verdictBox!.y).toBeGreaterThanOrEqual(headerBox!.y + headerBox!.height - 1)
 })
 
-test('clicking a run opens its analysis in 1 click in the new shell, while old shell keeps 2-click', async ({ page }) => {
+test('clicking a run opens its analysis in 1 click', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(tabByKey(page, 'setup')).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('button', { name: 'shell.jtl' }).click()
   await expect(tabByKey(page, 'overview')).toHaveAttribute('aria-selected', 'true')
   await expect(page.locator('#verdict')).toBeVisible()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
-
-  await page.goto('/?shell=old')
-  await page.getByRole('button', { name: 'shell.jtl' }).click()
-  await expect(page.getByRole('heading', { name: 'Saved analyses' })).toBeVisible()
-  await expect(page.locator('#verdict')).toHaveCount(0)
-  await page.locator(`button[title="${reference.analysis_id}"]`).click()
-  await expect(page.locator('#verdict')).toBeVisible()
 })
 
 test('new shell handles a run with 0 analyses and a run with multiple analyses cleanly', async ({ page }) => {
@@ -328,7 +310,7 @@ test('new shell handles a run with 0 analyses and a run with multiple analyses c
     else throw new Error(`Unexpected UI request ${path}`)
     await route.fulfill({ json: body })
   })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'empty.jtl' }).click()
   await expect(page.getByText(SHELL_LABELS.analysesEmpty)).toBeVisible()
   await expect(tabByKey(page, 'setup')).toHaveAttribute('aria-selected', 'true')
@@ -386,7 +368,7 @@ test('regression: openReference stays on current tab on result error and manual 
     await route.fulfill({ status, json: body })
   })
 
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await tabByKey(page, 'history').click()
   await expect(page.getByTestId('release-row')).toHaveCount(1)
   await page.getByTestId('release-row').first().getByRole('button', { name: /Открыть/ }).click()
@@ -426,7 +408,7 @@ test('regression: joining an in-flight selectAnalysis respects subsequent manual
     await route.fulfill({ json: body })
   })
 
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'shell.jtl' }).click()
   const analysisBtn = page.locator(`button[title="${reference.analysis_id}"]`)
   await expect(analysisBtn).toBeVisible()

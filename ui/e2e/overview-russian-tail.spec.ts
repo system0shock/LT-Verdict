@@ -2,8 +2,8 @@ import { expect, test, type Page } from '@playwright/test'
 import { JOB_LABELS } from '../src/shell/labels'
 import { ANALYTICS_LABELS, DOWNLOAD_LABELS } from '../src/shell/labels.export'
 
-// Хвост «Обзора» новой оболочки: статус задачи, ссылки скачивания и панель сохранённой аналитики по-русски.
-// API целиком подменяется; прежний интерфейс остаётся английским (его проверяют header-export и local-flow).
+// Хвост «Обзора»: статус задачи, ссылки скачивания и панель сохранённой аналитики на вкладке «История».
+// API целиком подменяется.
 const reference = { run_id: 'tail-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'tail.jtl' }
 const overall = {
@@ -45,7 +45,7 @@ async function fixtureApi(page: Page, state: string) {
 
 test('a finished analysis shows Russian status, hides the old tail on overview, and renders Russian exports and analytics on history', async ({ page }) => {
   await fixtureApi(page, 'COMPLETE')
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(page.locator('#verdict')).toBeVisible()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
 
@@ -66,15 +66,4 @@ test('a finished analysis shows Russian status, hides the old tail on overview, 
   await expect(page.getByRole('button', { name: 'Refresh analytics' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: ANALYTICS_LABELS.title })).toBeVisible()
   await expect(page.getByRole('button', { name: ANALYTICS_LABELS.refresh, exact: true })).toBeVisible()
-})
-
-test('the old interface keeps the English download links and saved-analytics panel', async ({ page }) => {
-  await fixtureApi(page, 'COMPLETE')
-  await page.goto('/?shell=old')
-  await page.getByRole('button', { name: run.original_filename }).click()
-  await page.locator(`button[title="${reference.analysis_id}"]`).click()
-  await expect(page.locator('#verdict')).toBeVisible()
-
-  await expect(page.getByRole('link', { name: 'Download JSON', exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Saved-run analytics' })).toBeVisible()
 })

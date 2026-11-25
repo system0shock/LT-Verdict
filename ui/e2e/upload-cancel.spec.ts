@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { JOB_LABELS, SETUP_LABELS } from '../src/shell/labels'
+import { JOB_LABELS, SETUP_LABELS, UPLOAD_LABELS } from '../src/shell/labels'
 
 const run = { run_id: `jmeter_jtl_csv-${'b'.repeat(64)}`, source_type: 'jmeter_jtl_csv', sha256: 'b'.repeat(64), size_bytes: 1, original_filename: 'big.jtl' }
 const failed = { job_id: 'job-1', state: 'FAILED', processed_bytes: 1, total_bytes: 1, run_id: run.run_id, analysis_id: null, diagnostic: { code: 'TEST_DONE', message: 'finished by the test' } }
@@ -38,44 +38,41 @@ async function fixtureApi(page: Page): Promise<Fixture> {
   return { uploads: () => uploads, jobPosts: () => jobPosts }
 }
 
-for (const scenario of [
-  { name: 'legacy', path: '/', analyze: 'Analyze run', cancel: 'Cancel upload', cancelled: 'Upload cancelled', uploading: 'UPLOADING', failed: 'FAILED' },
-  { name: 'new shell', path: '/?shell=new', analyze: SETUP_LABELS.startButton, cancel: 'Отменить загрузку', cancelled: 'Загрузка отменена', uploading: JOB_LABELS.uploading, failed: JOB_LABELS.states.FAILED },
-]) {
-  test(`cancels a pending upload without creating a job (${scenario.name})`, async ({ page }) => {
-    await page.addInitScript(() => {
-      const aborts = { count: 0 }
-      ;(window as unknown as { __xhrAborts: { count: number } }).__xhrAborts = aborts
-      const original = XMLHttpRequest.prototype.abort
-      XMLHttpRequest.prototype.abort = function (this: XMLHttpRequest) {
-        aborts.count += 1
-        return original.call(this)
-      }
-    })
-    const api = await fixtureApi(page)
-    await page.goto(scenario.path)
-    await page.getByTestId('input-file').setInputFiles({ name: 'big.jtl', mimeType: 'text/plain', buffer: Buffer.from('x') })
-    await page.getByRole('button', { name: scenario.analyze }).click()
+const scenario = { analyze: SETUP_LABELS.startButton, cancel: UPLOAD_LABELS.cancel, cancelled: 'Загрузка отменена', uploading: JOB_LABELS.uploading, failed: JOB_LABELS.states.FAILED }
 
-    await expect(page.locator('#job-status')).toContainText(scenario.uploading)
-    await expect(page.getByTestId('input-file')).toBeDisabled()
-    await expect.poll(api.uploads).toBe(1)
-
-    await page.getByRole('button', { name: scenario.cancel }).click()
-
-    await expect(page.getByRole('button', { name: scenario.cancel })).toHaveCount(0)
-    await expect(page.locator('#job-status')).toContainText(scenario.cancelled)
-    await expect(page.getByRole('alert')).toHaveCount(0)
-    await expect(page.getByTestId('input-file')).toBeEnabled()
-    await expect(page.getByTestId('input-file')).toBeFocused()
-    await expect(page.getByRole('button', { name: scenario.analyze })).toBeEnabled()
-    expect(await page.evaluate(() => (window as unknown as { __xhrAborts: { count: number } }).__xhrAborts.count)).toBe(1)
-    expect(api.jobPosts()).toBe(0)
-
-    await page.getByRole('button', { name: scenario.analyze }).click()
-    await expect(page.locator('#job-status')).toContainText(scenario.failed)
-    await expect(page.locator('#job-status')).not.toContainText(scenario.cancelled)
-    expect(api.uploads()).toBe(2)
-    expect(api.jobPosts()).toBe(1)
+test('cancels a pending upload without creating a job', async ({ page }) => {
+  await page.addInitScript(() => {
+    const aborts = { count: 0 }
+    ;(window as unknown as { __xhrAborts: { count: number } }).__xhrAborts = aborts
+    const original = XMLHttpRequest.prototype.abort
+    XMLHttpRequest.prototype.abort = function (this: XMLHttpRequest) {
+      aborts.count += 1
+      return original.call(this)
+    }
   })
-}
+  const api = await fixtureApi(page)
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles({ name: 'big.jtl', mimeType: 'text/plain', buffer: Buffer.from('x') })
+  await page.getByRole('button', { name: scenario.analyze }).click()
+
+  await expect(page.locator('#job-status')).toContainText(scenario.uploading)
+  await expect(page.getByTestId('input-file')).toBeDisabled()
+  await expect.poll(api.uploads).toBe(1)
+
+  await page.getByRole('button', { name: scenario.cancel }).click()
+
+  await expect(page.getByRole('button', { name: scenario.cancel })).toHaveCount(0)
+  await expect(page.locator('#job-status')).toContainText(scenario.cancelled)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByTestId('input-file')).toBeEnabled()
+  await expect(page.getByTestId('input-file')).toBeFocused()
+  await expect(page.getByRole('button', { name: scenario.analyze })).toBeEnabled()
+  expect(await page.evaluate(() => (window as unknown as { __xhrAborts: { count: number } }).__xhrAborts.count)).toBe(1)
+  expect(api.jobPosts()).toBe(0)
+
+  await page.getByRole('button', { name: scenario.analyze }).click()
+  await expect(page.locator('#job-status')).toContainText(scenario.failed)
+  await expect(page.locator('#job-status')).not.toContainText(scenario.cancelled)
+  expect(api.uploads()).toBe(2)
+  expect(api.jobPosts()).toBe(1)
+})

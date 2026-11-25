@@ -10,7 +10,3 @@ export function e2ePort(defaultPort: number): number {
   }
   return port
 }
-
-export function oldShellStorageState(origin: string) {
-  return { cookies: [], origins: [{ origin, localStorage: [{ name: 'ltv.shell', value: 'old' }] }] }
-}

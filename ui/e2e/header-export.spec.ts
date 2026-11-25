@@ -54,21 +54,21 @@ async function recordActivations(page: Page) {
   return () => page.evaluate(() => (window as unknown as { exportClicks: string[] }).exportClicks)
 }
 
-async function openRun(page: Page, shell: 'new' | 'old' = 'new') {
+async function openRun(page: Page) {
   await fixtureApi(page)
-  await page.goto(`/?shell=${shell}`)
+  await page.goto('/')
   await page.getByRole('button', { name: 'export.jtl' }).click()
 }
 
-async function openAnalysis(page: Page, shell: 'new' | 'old' = 'new') {
-  await openRun(page, shell)
+async function openAnalysis(page: Page) {
+  await openRun(page)
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
 }
 
 test('the header has no export action before an analysis is open', async ({ page }) => {
   await fixtureApi(page, 0)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(exportLink(page)).toHaveCount(0)
 
   await page.getByRole('button', { name: 'export.jtl' }).click()
@@ -127,13 +127,6 @@ test('the export action is reachable by Tab', async ({ page }) => {
   })()
   expect(reachable).toBe(true)
   await expect(exportLink(page)).toHaveCSS('outline-style', 'solid')
-})
-
-test('the old interface keeps its English download links and has no header export', async ({ page }) => {
-  await openAnalysis(page, 'old')
-
-  await expect(exportLink(page)).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Download HTML' })).toHaveAttribute('href', `${reportPath}?format=html`)
 })
 
 for (const theme of ['light', 'dark'] as const) {

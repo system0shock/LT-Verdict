@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { JOB_LABELS, SHELL_LABELS } from '../src/shell/labels'
 
 const analysisId = 'a'.repeat(64)
 const run = {
@@ -89,8 +90,8 @@ async function fixtureApi(page: Page, cancelState: CancelState, completeAfterPol
 
 async function cancelActiveJob(page: Page) {
   await page.goto('/')
-  await expect(page.locator('#job-status')).toContainText('PROCESSING')
-  await page.getByRole('button', { name: 'Cancel analysis' }).click()
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.PROCESSING)
+  await page.getByRole('button', { name: JOB_LABELS.cancel }).click()
 }
 
 test('loads a result returned as complete while cancellation races with publication', async ({ page }) => {
@@ -100,17 +101,17 @@ test('loads a result returned as complete while cancellation races with publicat
   const resultRequest = `GET /api/runs/${run.run_id}/analyses/${analysisId}/result`
   await expect.poll(() => requests.includes(resultRequest)).toBe(true)
   await expect(page.locator('#verdict')).toBeVisible()
-  await expect(page.getByText(/^Completed /)).toBeVisible()
-  await expect(page.locator('#job-status')).toContainText('COMPLETE')
-  await expect(page.getByRole('button', { name: 'Cancel analysis' })).toHaveCount(0)
+  await expect(page.getByText(new RegExp(`^${SHELL_LABELS.completed} `))).toBeVisible()
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.COMPLETE)
+  await expect(page.getByRole('button', { name: JOB_LABELS.cancel })).toHaveCount(0)
 })
 
 test('keeps a cancelled job terminal without loading a result', async ({ page }) => {
   const requests = await fixtureApi(page, 'CANCELLED')
   await cancelActiveJob(page)
 
-  await expect(page.locator('#job-status')).toContainText('CANCELLED')
-  await expect(page.getByRole('button', { name: 'Cancel analysis' })).toHaveCount(0)
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.CANCELLED)
+  await expect(page.getByRole('button', { name: JOB_LABELS.cancel })).toHaveCount(0)
   expect(requests.some((request) => request.endsWith('/result'))).toBe(false)
 })
 
@@ -121,9 +122,9 @@ test('resumes polling when cancellation returns processing before publication co
   const resultRequest = `GET /api/runs/${run.run_id}/analyses/${analysisId}/result`
   await expect.poll(() => requests.includes(resultRequest)).toBe(true)
   await expect(page.locator('#verdict')).toBeVisible()
-  await expect(page.getByText(/^Completed /)).toBeVisible()
-  await expect(page.locator('#job-status')).toContainText('COMPLETE')
-  await expect(page.getByRole('button', { name: 'Cancel analysis' })).toHaveCount(0)
+  await expect(page.getByText(new RegExp(`^${SHELL_LABELS.completed} `))).toBeVisible()
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.COMPLETE)
+  await expect(page.getByRole('button', { name: JOB_LABELS.cancel })).toHaveCount(0)
 })
 
 test('ignores a stale cancel response that arrives after a newer one loaded the result', async ({ page }) => {
@@ -131,20 +132,20 @@ test('ignores a stale cancel response that arrives after a newer one loaded the 
   const gate = new Promise<void>((resolve) => { release = resolve })
   const requests = await fixtureApi(page, 'COMPLETE', false, gate)
   await page.goto('/')
-  await expect(page.locator('#job-status')).toContainText('PROCESSING')
-  const cancel = page.getByRole('button', { name: 'Cancel analysis' })
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.PROCESSING)
+  const cancel = page.getByRole('button', { name: JOB_LABELS.cancel })
   await cancel.click()
   await cancel.click()
 
   const resultRequest = `GET /api/runs/${run.run_id}/analyses/${analysisId}/result`
   await expect.poll(() => requests.includes(resultRequest)).toBe(true)
-  await expect(page.locator('#job-status')).toContainText('COMPLETE')
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.COMPLETE)
   const stale = page.waitForResponse((response) => response.request().method() === 'DELETE')
   release()
   await stale
   await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 200)))
 
-  await expect(page.locator('#job-status')).toContainText('COMPLETE')
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.COMPLETE)
   await expect(page.locator('#verdict')).toBeVisible()
   await expect(cancel).toHaveCount(0)
 })

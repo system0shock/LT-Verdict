@@ -124,7 +124,7 @@ async function fixtureApi(page: Page, screen: ZoomScreen) {
 
 async function openScreen(page: Page, screen: ZoomScreen) {
   await fixtureApi(page, screen)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   if (screen === 'setup') {
     await expect(page.locator('#input-file')).toBeVisible()
     return

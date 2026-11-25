@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Locator } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
+import { SHELL_LABELS } from '../src/shell/labels'
+import { NORMALIZED_LABELS, TABLES_LABELS } from '../src/shell/labels.tables'
 import { e2ePort } from './e2e-env'
 
 const origin = `http://127.0.0.1:${e2ePort(18473)}`
@@ -49,24 +51,24 @@ test.describe.serial('local UI security and accessibility', () => {
 
     await page.goto('/')
     await page.getByTestId('input-file').setInputFiles(fixture('slice1/security/html-label.jtl'))
-    await page.getByRole('button', { name: 'Analyze run' }).click()
+    await page.getByTestId('start-analysis').click()
     await expect(page.locator('#verdict')).toContainText('NO_POLICY')
+    await page.locator('#shell-tab-tables').click()
 
-    await expect(page.locator('#transaction-metrics').getByText(maliciousLabel, { exact: true })).toBeVisible()
-    await expect(page.locator('#transaction-metrics').getByText('NO_POLICY', { exact: true })).toBeVisible()
-    await expect(page.locator('#transaction-metrics').getByText('PASS', { exact: true })).toHaveCount(0)
+    await expect(page.locator('#transaction-metrics tbody').getByText(maliciousLabel, { exact: true })).toBeVisible()
+    await expect(page.locator('#transaction-metrics tbody').getByText(TABLES_LABELS.statusText.NO_POLICY, { exact: true })).toBeVisible()
+    await expect(page.locator('#transaction-metrics tbody').getByText(TABLES_LABELS.statusText.PASS, { exact: true })).toHaveCount(0)
     await expect(page.locator('img[src="x"]')).toHaveCount(0)
     expect(dialogs).toEqual([])
     expect(remoteRequests).toEqual([])
 
-    await page.getByRole('button', { name: /Dark theme|Light theme/ }).click()
-    // The only thing the app may remember is the explicit old-shell choice seeded by the project config.
+    await page.getByRole('button', { name: new RegExp(`${SHELL_LABELS.themeToDark}|${SHELL_LABELS.themeToLight}`) }).click()
     expect(
       await page.evaluate(() => ({
         local: Object.entries(window.localStorage),
         session: window.sessionStorage.length,
       })),
-    ).toEqual({ local: [['ltv.shell', 'old']], session: 0 })
+    ).toEqual({ local: [], session: 0 })
   })
 
   test('serves the shell and API with the exact security headers and no CORS', async ({ request }) => {
@@ -95,48 +97,58 @@ test.describe.serial('local UI security and accessibility', () => {
     const listedRuns = await (await listing).json() as { runs: unknown[] }
     await expect(page.getByTestId('run-list').getByRole('button')).toHaveCount(listedRuns.runs.length)
     const input = page.getByTestId('input-file')
+    const stagesPropose = page.getByTestId('stages-propose')
+    const stagesJson = page.getByTestId('stages-json')
     const policy = page.getByTestId('policy-file')
     const resources = page.getByTestId('resource-snapshot-file')
     const diagnostics = page.getByTestId('correlation-plan-file')
     const capacity = page.getByTestId('capacity-plan-file')
     const trend = page.getByTestId('trend-plan-file')
-    const sourceContext = page.getByLabel('OpenSearch context')
+    const sourceContext = page.locator('#source-context-file')
     const sourceProfile = page.getByTestId('source-profile')
+    const reloadSources = page.getByTestId('reload-sources')
+    const validateSources = page.getByTestId('validate-sources')
+    const probeQueryId = page.getByTestId('source-probe-query-id')
+    const probeSource = page.getByTestId('probe-source')
     const sourceWindowOrigin = page.locator('#source-window-origin')
     const sourceStep = page.locator('#source-step')
     const sourceStepMode = page.locator('#source-step-mode')
     const sourceMargin = page.locator('#source-margin')
     const sourceMaxIdleGap = page.locator('#source-max-idle-gap')
-    const postgresPre = page.getByLabel('PostgreSQL pre capture')
-    const postgresPost = page.getByLabel('PostgreSQL post capture')
-    const pgProfileHtml = page.getByLabel('pg_profile HTML')
+    const postgresProfile = page.locator('#postgres-profile')
+    const postgresPre = page.locator('#postgres-pre-file')
+    const postgresPost = page.locator('#postgres-post-file')
+    const pgProfileHtml = page.locator('#pg-profile-html-file')
+    const aiRequested = page.getByTestId('ai-requested')
+    const pairRequested = page.getByTestId('pair-requested')
     await expect(sourceProfile).toBeEnabled()
-    const analyze = page.getByRole('button', { name: 'Analyze run' })
+    const analyze = page.getByTestId('start-analysis')
     await input.setInputFiles(fixture('slice1/jmeter/csv-5.6.3/input.jtl'))
     await expect(analyze).toBeEnabled()
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
 
-    const navigation = page.getByRole('navigation').locator('a[href], button')
-    await expect(navigation).toHaveCount(2)
-    await expect(navigation.nth(0)).toHaveText('Runs')
-    await expect(navigation.nth(1)).toHaveText('Policies')
     const focusOrder = [
-      navigation.nth(0),
-      navigation.nth(1),
+      page.locator('#shell-tab-setup'),
       page.getByTestId('run-list'),
       ...await page.getByTestId('run-list').getByRole('button').all(),
-      page.getByRole('button', { name: /Dark theme|Light theme/ }),
+      page.getByRole('button', { name: new RegExp(`${SHELL_LABELS.themeToDark}|${SHELL_LABELS.themeToLight}`) }),
       input,
+      stagesPropose,
+      stagesJson,
       policy,
       resources,
-      diagnostics,
-      capacity,
-      trend,
       sourceContext,
       sourceProfile,
+      reloadSources,
+      validateSources,
       postgresPre,
       postgresPost,
       pgProfileHtml,
+      diagnostics,
+      capacity,
+      trend,
+      aiRequested,
+      pairRequested,
       analyze,
     ]
     for (const target of focusOrder) {
@@ -153,12 +165,12 @@ test.describe.serial('local UI security and accessibility', () => {
     await expect(page.locator('p#source-margin-hint')).toBeVisible()
     await expect(page.locator('p#source-max-idle-gap-hint')).toBeVisible()
     await sourceProfile.focus()
-    for (const target of [sourceWindowOrigin, sourceStep, sourceStepMode, sourceMargin, sourceMaxIdleGap, postgresPre]) {
+    for (const target of [reloadSources, validateSources, probeQueryId, probeSource, sourceWindowOrigin, sourceStep, sourceStepMode, sourceMargin, sourceMaxIdleGap, postgresPre]) {
       await page.keyboard.press('Tab')
       await expectVisibleKeyboardFocus(target)
     }
 
-    for (const labelledInput of [input, policy, resources, diagnostics, capacity, trend, sourceContext, sourceProfile, sourceWindowOrigin, sourceStep, sourceStepMode, sourceMargin, sourceMaxIdleGap, postgresPre, postgresPost, pgProfileHtml]) {
+    for (const labelledInput of [input, stagesJson, policy, resources, diagnostics, capacity, trend, sourceContext, sourceProfile, sourceWindowOrigin, sourceStep, sourceStepMode, sourceMargin, sourceMaxIdleGap, postgresProfile, postgresPre, postgresPost, pgProfileHtml]) {
       const labels = await labelledInput.evaluate((element) =>
         [...((element as HTMLInputElement).labels ?? [])].map((label) => {
           const style = getComputedStyle(label)
@@ -193,8 +205,9 @@ test.describe.serial('local UI security and accessibility', () => {
       buffer: Buffer.from(gappedJtl),
     })
     await page.getByTestId('policy-file').setInputFiles(fixture('slice1/policies/fail.json'))
-    await page.getByRole('button', { name: 'Analyze run' }).click()
+    await page.getByTestId('start-analysis').click()
     await expect(page.locator('#verdict')).toContainText('FAIL')
+    await page.locator('#shell-tab-tables').click()
 
     for (const id of ['policy-results', 'transaction-metrics', 'normalized-data']) {
       const table = page.locator(`#${id} table, table#${id}`).first()
@@ -207,10 +220,10 @@ test.describe.serial('local UI security and accessibility', () => {
       ).toBeTruthy()
       expect(await table.getByRole('row').count(), id).toBeGreaterThan(1)
     }
-    await expect(page.locator('#policy-results').getByText('FAIL', { exact: true })).toBeVisible()
-    await expect(page.locator('#normalized-data')).toContainText('20 ms')
-    await expect(page.locator('#normalized-data')).toContainText('30 ms')
-    await expect(page.locator('#normalized-data')).toContainText('Missing / no samples')
+    await expect(page.locator('#policy-results').getByText(TABLES_LABELS.statusText.FAIL, { exact: true }).first()).toBeVisible()
+    await expect(page.locator('#normalized-data')).toContainText('20 мс')
+    await expect(page.locator('#normalized-data')).toContainText('30 мс')
+    await expect(page.locator('#normalized-data')).toContainText(NORMALIZED_LABELS.missing)
     await expect(page.locator('#normalized-data').getByText('Not available', { exact: true })).toHaveCount(0)
 
     expect(

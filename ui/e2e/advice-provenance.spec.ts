@@ -97,14 +97,12 @@ const failedJob = (failure: string | null, reason: string | null = null, state =
   job_id: 'advice-job', run_id: runId, analysis_id: analysisA, state, reused: false, failure, unavailable_reason: reason,
 })
 
-async function openAdvice(page: Page, setup: Setup, shell: 'new' | 'old' = 'new') {
+async function openAdvice(page: Page, setup: Setup) {
   const calls = await mockApi(page, setup)
-  await page.goto(shell === 'new' ? '/?shell=new' : '/?shell=old')
+  await page.goto('/')
   await page.getByRole('button', { name: 'u6a.jtl' }).click()
   await page.locator(`button[title="${analysisA}"]`).click()
-  if (shell === 'new') {
-    await page.locator('#shell-tab-advice').click()
-  }
+  await page.locator('#shell-tab-advice').click()
   const panel = page.locator('section[aria-labelledby="advice-title"]')
   await expect(panel).toBeVisible()
   return { calls, panel }
@@ -150,10 +148,10 @@ test('self-reported MCP advice renders the self-reported origin label without pr
   await expect(origin).toContainText('claude-code 1.0.0')
 })
 
-test('the old interface shows the same provenance because the panel is shared', async ({ page }) => {
-  await openAdvice(page, { advice: advice(analysisA, 'm-old-shell', 'advisory-system.v2', 'Сводка совета', { provider_requests: 2 }) }, 'old')
+test('provenance shows retry count when provider_requests is 2', async ({ page }) => {
+  await openAdvice(page, { advice: advice(analysisA, 'm-retry', 'advisory-system.v2', 'Сводка совета', { provider_requests: 2 }) })
   const origin = page.getByTestId('advice-provenance')
-  await expect(origin).toContainText('m-old-shell')
+  await expect(origin).toContainText('m-retry')
   await expect(origin).toContainText('advisory-system.v2')
   await expect(origin.locator('dd').filter({ hasText: ADVICE_LABELS.requestsRetry })).toBeVisible()
 })
@@ -322,8 +320,8 @@ test('grounds name the evidence in words and open the table row or the summary c
   await expect(page.locator('#summary-metrics')).toBeInViewport()
 })
 
-test('an advice without a loaded result or in the old interface keeps the codes without links', async ({ page }) => {
-  const { panel } = await openAdvice(page, { advice: groundedAdvice(), result: evidenceResult }, 'old')
+test('an advice without matching evidence in the loaded result keeps the codes without links', async ({ page }) => {
+  const { panel } = await openAdvice(page, { advice: groundedAdvice(), result: { ...result, evidence: [] } })
   await panel.getByText('Основания').click()
   await expect(panel.locator('details li')).toHaveCount(4)
   await expect(panel.locator('details li code').first()).toHaveText('c1')

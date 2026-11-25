@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { SETUP_LABELS } from '../src/shell/labels'
 
-// Сверка с настоящим сервером: запуск из нового экрана даёт тот же результат, что запуск из прежней формы.
+// Сверка с настоящим сервером: запуск анализа с политикой и без политики сохраняет результат.
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
 const input = fixture('slice1/jmeter/xml-5.6.3/input.xml')
 const policy = fixture('slice1/policies/fail.json')
@@ -20,33 +20,24 @@ async function storedResults(page: Page) {
   }, inputRunId)
 }
 
-test('the new setup screen runs the same analysis as the old form on a real server', async ({ page }) => {
+test('runs an analysis with policy on a real server and stores the FAIL result', async ({ page }) => {
   await page.goto('/')
-  await page.getByTestId('input-file').setInputFiles(input)
-  await page.getByTestId('policy-file').setInputFiles(policy)
-  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
-  await expect(page.locator('#verdict')).toBeVisible()
-  const oldChip = await page.getByTestId('verdict-chip').textContent()
-  const before = await storedResults(page)
-
-  await page.goto('/?shell=new')
   await page.locator('#input-file').setInputFiles(input)
   await page.locator('#policy-file').setInputFiles(policy)
   await expect(page.locator('[data-testid="readiness-item"][data-key="policy"]')).toHaveAttribute('data-level', 'ok')
   await page.getByTestId('start-analysis').click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
   await expect(page.locator('#shell-tab-overview')).toHaveAttribute('aria-selected', 'true')
-  const newChip = await page.getByTestId('verdict-chip').textContent()
-  const after = await storedResults(page)
+  await expect(page.getByTestId('verdict-chip')).toContainText('FAIL')
 
-  expect(newChip).toBe(oldChip)
-  expect(after.runId).toBe(before.runId)
-  expect(after.results).toEqual(before.results)
-  expect(after.results.length).toBeGreaterThan(0)
+  const stored = await storedResults(page) as { runId: string; results: Array<{ policy_verdict: string }> }
+  expect(stored.runId).toBe(inputRunId)
+  expect(stored.results.length).toBeGreaterThan(0)
+  expect(stored.results.some((item) => item.policy_verdict === 'FAIL')).toBe(true)
 })
 
-test('the new screen starts a load-file-only analysis and reports NO_POLICY in the readiness block', async ({ page }) => {
-  await page.goto('/?shell=new')
+test('starts a load-file-only analysis and reports NO_POLICY in the readiness block', async ({ page }) => {
+  await page.goto('/')
   await page.locator('#input-file').setInputFiles(input)
 
   await expect(page.locator('[data-testid="readiness-item"][data-key="policy"]')).toContainText(SETUP_LABELS.policyNoneItem)

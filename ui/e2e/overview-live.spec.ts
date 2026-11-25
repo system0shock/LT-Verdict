@@ -1,23 +1,24 @@
 import { expect, test, type Page } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
 import { SETUP_LABELS } from '../src/shell/labels'
+import { SUMMARY_METRICS_LABELS } from '../src/shell/labels.tables'
 
-// Сверка с настоящим сервером: числа вкладки «Обзор» новой оболочки совпадают с числами прежнего интерфейса.
+// Сверка с настоящим сервером: числа вкладки «Обзор» совпадают с таблицами и нормализованными интервалами.
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
 const input = fixture('slice1/jmeter/xml-5.6.3/input.xml')
 const policy = fixture('slice1/policies/fail.json')
-const number = (text: string | null) => Number((text ?? '').replace(/[^0-9.]/g, ''))
+const number = (text: string | null) => Number((text ?? '').replace(/\s/g, '').replace(',', '.').replace(/[^0-9.-]/g, ''))
 
-async function analyzeInNewShell(page: Page) {
-  await page.goto('/?shell=new')
+async function analyzeInDefaultShell(page: Page) {
+  await page.goto('/')
   await page.getByTestId('input-file').setInputFiles(input)
   await page.getByTestId('policy-file').setInputFiles(policy)
   await page.getByRole('button', { name: SETUP_LABELS.startButton }).click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
 }
 
-test('overview numbers equal the old interface on a real server', async ({ page }) => {
-  await analyzeInNewShell(page)
+test('overview numbers equal summary metrics and normalized buckets on a real server', async ({ page }) => {
+  await analyzeInDefaultShell(page)
 
   const tiles = Object.fromEntries(await page.getByTestId('metric-tile').evaluateAll((nodes) => nodes.map((node) => [node.getAttribute('data-metric'), node.getAttribute('data-value')])))
   const slider = page.getByTestId('chart-cursor')
@@ -36,14 +37,12 @@ test('overview numbers equal the old interface on a real server', async ({ page 
   })))
   const attention = await page.getByTestId('attention-item').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-kind')))
 
-  await page.goto('/?shell=old')
-  await page.getByRole('button', { name: 'input.xml' }).click()
-  await page.locator('section[aria-labelledby="analysis-list-title"] li button').first().click()
+  await page.locator('#shell-tab-tables').click()
   await expect(page.locator('#summary-metrics')).toBeVisible()
   const card = (name: string) => page.locator('#summary-metrics .metric-card', { has: page.getByText(name, { exact: true }) }).locator('strong')
-  expect(number(await card('P95').textContent())).toBe(Number(tiles.p95))
-  expect(number(await card('P99').textContent())).toBe(Number(tiles.p99))
-  expect(number(await card('Throughput').textContent())).toBe(Number(tiles.rps))
+  expect(number(await card(SUMMARY_METRICS_LABELS.p95).textContent())).toBe(Number(tiles.p95))
+  expect(number(await card(SUMMARY_METRICS_LABELS.p99).textContent())).toBe(Number(tiles.p99))
+  expect(number(await card(SUMMARY_METRICS_LABELS.throughput).textContent())).toBe(Number(tiles.rps))
 
   const rows = page.locator('#normalized-data tbody tr[data-status="available"]')
   await expect(rows.first()).toBeVisible()

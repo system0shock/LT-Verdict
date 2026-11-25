@@ -56,7 +56,7 @@ async function mockAdvice(page: Page, cancelResult: 'CANCELLED' | 'COMPLETE' | '
 }
 
 async function openAdvice(page: Page) {
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#input-file').setInputFiles(input)
   await page.getByTestId('start-analysis').click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()

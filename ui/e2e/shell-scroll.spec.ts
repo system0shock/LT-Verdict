@@ -51,7 +51,7 @@ test.use({ viewport: { width: 1280, height: 720 } })
 
 test('switching a tab scrolls the page back to the top', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'load-0.jtl' }).click()
   await page.locator(`button[title="${manyAnalyses[0].analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
@@ -75,7 +75,7 @@ test('a finished analysis opens with the verdict on the first screen', async ({ 
     run_id: manyRuns[0].run_id, analysis_id: done ? analysisId : null, diagnostic: null,
   })
   await fixtureApi(page, { job })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.PROCESSING)
 
   await page.evaluate(() => window.scrollTo(0, 400))
@@ -89,7 +89,7 @@ test('a finished analysis opens with the verdict on the first screen', async ({ 
 
 test('the side column keeps its own scroll and a bounded height', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'load-0.jtl' }).click()
   await expect(page.locator('ul.run-list').nth(1).locator('li')).toHaveCount(40)
 
@@ -113,7 +113,7 @@ test('the side column keeps its own scroll and a bounded height', async ({ page 
 test('under 960 px the stacked side column does not hide the verdict after a tab switch', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 720 })
   await fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'load-0.jtl' }).click()
   await page.locator(`button[title="${manyAnalyses[0].analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()

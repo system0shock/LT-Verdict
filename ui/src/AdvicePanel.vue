@@ -7,9 +7,8 @@ import ModelChoice from './shell/ModelChoice.vue'
 import type { AttentionTarget } from './shell/overview'
 import type { AdviceDocument, AdviceJob, AdvisoryAiConfig, AnalysisReference, AnalysisResult } from './types'
 
-// linkable: ссылки на строки evidence есть только в новой оболочке (вкладка «Таблицы»).
 // aiConfig и aiModel: список моделей из bootstrap и выбор (ADR 0023); выбор живёт в App.vue.
-const props = defineProps<{ selection: AnalysisReference; autoStart?: boolean; result?: AnalysisResult | null; linkable?: boolean; aiConfig?: AdvisoryAiConfig | null; aiModel?: string }>()
+const props = defineProps<{ selection: AnalysisReference; autoStart?: boolean; result?: AnalysisResult | null; aiConfig?: AdvisoryAiConfig | null; aiModel?: string }>()
 const emit = defineEmits<{ 'auto-started': []; navigate: [target: AttentionTarget]; 'ai-model': [id: string] }>()
 const advice = ref<AdviceDocument | null>(null)
 const job = ref<AdviceJob | null>(null)
@@ -241,7 +240,7 @@ onUnmounted(() => { revision++; stopPolling() })
                 &mdash; {{ ground.label }}
               </template>
               <button
-                v-if="props.linkable && ground.target"
+                v-if="ground.target"
                 type="button"
                 :aria-label="ADVICE_LABELS.evidence.openFor(ground.label)"
                 @click="emit('navigate', ground.target)"

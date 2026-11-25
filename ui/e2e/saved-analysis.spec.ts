@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
+import { JOB_LABELS, SHELL_LABELS } from '../src/shell/labels'
+import { NORMALIZED_LABELS } from '../src/shell/labels.tables'
 
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
 
@@ -10,15 +12,17 @@ test('keeps displayed bucket units until a new rollup page is loaded', async ({ 
     mimeType: 'text/csv',
     buffer: Buffer.from('timeStamp,elapsed,label,success\n1767225600000,0,one,true\n1767225600500,0,two,true\n'),
   })
-  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByTestId('start-analysis').click()
+  await expect(page.locator('#verdict')).toBeVisible()
+  await page.locator('#shell-tab-tables').click()
   const rps = page.locator('#normalized-data tbody tr[data-status="available"]').first().locator('td').nth(1)
-  await expect(rps).toHaveText('2.00')
-  await expect(page.getByRole('img', { name: 'Requests per second' }).locator('circle')).toHaveCount(1)
-  await page.getByLabel('Bucket rollup').selectOption('10')
-  await expect(rps).toHaveText('2.00')
-  await page.getByRole('button', { name: 'Refresh data' }).click()
-  await expect(rps).toHaveText('0.20')
-  await expect(page.getByText(/maximum 500 per page/)).toBeVisible()
+  await expect(rps).toHaveText('2,00')
+  await expect(page.getByRole('img', { name: NORMALIZED_LABELS.charts.rpsTitle }).locator('circle')).toHaveCount(1)
+  await page.getByLabel(NORMALIZED_LABELS.rollupAria).selectOption('10')
+  await expect(rps).toHaveText('2,00')
+  await page.getByRole('button', { name: NORMALIZED_LABELS.refresh }).click()
+  await expect(rps).toHaveText('0,20')
+  await expect(page.getByText(/не более 500 на странице/)).toBeVisible()
   await page.getByRole('button', { name: 'rollup-display.jtl' }).click()
   await expect(page.locator('#job-status')).toHaveCount(0)
 })
@@ -26,7 +30,7 @@ test('keeps displayed bucket units until a new rollup page is loaded', async ({ 
 test('loads a saved analysis after reload without creating a job', async ({ page }) => {
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/xml-5.6.3/input.xml'))
-  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByTestId('start-analysis').click()
   await expect(page.locator('#verdict')).toBeVisible()
   const verdict = await page.locator('#verdict h2').innerText()
   const analysisId = await page.locator('button[aria-pressed="true"][title]').getAttribute('title')
@@ -54,7 +58,9 @@ test('keeps a newer bucket refresh failure over an older response', async ({ pag
 
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/xml-5.6.3/input.xml'))
-  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByTestId('start-analysis').click()
+  await expect(page.locator('#verdict')).toBeVisible()
+  await page.locator('#shell-tab-tables').click()
   await expect(page.locator('#normalized-data')).toBeVisible()
   await page.route(/\/buckets\?/, async (route) => {
     requests += 1
@@ -75,20 +81,22 @@ test('keeps a newer bucket refresh failure over an older response', async ({ pag
     })
   })
 
-  await page.getByRole('button', { name: 'Refresh data' }).click()
+  await page.getByRole('button', { name: NORMALIZED_LABELS.refresh }).click()
   await expect.poll(() => firstStarted).toBe(true)
-  await page.getByRole('button', { name: 'Refresh data' }).click()
+  await page.getByRole('button', { name: NORMALIZED_LABELS.refresh }).click()
   await expect(page.getByRole('alert')).toContainText('Latest bucket request failed')
   releaseFirst?.()
   await expect.poll(() => firstFinished).toBe(true)
-  await expect(page.getByText('999 ms', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('999 мс', { exact: true })).toHaveCount(0)
 })
 
 for (const status of [200, 500]) {
   test(`ignores superseded completion listing with status ${status}`, async ({ page }) => {
     await page.goto('/')
     await page.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/xml-5.6.3/input.xml'))
-    await page.getByRole('button', { name: 'Analyze run' }).click()
+    await page.getByTestId('start-analysis').click()
+    await expect(page.locator('#verdict')).toBeVisible()
+    await page.locator('#shell-tab-tables').click()
     await expect(page.locator('#normalized-data tbody tr').first()).toBeVisible()
     let held = false
     let finished = false
@@ -103,7 +111,13 @@ for (const status of [200, 500]) {
       else await route.fulfill({ status, json: { error: { code: 'TEST_FAILURE', message: 'Stale completion failed', details: [] } } })
       finished = true
     })
-    await page.getByRole('button', { name: 'Analyze run' }).click()
+    await page.locator('#shell-tab-setup').click()
+    await page.getByTestId('input-file').setInputFiles({
+      name: 'other.jtl',
+      mimeType: 'text/csv',
+      buffer: Buffer.from('timeStamp,elapsed,label,success\n1767225600000,10,other,true\n'),
+    })
+    await page.getByTestId('start-analysis').click()
     await expect.poll(() => held).toBe(true)
     await expect(page.locator('#verdict')).toBeVisible()
     await page.getByRole('button', { name: 'input.xml' }).click()
@@ -111,25 +125,26 @@ for (const status of [200, 500]) {
     await expect.poll(() => finished).toBe(true)
     await page.waitForLoadState('networkidle')
     await expect(page.getByRole('alert')).toHaveCount(0)
-    await expect(page.locator('#verdict')).toHaveCount(0)
+    await expect(page.locator('.run-identity')).toContainText('input.xml')
   })
 }
 
 test('clears the previous run analyses when a new run is cancelled', async ({ page }) => {
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/xml-5.6.3/input.xml'))
-  await page.getByRole('button', { name: 'Analyze run' }).click()
-  const analyses = page.getByRole('region', { name: 'Saved analyses' })
-  await expect(analyses.getByRole('button', { name: /^Analysis / }).first()).toBeVisible()
+  await page.getByTestId('start-analysis').click()
+  const analyses = page.getByRole('region', { name: SHELL_LABELS.analysesTitle })
+  await expect(analyses.getByRole('button', { name: new RegExp(`^${SHELL_LABELS.analysisItem} `) }).first()).toBeVisible()
+  await page.locator('#shell-tab-setup').click()
   await page.getByTestId('input-file').setInputFiles({
     name: 'sustained.jtl',
     mimeType: 'text/csv',
     buffer: Buffer.from('timeStamp,elapsed,label,success\n1767225600000,321,cancel-selection,true\n'),
   })
-  await page.getByRole('button', { name: 'Analyze run' }).click()
-  await page.getByRole('button', { name: 'Cancel analysis' }).click()
-  await expect(page.locator('#job-status')).toContainText('CANCELLED')
-  await expect(analyses.getByRole('button', { name: /^Analysis / })).toHaveCount(0)
+  await page.getByTestId('start-analysis').click()
+  await page.getByRole('button', { name: JOB_LABELS.cancel }).click()
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.CANCELLED)
+  await expect(analyses.getByRole('button', { name: new RegExp(`^${SHELL_LABELS.analysisItem} `) })).toHaveCount(0)
 })
 
 test('renders separate chart segments for missing intervals', async ({ page }) => {
@@ -144,11 +159,13 @@ test('renders separate chart segments for missing intervals', async ({ page }) =
     mimeType: 'text/csv',
     buffer: Buffer.from(`${header}\n${rows.join('\n')}\n`),
   })
-  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByTestId('start-analysis').click()
+  await expect(page.locator('#verdict')).toBeVisible()
+  await page.locator('#shell-tab-tables').click()
   await expect(page.locator('#normalized-data')).toBeVisible()
-  await expect(page.getByRole('img', { name: 'Requests per second' })).toBeVisible()
-  await expect(page.getByRole('img', { name: 'Errors per bin' })).toBeVisible()
-  await expect(page.getByRole('img', { name: 'P95 latency' })).toBeVisible()
+  await expect(page.getByRole('img', { name: NORMALIZED_LABELS.charts.rpsTitle })).toBeVisible()
+  await expect(page.getByRole('img', { name: NORMALIZED_LABELS.charts.errorsTitle })).toBeVisible()
+  await expect(page.getByRole('img', { name: NORMALIZED_LABELS.charts.p95Title })).toBeVisible()
   await expect(page.locator('#normalized-data svg polyline')).toHaveCount(6)
   await expect(page.locator('#normalized-data svg circle')).toHaveCount(6)
 })

@@ -4,11 +4,11 @@ import BaselineCharts from './BaselineCharts.vue'
 import { ApiError, clearBaseline, compareBaseline, getBaseline, getBaselineConditions, setBaseline, setBaselineConditions } from './api'
 import { baselineIneligibility, type BaselineFacts } from './shell/history'
 import { BASELINE_LABELS } from './shell/labels'
-import { EN_COMPARE_LABELS, type CompareLabels } from './shell/labels.compare'
+import { COMPARE_LABELS, type CompareLabels } from './shell/labels.compare'
 import type { AnalysisReference, AnalysisResult, BaselineComparison, BaselineCondition, BaselineConditionDecision, BaselineConditionWindows, BaselineRequest, BaselineSelection, BaselineSlotView } from './types'
 
 // `version` changes when the history tab assigned a baseline; `preferredSeries` is the series of the release opened from the history.
-const props = withDefaults(defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean; labels?: CompareLabels; version?: number; preferredSeries?: string; facts?: BaselineFacts | null; result?: AnalysisResult | null; useEcharts?: boolean }>(), { labels: () => EN_COMPARE_LABELS, version: 0, preferredSeries: undefined, facts: null, result: null, useEcharts: false })
+const props = withDefaults(defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean; labels?: CompareLabels; version?: number; preferredSeries?: string; facts?: BaselineFacts | null; result?: AnalysisResult | null }>(), { labels: () => COMPARE_LABELS, version: 0, preferredSeries: undefined, facts: null, result: null })
 // The series of the shown baseline: the saved analytics ask the server for the same baseline.
 const emit = defineEmits<{ 'active-series': [series: string | undefined] }>()
 const slots = ref<BaselineSlotView[]>([])
@@ -38,8 +38,8 @@ let conditionRevision = 0
 const busy = computed(() => loading.value || saving.value || conditionSaving.value || props.working)
 const canAdd = computed(() => props.selection && candidates.value.length < 20
   && !candidates.value.some((candidate) => candidate.reference.run_id === props.selection?.run_id))
-// Why the open analysis cannot become a baseline (new shell only: the old interface leaves the decision to the server).
-const ineligibleCode = computed(() => (props.labels.ineligible && props.facts ? baselineIneligibility(props.facts) : null))
+// Why the open analysis cannot become a baseline.
+const ineligibleCode = computed(() => (props.facts ? baselineIneligibility(props.facts) : null))
 const validSeries = computed(() => series.value.trim().length > 0 && new TextEncoder().encode(series.value).length <= 128)
 const windowSelection = computed(() => baselineWindow.value.trim() !== '' || currentWindow.value.trim() !== '')
 const validWindows = computed(() => !windowSelection.value || (
@@ -507,7 +507,7 @@ function warningText(code: string): string {
     </div>
 
     <p
-      v-if="ineligibleCode !== null && labels.ineligible"
+      v-if="ineligibleCode !== null"
       id="baseline-ineligible"
       data-testid="baseline-ineligible"
       class="field__hint"
@@ -616,7 +616,6 @@ function warningText(code: string): string {
         :comparison="comparison"
         :labels="labels"
         :result="result"
-        :use-echarts="useEcharts"
       />
       <div
         class="table-wrap"

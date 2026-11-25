@@ -137,7 +137,7 @@ function fixtureApi(page: Page, options: Options = {}) {
 }
 
 async function openDeep(page: Page) {
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'deep.jtl' }).click()
   await page.locator(`button[title="${analysisId}"]`).click()
   await page.locator('#shell-tab-deep').click()
@@ -214,7 +214,7 @@ test('deep charts raise no CSP violation under the real server policy', async ({
 
 test('a failed resource diagnostic in overview opens and focuses deep analysis', async ({ page }) => {
   const mock = fixtureApi(page, { diagnosticFail: true })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'deep.jtl' }).click()
   await page.locator(`button[title="${analysisId}"]`).click()
 
@@ -315,7 +315,7 @@ test('a failed replacement does not display stale resource tracks', async ({ pag
 
 test('changing series during the initial bucket request preserves load tracks', async ({ page }) => {
   const mock = fixtureApi(page, { delayDeepBucket: 400 })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'deep.jtl' }).click()
   await page.locator(`button[title="${analysisId}"]`).click()
   await page.locator('#shell-tab-deep').click()
@@ -418,7 +418,7 @@ test('unapplied period edits do not leak into a later series change', async ({ p
 test('a slow second catalog page keeps the period controls hidden and all series listed', async ({ page }) => {
   const many = Array.from({ length: 300 }, (_, i) => `s${String(i).padStart(3, '0')}`)
   fixtureApi(page, { ids: many, catalogPage: 256, delayCatalogSecondPage: 600 })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'deep.jtl' }).click()
   await page.locator(`button[title="${analysisId}"]`).click()
   await page.locator('#shell-tab-deep').click()
@@ -526,7 +526,7 @@ for (const theme of ['light', 'dark'] as const) {
 
 test('empty deep tab repeats the overview notice', async ({ page }) => {
   fixtureApi(page)
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.locator('#shell-tab-deep').click()
   await expect(page.getByText(SHELL_LABELS.overviewEmpty)).toBeVisible()
 })
@@ -536,7 +536,7 @@ test('grouped metric catalog switches the ~260px primary chart, pins load metric
     roles: { queue: 'generator' },
     policyChecks: [{ id: 'p95-rule', type: 'policy_check', rule_id: 'p95-sla', metric: 'response_time_p95_ms', operator: 'lte', threshold: 90, status: 'FAIL', scope: { kind: 'overall' } }],
   })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'deep.jtl' }).click()
   await page.locator(`button[title="${analysisId}"]`).click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()

@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { COMPARE_LABELS } from '../src/shell/labels.compare'
+import { DIAGNOSTICS_LABELS } from '../src/shell/labels.tables'
 
 const reference = { run_id: 'diagnostic-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'diagnostic.jtl' }
@@ -58,9 +60,9 @@ test('submits the optional diagnostic plan with the resource snapshot', async ({
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles({ name: 'diagnostic.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
   await page.getByTestId('resource-snapshot-file').setInputFiles({ name: 'resource.json', mimeType: 'application/json', buffer: Buffer.from('{"resource":"selected"}') })
-  await page.getByLabel('Correlation plan', { exact: false }).setInputFiles({ name: 'plan.json', mimeType: 'application/json', buffer: Buffer.from('{"plan":"selected"}') })
+  await page.getByTestId('correlation-plan-file').setInputFiles({ name: 'plan.json', mimeType: 'application/json', buffer: Buffer.from('{"plan":"selected"}') })
   const request = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/jobs')
-  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  await page.getByTestId('start-analysis').click()
   const submitted = (await request).postDataBuffer()!.toString()
   expect(submitted).toContain('name="correlation_plan"; filename="plan.json"')
   expect(submitted).toContain('{"plan":"selected"}')
@@ -69,19 +71,17 @@ test('submits the optional diagnostic plan with the resource snapshot', async ({
 
 test('renders diagnostic coverage, abstention and one safe episode with expandable evidence', async ({ page }, testInfo) => {
   await openSaved(page)
+  await page.locator('#shell-tab-tables').click()
   const diagnostics = page.locator('#diagnostic-results')
   await expect(diagnostics).toBeVisible()
   await expect(diagnostics).toContainText('NOT_ESTIMATED')
-  await expect(diagnostics).toContainText('3 short episodes suppressed')
-  await expect(diagnostics.getByRole('row', { name: /cpu-latency/ })).toContainText('0.9')
-  await expect(diagnostics.getByRole('row', { name: /memory-latency/ })).toContainText('INSUFFICIENT_DATA')
-  await expect(diagnostics).toContainText('PLANNED_LOAD_UNAVAILABLE')
-  await expect(diagnostics.getByRole('row', { name: /server-1.*memory|memory.*server-1/ })).toContainText('N/A')
+  await expect(diagnostics).toContainText(DIAGNOSTICS_LABELS.summaryCounts(1, 2, 1, 1, 3))
+  await expect(diagnostics.getByTestId('correlation-hypotheses')).toContainText('Ассоциаций, прошедших отбор, нет')
   await expect(page.getByTestId('anomaly-episodes').locator('tbody tr')).toHaveCount(1)
-  await expect(page.getByTestId('anomaly-episodes')).toContainText('25.0 s')
+  await expect(page.getByTestId('anomaly-episodes')).toContainText(DIAGNOSTICS_LABELS.durationSec('25,0'))
   await expect(page.getByTestId('anomaly-episodes')).toContainText('<img src=x onerror=alert(1)>')
   await expect(diagnostics.locator('img')).toHaveCount(0)
-  await diagnostics.getByText('Raw diagnostic evidence', { exact: true }).click()
+  await diagnostics.getByText(DIAGNOSTICS_LABELS.rawSummary, { exact: true }).click()
   await expect(diagnostics.locator('pre')).toContainText('reference_mad')
   expect((await new AxeBuilder({ page }).include('#diagnostic-results').analyze()).violations).toEqual([])
   await page.setViewportSize({ width: 500, height: 1000 })
@@ -102,22 +102,23 @@ test('compares explicit windows and materiality while preserving unconfirmed and
     } })
   })
   await openSaved(page)
-  const action = page.getByRole('button', { name: 'Compare selected analysis', exact: true })
-  await page.getByLabel('Baseline window ID', { exact: true }).fill('reference')
+  await page.locator('#shell-tab-compare').click()
+  const action = page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true })
+  await page.getByLabel(COMPARE_LABELS.baselineWindow, { exact: true }).fill('reference')
   await expect(action).toBeDisabled()
-  await page.getByLabel('Current window ID', { exact: true }).fill('steady')
-  await page.getByLabel('Minimum change (%)', { exact: true }).fill('10')
-  await page.getByLabel('Minimum error-rate delta (ratio)', { exact: true }).fill('0.002')
+  await page.getByLabel(COMPARE_LABELS.currentWindow, { exact: true }).fill('steady')
+  await page.getByLabel(COMPARE_LABELS.minChange, { exact: true }).fill('10')
+  await page.getByLabel(COMPARE_LABELS.minErrorDelta, { exact: true }).fill('0.002')
   await action.click()
   await expect(page.getByTestId('window-comparison')).toContainText('CONDITIONS_UNCONFIRMED')
   await expect(page.getByTestId('window-comparison')).toContainText('ZERO_BASELINE')
   await expect(page.getByTestId('window-comparison')).toContainText('server-1')
-  await expect(page.getByTestId('window-comparison')).toContainText('600 samples / 30000 ms')
-  await expect(page.getByTestId('window-comparison')).toContainText('800 samples / 40000 ms')
-  await page.getByTestId('window-comparison').getByText('Raw window comparison evidence', { exact: true }).click()
+  await expect(page.getByTestId('window-comparison')).toContainText(COMPARE_LABELS.windowStats('baseline', 600, 30000))
+  await expect(page.getByTestId('window-comparison')).toContainText(COMPARE_LABELS.windowStats('current', 800, 40000))
+  await page.getByTestId('window-comparison').getByText(COMPARE_LABELS.rawSummary, { exact: true }).click()
   await page.setViewportSize({ width: 500, height: 1000 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(500)
-  await page.getByLabel('Current window ID', { exact: true }).fill('another-window')
+  await page.getByLabel(COMPARE_LABELS.currentWindow, { exact: true }).fill('another-window')
   await expect(page.getByTestId('window-comparison')).toHaveCount(0)
 })
 
@@ -140,9 +141,9 @@ const withSelection = {
   ],
 }
 
-test('the new shell lists only the selected correlation as a hypothesis to check and says what could not be checked', async ({ page }, testInfo) => {
+test('lists only the selected correlation as a hypothesis to check and says what could not be checked', async ({ page }, testInfo) => {
   await page.route('**/result', (route) => route.fulfill({ json: withSelection }))
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'diagnostic.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
   await page.locator('#shell-tab-tables').click()
@@ -166,18 +167,13 @@ test('the new shell lists only the selected correlation as a hypothesis to check
   await diagnostics.screenshot({ path: testInfo.outputPath('correlation-hypotheses-mobile.png') })
 })
 
-test('the new shell says so when no pair was selected, and the old interface still shows every pair in English', async ({ page }) => {
+test('says so when no pair was selected', async ({ page }) => {
   await page.route('**/result', (route) => route.fulfill({ json: { ...withSelection, evidence: withSelection.evidence.filter((item) => item.id !== 'selection-cpu-latency') } }))
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'diagnostic.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
   await page.locator('#shell-tab-tables').click()
 
   await expect(page.getByTestId('correlation-hypotheses')).toContainText('Ассоциаций, прошедших отбор, нет')
   await expect(page.getByTestId('correlation-hypotheses').getByRole('table')).toHaveCount(0)
-  await page.goto('/?shell=old')
-  await page.getByRole('button', { name: 'diagnostic.jtl' }).click()
-  await page.locator(`button[title="${reference.analysis_id}"]`).click()
-  await expect(page.locator('#diagnostic-results').getByRole('row', { name: /memory-latency/ })).toBeVisible()
-  await expect(page.getByTestId('correlation-hypotheses')).toHaveCount(0)
 })

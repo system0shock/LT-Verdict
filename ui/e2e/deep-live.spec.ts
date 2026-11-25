@@ -43,7 +43,7 @@ async function moveTo(page: Page, position: 'Home' | 'End' | number, testId = 'd
 }
 
 test('deep cursor matches the independent resource-series oracle on a real server', async ({ page }) => {
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByTestId('input-file').setInputFiles({ name: 'deep-live.csv', mimeType: 'text/csv', buffer: csv })
   await page.getByTestId('resource-snapshot-file').setInputFiles({ name: 'deep-live-snapshot.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(snapshot)) })
   await page.getByTestId('start-analysis').click()

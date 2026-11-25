@@ -64,7 +64,7 @@ const start = (page: Page) => page.getByTestId('start-analysis')
 const readiness = (page: Page, key: string) => page.locator(`[data-testid="readiness-item"][data-key="${key}"]`)
 const partNames = (body: string) => [...body.matchAll(/name="([^"]+)"(?:; filename="([^"]+)")?/g)].map((match) => (match[2] ? `${match[1]}:${match[2]}` : match[1]))
 
-async function openSetup(page: Page, path = '/?shell=new') {
+async function openSetup(page: Page, path = '/') {
   const calls = await fixtureApi(page)
   await page.goto(path)
   await expect(page.locator('#source-profile option')).toHaveCount(3)
@@ -155,16 +155,6 @@ test('correlation, capacity and trend plans without a snapshot block the start b
   await expect(start(page)).toBeEnabled()
 })
 
-test('the old form refuses a correlation plan without a snapshot before any upload, in English', async ({ page }) => {
-  const calls = await openSetup(page, '/?shell=old')
-  await page.getByTestId('input-file').setInputFiles(load)
-  await page.getByTestId('correlation-plan-file').setInputFiles(json('correlation.json'))
-  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
-
-  await expect(page.getByRole('alert').filter({ hasText: 'Correlation plan requires a matching resource snapshot.' })).toBeVisible()
-  expect(calls.inputs).toBe(0)
-})
-
 test('an invalid policy draft blocks the start and a rejected policy file does not', async ({ page }) => {
   await openSetup(page)
   await page.locator('#input-file').setInputFiles(load)
@@ -218,43 +208,35 @@ async function fillEverythingFromFiles(page: Page) {
   await page.locator('#pg-profile-html-file').setInputFiles({ name: 'pg-profile.html', mimeType: 'text/html', buffer: Buffer.from('<p>x</p>') })
 }
 
-test('sends the same job parts as the old form for a full file selection', async ({ page }) => {
-  const sent: Record<string, string[]> = {}
-  for (const [name, path, label] of [['old', '/', 'Analyze run'], ['new', '/?shell=new', SETUP_LABELS.startButton]] as const) {
-    const calls = await openSetup(page, path)
-    await fillEverythingFromFiles(page)
-    await expect(page.getByRole('button', { name: label, exact: true })).toBeEnabled()
-    await page.getByRole('button', { name: label, exact: true }).click()
-    await expect.poll(() => calls.jobs.length).toBe(1)
-    sent[name] = partNames(calls.jobs[0])
-    await page.unroute('**/api/**')
-  }
+test('sends all job parts for a full file selection', async ({ page }) => {
+  const calls = await openSetup(page)
+  await fillEverythingFromFiles(page)
+  await expect(start(page)).toBeEnabled()
+  await start(page).click()
+  await expect.poll(() => calls.jobs.length).toBe(1)
 
-  expect(sent.new).toEqual(sent.old)
-  expect(sent.new).toEqual(expect.arrayContaining([
+  expect(partNames(calls.jobs[0])).toEqual(expect.arrayContaining([
     'run_id', 'policy:policy.json', 'resource_snapshot:snapshot.json', 'correlation_plan:correlation.json', 'capacity_plan:capacity.json',
     'trend_plan:trend.json', 'source_context:context-a.json', 'source_context:context-b.json', 'postgres_pre:pre.json', 'postgres_post:post.json', 'pg_profile_html:pg-profile.html',
   ]))
 })
 
-for (const [name, path, label] of [['old', '/?shell=old', 'Analyze run'], ['new', '/?shell=new', SETUP_LABELS.startButton]] as const) {
-  test(`${name} form: a start clicked while the policy file is still being checked sends that policy`, async ({ page }) => {
-    const calls = await openSetup(page, path)
-    let release!: () => void
-    const checked = new Promise<void>((resolve) => (release = resolve))
-    await page.route('**/api/policies/validate', async (route) => {
-      await checked
-      await route.fallback()
-    })
-    await page.locator('#input-file').setInputFiles(load)
-    await page.locator('#policy-file').setInputFiles(policyFile())
-    await page.getByRole('button', { name: label, exact: true }).click()
-    release()
-
-    await expect.poll(() => calls.jobs.length).toBe(1)
-    expect(partNames(calls.jobs[0])).toContain('policy:policy.json')
+test('a start clicked while the policy file is still being checked sends that policy', async ({ page }) => {
+  const calls = await openSetup(page)
+  let release!: () => void
+  const checked = new Promise<void>((resolve) => (release = resolve))
+  await page.route('**/api/policies/validate', async (route) => {
+    await checked
+    await route.fallback()
   })
-}
+  await page.locator('#input-file').setInputFiles(load)
+  await page.locator('#policy-file').setInputFiles(policyFile())
+  await start(page).click()
+  release()
+
+  await expect.poll(() => calls.jobs.length).toBe(1)
+  expect(partNames(calls.jobs[0])).toContain('policy:policy.json')
+})
 
 test('a policy file cleared while it is still being checked is not sent', async ({ page }) => {
   const calls = await openSetup(page)
@@ -274,34 +256,27 @@ test('a policy file cleared while it is still being checked is not sent', async 
   expect(partNames(calls.jobs[0])).toEqual(['run_id'])
 })
 
-test('online profiles lock the file inputs and send the same source request as the old form', async ({ page }) => {
-  const sent: Record<string, string> = {}
-  for (const [name, path, label] of [['old', '/', 'Analyze run'], ['new', '/?shell=new', SETUP_LABELS.startButton]] as const) {
-    const calls = await openSetup(page, path)
-    await page.locator('#input-file').setInputFiles(load)
-    await page.locator('#source-profile').selectOption(['prod-prometheus', 'app-logs'])
-    for (const id of ['resource-snapshot-file', 'correlation-plan-file', 'capacity-plan-file', 'trend-plan-file', 'source-context-file']) {
-      await expect(page.locator(`#${id}`), `${name} ${id}`).toBeDisabled()
-    }
-    await expect(page.locator('#source-window-origin')).toHaveValue('auto')
-    // Новый экран принимает секунды, прежняя форма миллисекунды: на сервер уходит одно и то же.
-    const [step, margin, idle] = name === 'new' ? ['1', '2', '60'] : ['1000', '2000', '60000']
-    if (name === 'new') await expect(page.locator('#source-max-idle-gap')).toHaveValue('60')
-    await page.locator('#source-step').fill(step)
-    await page.locator('#source-margin').fill(margin)
-    await page.locator('#source-max-idle-gap').fill(idle)
-    await page.getByRole('button', { name: label, exact: true }).click()
-    await expect.poll(() => calls.jobs.length).toBe(1)
-    expect(partNames(calls.jobs[0])).toEqual(['run_id', 'source_request:source-request.json'])
-    sent[name] = calls.jobs[0].split('\r\n').find((line) => line.startsWith('{"schema_version"')) ?? ''
-    await page.unroute('**/api/**')
+test('online profiles lock the file inputs and send source-request.v3', async ({ page }) => {
+  const calls = await openSetup(page)
+  await page.locator('#input-file').setInputFiles(load)
+  await page.locator('#source-profile').selectOption(['prod-prometheus', 'app-logs'])
+  for (const id of ['resource-snapshot-file', 'correlation-plan-file', 'capacity-plan-file', 'trend-plan-file', 'source-context-file']) {
+    await expect(page.locator(`#${id}`), id).toBeDisabled()
   }
+  await expect(page.locator('#source-window-origin')).toHaveValue('auto')
+  await expect(page.locator('#source-max-idle-gap')).toHaveValue('60')
+  await page.locator('#source-step').fill('1')
+  await page.locator('#source-margin').fill('2')
+  await page.locator('#source-max-idle-gap').fill('60')
+  await start(page).click()
+  await expect.poll(() => calls.jobs.length).toBe(1)
+  expect(partNames(calls.jobs[0])).toEqual(['run_id', 'source_request:source-request.json'])
+  const sent = calls.jobs[0].split('\r\n').find((line) => line.startsWith('{"schema_version"')) ?? ''
 
-  expect(sent.new).toBe('{"schema_version":"source-request.v3","profile_ids":["app-logs","prod-prometheus"],"window":{"origin":"auto","step_ms":1000,"margin_ms":2000,"max_idle_gap_ms":60000}}')
-  expect(sent.new).toBe(sent.old)
+  expect(sent).toBe('{"schema_version":"source-request.v3","profile_ids":["app-logs","prod-prometheus"],"window":{"origin":"auto","step_ms":1000,"margin_ms":2000,"max_idle_gap_ms":60000}}')
 })
 
-test('an explicit source window asks for a period and its errors are Russian here and English in the old form', async ({ page }) => {
+test('an explicit source window asks for a period and shows Russian errors', async ({ page }) => {
   await openSetup(page)
   await page.locator('#input-file').setInputFiles(load)
   await page.locator('#source-profile').selectOption('prod-prometheus')
@@ -321,11 +296,6 @@ test('an explicit source window asks for a period and its errors are Russian her
   await page.locator('#source-step').fill('1')
   await expect(page.getByTestId('source-request-error')).toHaveCount(0)
   await expect(start(page)).toBeEnabled()
-
-  await page.unroute('**/api/**')
-  await openSetup(page, '/?shell=old')
-  await page.locator('#source-profile').selectOption('prod-prometheus')
-  await expect(page.getByTestId('source-request-error')).toHaveText('Online source requires step, margin, and max idle gap in milliseconds.')
 })
 
 test('the window fields are in seconds and an explicit window may hold at most 100000 cells, like the server check', async ({ page }) => {
@@ -374,18 +344,6 @@ test('the step mode is fixed by default and auto sends source-request.v4 with a 
   expect(calls.jobs[0]).toContain('{"schema_version":"source-request.v4","profile_ids":["prod-prometheus"],"window":{"origin":"auto","step_ms":15000,"step_mode":"auto","margin_ms":50000,"max_idle_gap_ms":60000}}')
 })
 
-test('the old form checks the number of cells too, in milliseconds and English', async ({ page }) => {
-  await openSetup(page, '/?shell=old')
-  await page.locator('#source-profile').selectOption('prod-prometheus')
-  await page.locator('#source-window-origin').selectOption('explicit')
-  await page.locator('#source-start').fill('0')
-  await page.locator('#source-step').fill('1000')
-  await page.locator('#source-end').fill('100000000')
-  await expect(page.getByTestId('source-request-error')).toHaveCount(0)
-  await page.locator('#source-end').fill('100001000')
-  await expect(page.getByTestId('source-request-error')).toHaveText('Source range may hold at most 100000 cells (range divided by step): increase the step or shorten the period.')
-})
-
 test('PostgreSQL capture buttons need a profile and call the existing endpoints', async ({ page }) => {
   const calls = await openSetup(page)
 
@@ -413,15 +371,6 @@ test('the ИИ-разбор section offers a toggle with no consent wording and 
   await expect(start(page)).toBeEnabled()
   expect(calls.inputs).toBe(0)
   await expect(ai.locator('button, select')).toHaveCount(0)
-})
-
-test('the old interface keeps its own form and never shows the new screen', async ({ page }) => {
-  await openSetup(page, '/?shell=old')
-
-  await expect(page.getByRole('heading', { name: 'Run setup' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Analyze run', exact: true })).toBeDisabled()
-  await expect(page.getByTestId('start-analysis')).toHaveCount(0)
-  await expect(page.getByText(SETUP_LABELS.readinessTitle)).toHaveCount(0)
 })
 
 for (const theme of ['light', 'dark'] as const) {

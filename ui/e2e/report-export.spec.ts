@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { EXPORT_LABELS } from '../src/shell/labels.export'
+import { DOWNLOAD_LABELS, EXPORT_LABELS } from '../src/shell/labels.export'
+import { TABLES_LABELS } from '../src/shell/labels.tables'
 
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
 const number = (text: string) => Number(text.replace(/\s/g, '').replace(',', '.').match(/-?\d+(?:\.\d+)?/)?.[0])
@@ -14,14 +15,15 @@ test('downloads exact JSON and a safe offline HTML report without another job', 
     mimeType: 'text/csv',
     buffer: Buffer.from(`timeStamp,elapsed,label,success\n1767225600000,20,"${label.replaceAll('"', '""')}",true\n`),
   })
-  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByTestId('start-analysis').click()
   await expect(page.locator('#verdict')).toContainText('NO_POLICY')
   let jobs = 0
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/jobs') jobs += 1
   })
+  await page.locator('#shell-tab-history').click()
 
-  const jsonLink = page.getByRole('link', { name: 'Download JSON' })
+  const jsonLink = page.getByRole('link', { name: DOWNLOAD_LABELS.format('json') })
   const href = await jsonLink.getAttribute('href')
   expect(href).toMatch(/^\/api\/runs\/[^/]+\/analyses\/[a-f0-9]{64}\/report\?format=json$/)
   const result = await context.request.get(href!.replace('/report?format=json', '/result'))
@@ -32,7 +34,7 @@ test('downloads exact JSON and a safe offline HTML report without another job', 
   expect(await readFile((await json.path())!)).toEqual(await result.body())
 
   const asciidocDownload = page.waitForEvent('download')
-  await page.getByRole('link', { name: 'Download AsciiDoc' }).click()
+  await page.getByRole('link', { name: DOWNLOAD_LABELS.format('asciidoc') }).click()
   const asciidoc = await asciidocDownload
   expect(asciidoc.suggestedFilename()).toMatch(/^lt-verdict-[a-f0-9]{64}\.adoc$/)
   const asciidocText = await readFile((await asciidoc.path())!, 'utf8')
@@ -40,7 +42,7 @@ test('downloads exact JSON and a safe offline HTML report without another job', 
   expect(asciidocText).toContain('Analysis ID')
 
   const htmlDownload = page.waitForEvent('download')
-  await page.getByRole('link', { name: 'Download HTML' }).click()
+  await page.getByRole('link', { name: DOWNLOAD_LABELS.format('html') }).click()
   const html = await htmlDownload
   expect(html.suggestedFilename()).toMatch(/^lt-verdict-[a-f0-9]{64}\.html$/)
   const htmlPath = testInfo.outputPath('report.html')
@@ -82,20 +84,22 @@ test('the HTML report shows the failed rule with the same measured value as the 
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/xml-5.6.3/input.xml'))
   await page.getByTestId('policy-file').setInputFiles(fixture('slice1/policies/fail.json'))
-  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByTestId('start-analysis').click()
   await expect(page.locator('#verdict')).toContainText('FAIL')
-  const interfaceRule = page.locator('#policy-results tbody tr').filter({ hasText: 'FAIL' })
+  await page.locator('#shell-tab-tables').click()
+  const interfaceRule = page.locator('#policy-results tbody tr').filter({ hasText: TABLES_LABELS.statusText.FAIL })
   await expect(interfaceRule).toHaveCount(1)
-  const interfaceThreshold = number(await interfaceRule.locator('td').nth(4).innerText())
-  const interfaceMeasured = number(await interfaceRule.locator('td').nth(5).innerText())
+  const interfaceThreshold = number(await interfaceRule.locator('td').nth(2).innerText())
+  const interfaceMeasured = number(await interfaceRule.locator('td').nth(3).innerText())
 
-  const href = (await page.getByRole('link', { name: 'Download HTML' }).getAttribute('href'))!
+  await page.locator('#shell-tab-history').click()
+  const href = (await page.getByRole('link', { name: DOWNLOAD_LABELS.format('html') }).getAttribute('href'))!
   const result = await (await context.request.get(href.replace('/report?format=html', '/result'))).json()
   const check = result.evidence.find((item: { type: string; rule_id?: string }) => item.type === 'policy_check' && item.rule_id === 'overall-errors')
   const coreMeasured = (check.observed.numerator / check.observed.denominator) * 100
 
   const download = page.waitForEvent('download')
-  await page.getByRole('link', { name: 'Download HTML' }).click()
+  await page.getByRole('link', { name: DOWNLOAD_LABELS.format('html') }).click()
   const htmlPath = testInfo.outputPath('report-fail.html')
   await (await download).saveAs(htmlPath)
   const reportPage = await context.newPage()
@@ -120,14 +124,15 @@ test('the HTML report shows the failed rule with the same measured value as the 
   expect(network).toEqual([])
 })
 
-test('the header export of the new interface downloads exactly the HTML report of the open analysis', async ({ page, context }) => {
+test('the header export downloads exactly the HTML report of the open analysis', async ({ page, context }) => {
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/xml-5.6.3/input.xml'))
-  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByTestId('start-analysis').click()
   await expect(page.locator('#verdict')).toContainText('NO_POLICY')
-  const href = (await page.getByRole('link', { name: 'Download HTML' }).getAttribute('href'))!
+  await page.locator('#shell-tab-history').click()
+  const href = (await page.getByRole('link', { name: DOWNLOAD_LABELS.format('html') }).getAttribute('href'))!
 
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await expect(page.getByRole('link', { name: EXPORT_LABELS.html })).toHaveCount(0)
   const [, runId, analysisId] = href.match(/^\/api\/runs\/([^/]+)\/analyses\/([a-f0-9]{64})\/report\?format=html$/)!
   await page.getByTestId('run-list').locator(`li[title="${runId}"] button`).click()

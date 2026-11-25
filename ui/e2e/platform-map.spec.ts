@@ -165,7 +165,7 @@ async function openMap(page: Page, options: { analyses?: unknown[]; selected?: s
     else throw new Error(`Unexpected UI request ${path}`)
     await route.fulfill({ json: body })
   })
-  await page.goto('/?shell=new')
+  await page.goto('/')
   await page.getByRole('button', { name: 'map.jtl' }).click()
   await page.locator(`button[title="${options.selected ?? armA}"]`).click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()

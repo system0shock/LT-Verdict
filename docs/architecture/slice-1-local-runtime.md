@@ -714,9 +714,8 @@ tokens. Bootstrap передаёт их browser flow: session находится
 Origin, session cookie и `X-LTV-CSRF`. CORS не включается.
 
 Каждый response получает restrictive CSP, `nosniff`, `no-referrer` и
-`no-store`. UI не использует `v-html`, `sessionStorage`, CDN или
-outbound resources; единственное применение `localStorage` это явный выбор прежней
-оболочки (`?shell=old`, `ui/src/shell/shell.ts`). JMeter XML разбирается JDK StAX с отключёнными DTD,
+`no-store`. UI не использует `v-html`, `localStorage`, `sessionStorage`, CDN или
+outbound resources. JMeter XML разбирается JDK StAX с отключёнными DTD,
 external entities и filesystem/network resolution.
 
 ## Optional diagnostic analysis

@@ -55,6 +55,7 @@ internal fun analysisIdentity(
     stages: LoadStagesValidation.Valid? = null,
     jenkinsBuild: String? = null,
     commit: String? = null,
+    baselineAnalysisId: String? = null,
 ): ByteArray {
     val normalizedJenkinsBuild = normalizeProvenanceText(jenkinsBuild, "jenkins_build")
     val normalizedCommit = normalizeProvenanceText(commit, "commit")
@@ -112,6 +113,7 @@ internal fun analysisIdentity(
             incidentMethod = INCIDENT_METHOD,
             jenkinsBuild = normalizedJenkinsBuild,
             commit = normalizedCommit,
+            baselineAnalysisId = baselineAnalysisId,
             engine = ComponentRef(config.engineId, config.engineVersion),
             parsers =
                 listOf(ComponentRef(input.sourceType.parserId(), if (input.sourceType == SourceType.JMETER_CSV) "2" else "1")),

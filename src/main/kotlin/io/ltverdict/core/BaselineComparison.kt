@@ -1,5 +1,6 @@
 package io.ltverdict.core
 
+import io.ltverdict.metrics.NormalizedBucket
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -10,12 +11,27 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.HdrHistogram.PackedHistogram
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.math.RoundingMode
+import java.nio.ByteBuffer
 import java.time.Instant
 import java.time.format.DateTimeParseException
+import java.util.Base64
 import kotlin.math.abs
+import kotlin.math.sqrt
+
+internal data class RunLoadSeries(
+    val runStartEpochMillis: Long,
+    val buckets: List<NormalizedBucket>,
+    val runEndEpochMillis: Long? = null,
+)
+
+internal data class ComparisonSeriesContext(
+    val baseline: RunLoadSeries? = null,
+    val current: RunLoadSeries? = null,
+)
 
 internal data class WindowComparisonRequest(
     val baselineWindowId: String,
@@ -139,6 +155,7 @@ internal fun statisticalBaselineSelection(
                 identities[index]["verdict_gates"] is JsonObject &&
                     identities[index].stringOrNull("policy_sha256")?.let { it != "NO_POLICY" } == true,
             ) { "BASELINE_CANDIDATE_GATES_UNKNOWN" }
+            requireNotNull(baseSemanticKey(result, identities[index])) { "BASELINE_CANDIDATE_INVALID_IDENTITY" }
             Candidate(
                 reference,
                 listOf(
@@ -146,11 +163,14 @@ internal fun statisticalBaselineSelection(
                     requireNotNull(result.metricValue(Metric.THROUGHPUT)) { "BASELINE_CANDIDATE_MISSING_METRIC" },
                     requireNotNull(result.metricValue(Metric.ERROR_RATE)) { "BASELINE_CANDIDATE_MISSING_METRIC" },
                 ),
-                requireNotNull(semanticKey(result, identities[index])) { "BASELINE_CANDIDATE_INVALID_IDENTITY" },
             )
         }
     require(candidates.map { it.reference.runId }.toSet().size == candidates.size) { "BASELINE_DUPLICATE_RUN" }
-    require(candidates.map { it.semantics }.distinct().size == 1) { "BASELINE_MIXED_SEMANTICS" }
+    for (i in results.indices) {
+        for (j in i + 1 until results.size) {
+            require(comparableSemantics(results[i], identities[i], results[j], identities[j])) { "BASELINE_MIXED_SEMANTICS" }
+        }
+    }
 
     val center2 = candidates.size + 1
     // ponytail: quadratic ranks are bounded to 20 candidates; sort columns if the cap grows.
@@ -193,6 +213,7 @@ internal fun compareAnalyses(
     windows: WindowComparisonRequest? = null,
     conditionsConfirmed: Boolean? = null,
     releases: ReleaseComparisonContext? = null,
+    series: ComparisonSeriesContext? = null,
 ): JsonObject {
     val parsedSelection = selection.toSelection()
     val current = currentReference.toReference()
@@ -226,7 +247,7 @@ internal fun compareAnalyses(
             // ADR 0030, R7: the compared metrics are of the whole run, the verdict of a staged analysis is by its steady window.
             if (hasStageBinding(baselineResult) || hasStageBinding(currentResult)) add("WHOLE_RUN_METRICS_WITH_STAGES")
         }
-    val compatible = semanticKey(baselineResult, baselineIdentity)?.let { it == semanticKey(currentResult, currentIdentity) } == true
+    val compatible = comparableSemantics(baselineResult, baselineIdentity, currentResult, currentIdentity)
     return buildJsonObject {
         put("baseline", parsedSelection.toJson())
         put("current", current.toJson())
@@ -257,6 +278,7 @@ internal fun compareAnalyses(
                     currentResult,
                     compatible,
                     confirmed,
+                    series,
                 ),
             )
         }
@@ -269,6 +291,7 @@ private fun windowComparison(
     currentResult: JsonObject,
     compatible: Boolean,
     conditionsConfirmed: Boolean,
+    series: ComparisonSeriesContext? = null,
 ): JsonObject {
     val baseline = baselineResult.windowSummary(request.baselineWindowId)
     val current = currentResult.windowSummary(request.currentWindowId)
@@ -281,9 +304,11 @@ private fun windowComparison(
     }
     val baselineWindow = checkNotNull(baseline)
     val currentWindow = checkNotNull(current)
+    val baselineNoise = withinWindowStandardErrors(baselineWindow, series?.baseline)
+    val currentNoise = withinWindowStandardErrors(currentWindow, series?.current)
     val rows =
         WindowMetric.entries.map { metric ->
-            windowMetricComparison(metric, currentWindow, baselineWindow, request, conditionsConfirmed)
+            windowMetricComparison(metric, currentWindow, baselineWindow, request, conditionsConfirmed, baselineNoise, currentNoise)
         } + resourceMetricComparisons(baselineResult, currentResult, baselineWindow, currentWindow, request, conditionsConfirmed)
     val status =
         when {
@@ -330,6 +355,8 @@ private fun windowMetricComparison(
     baseline: WindowSummary,
     request: WindowComparisonRequest,
     conditionsConfirmed: Boolean,
+    baselineNoise: Map<WindowMetric, Double>? = null,
+    currentNoise: Map<WindowMetric, Double>? = null,
 ): WindowMetricComparison {
     val currentValue = current.value(metric)
     val baselineValue = baseline.value(metric)
@@ -342,12 +369,16 @@ private fun windowMetricComparison(
     val delta = if (reason == null) checkNotNull(currentValue) - checkNotNull(baselineValue) else null
     val zeroBaseline = reason == null && checkNotNull(baselineValue).isZero()
     val percent = if (reason == null && !zeroBaseline) checkNotNull(delta) / checkNotNull(baselineValue) * HUNDRED else null
-    val material =
+    val exceedsMinThreshold =
         when {
             reason != null || (zeroBaseline && metric != WindowMetric.ERROR_RATE) -> false
             metric == WindowMetric.ERROR_RATE -> checkNotNull(delta).absoluteValue() >= Rational.fromDecimal(request.minErrorRateDelta)
             else -> checkNotNull(percent).absoluteValue() >= Rational.fromDecimal(request.minChangePercent)
         }
+    val noiseThreshold = combinedNoiseThreshold(metric, baselineNoise, currentNoise)
+    val exceedsNoise = noiseThreshold == null || delta == null || delta.absoluteValue() >= noiseThreshold
+    val material = exceedsMinThreshold && exceedsNoise
+    val withinNoise = exceedsMinThreshold && !exceedsNoise
     val status =
         when {
             reason != null -> "INSUFFICIENT_DATA"
@@ -362,6 +393,8 @@ private fun windowMetricComparison(
                 metric != WindowMetric.ERROR_RATE
             ) {
                 "ZERO_BASELINE"
+            } else if (withinNoise) {
+                "WITHIN_NOISE"
             } else if (material &&
                 !conditionsConfirmed
             ) {
@@ -506,11 +539,37 @@ private fun JsonObject.windowSummary(windowId: String): WindowSummary? {
     if (from >= to || samples < 0) return null
     return WindowSummary(
         evidence.stringOrNull("id") ?: return null,
+        from,
+        to,
         samples,
         to - from,
         evidence.objectOrNull("latency_ms"),
         evidence.ratioOrNull("throughput_rps"),
         evidence.ratioOrNull("error_rate_ratio"),
+    )
+}
+
+private fun JsonObject.overallWindowSummary(runSeries: RunLoadSeries?): WindowSummary? {
+    val overall =
+        (this["evidence"] as? JsonArray)
+            ?.mapNotNull { it as? JsonObject }
+            ?.singleOrNull { evidence ->
+                evidence.stringOrNull("type") == "metric_summary" &&
+                    evidence.objectOrNull("scope")?.stringOrNull("kind") == "overall"
+            } ?: return null
+    val samples = overall.longOrNull("sample_count") ?: return null
+    if (samples < 0) return null
+    val from = runSeries?.runStartEpochMillis ?: 0L
+    val to = runSeries?.runEndEpochMillis?.takeIf { it > from } ?: from
+    return WindowSummary(
+        overall.stringOrNull("id") ?: return null,
+        from,
+        to,
+        samples,
+        to - from,
+        overall.objectOrNull("latency_ms"),
+        overall.ratioOrNull("throughput_rps"),
+        overall.ratioOrNull("error_rate_ratio"),
     )
 }
 
@@ -524,6 +583,8 @@ private fun JsonObject.longOrNull(name: String): Long? =
 
 private data class WindowSummary(
     val evidenceId: String,
+    val fromEpochMillis: Long,
+    val toEpochMillis: Long,
     val sampleCount: Long,
     val durationMillis: Long,
     val latency: JsonObject?,
@@ -667,7 +728,219 @@ private fun JsonObject.metricValue(metric: Metric): Rational? {
 internal fun hasStageBinding(result: JsonObject): Boolean =
     (result["evidence"] as? JsonArray).orEmpty().any { (it as? JsonObject)?.stringOrNull("type") == "stage_binding" }
 
-private fun semanticKey(
+internal data class BaselineRegressionFailure(
+    val windowId: String?,
+    val metric: String,
+    val baseline: String,
+    val current: String,
+    val delta: String,
+    val deltaPercent: String?,
+)
+
+internal sealed interface BaselineRegressionOutcome {
+    data object Pass : BaselineRegressionOutcome
+
+    data class Regressed(
+        val failures: List<BaselineRegressionFailure>,
+    ) : BaselineRegressionOutcome
+
+    data class NotEvaluated(
+        val reason: String,
+    ) : BaselineRegressionOutcome
+}
+
+internal fun evaluateBaselineRegression(
+    baselineResult: JsonObject,
+    baselineIdentity: JsonObject,
+    currentResult: JsonObject,
+    currentIdentity: JsonObject,
+    series: ComparisonSeriesContext? = null,
+): BaselineRegressionOutcome {
+    if (!comparableSemantics(baselineResult, baselineIdentity, currentResult, currentIdentity)) {
+        return BaselineRegressionOutcome.NotEvaluated("INCOMPATIBLE_METRIC_DEFINITION")
+    }
+    val staged = hasStageBinding(baselineResult) || hasStageBinding(currentResult)
+    val failures = mutableListOf<BaselineRegressionFailure>()
+    if (staged) {
+        val windowIds =
+            currentResult.stageBindingEvidence()?.stringListOrNull("evaluated_window_ids")?.takeIf { it.isNotEmpty() }
+                ?: return BaselineRegressionOutcome.NotEvaluated("MISSING_STAGE_WINDOWS")
+        for (windowId in windowIds) {
+            val baselineWindow =
+                baselineResult.windowSummary(windowId)
+                    ?: return BaselineRegressionOutcome.NotEvaluated("BASELINE_WINDOW_NOT_FOUND")
+            val currentWindow =
+                currentResult.windowSummary(windowId)
+                    ?: return BaselineRegressionOutcome.NotEvaluated("CURRENT_WINDOW_NOT_FOUND")
+            val outcome =
+                evaluateWindowRegression(
+                    windowId = windowId,
+                    baselineWindow = baselineWindow,
+                    currentWindow = currentWindow,
+                    request = WindowComparisonRequest(windowId, windowId),
+                    series = series,
+                )
+            when (outcome) {
+                is WindowRegressionCheck.NotEvaluated -> return BaselineRegressionOutcome.NotEvaluated(outcome.reason)
+                is WindowRegressionCheck.Evaluated -> failures += outcome.failures
+            }
+        }
+    } else {
+        val baselineWindow =
+            baselineResult.overallWindowSummary(series?.baseline)
+                ?: return BaselineRegressionOutcome.NotEvaluated("MISSING_METRIC")
+        val currentWindow =
+            currentResult.overallWindowSummary(series?.current)
+                ?: return BaselineRegressionOutcome.NotEvaluated("MISSING_METRIC")
+        val outcome =
+            evaluateWindowRegression(
+                windowId = null,
+                baselineWindow = baselineWindow,
+                currentWindow = currentWindow,
+                request = WindowComparisonRequest("overall", "overall"),
+                series = series,
+            )
+        when (outcome) {
+            is WindowRegressionCheck.NotEvaluated -> return BaselineRegressionOutcome.NotEvaluated(outcome.reason)
+            is WindowRegressionCheck.Evaluated -> failures += outcome.failures
+        }
+    }
+    return if (failures.isEmpty()) BaselineRegressionOutcome.Pass else BaselineRegressionOutcome.Regressed(failures)
+}
+
+private sealed interface WindowRegressionCheck {
+    data class NotEvaluated(
+        val reason: String,
+    ) : WindowRegressionCheck
+
+    data class Evaluated(
+        val failures: List<BaselineRegressionFailure>,
+    ) : WindowRegressionCheck
+}
+
+private fun evaluateWindowRegression(
+    windowId: String?,
+    baselineWindow: WindowSummary,
+    currentWindow: WindowSummary,
+    request: WindowComparisonRequest,
+    series: ComparisonSeriesContext?,
+): WindowRegressionCheck {
+    val baselineNoise = withinWindowStandardErrors(baselineWindow, series?.baseline)
+    val currentNoise = withinWindowStandardErrors(currentWindow, series?.current)
+    val rows =
+        WindowMetric.entries.map { metric ->
+            windowMetricComparison(metric, currentWindow, baselineWindow, request, true, baselineNoise, currentNoise)
+        }
+    if (rows.any { it.status == "INSUFFICIENT_DATA" }) {
+        return WindowRegressionCheck.NotEvaluated("INSUFFICIENT_DATA")
+    }
+    val regressions =
+        rows.mapNotNull { row ->
+            if (row.status != "CANDIDATE") return@mapNotNull null
+            val delta = row.delta ?: return@mapNotNull null
+            val regressed =
+                when (row.metric) {
+                    WindowMetric.P50, WindowMetric.P95, WindowMetric.P99, WindowMetric.ERROR_RATE -> delta.numerator.signum() > 0
+                    WindowMetric.THROUGHPUT -> delta.numerator.signum() < 0
+                }
+            if (!regressed) return@mapNotNull null
+            BaselineRegressionFailure(
+                windowId = windowId,
+                metric = row.metric.wireName,
+                baseline = checkNotNull(row.baseline).format(),
+                current = checkNotNull(row.current).format(),
+                delta = delta.format(),
+                deltaPercent = row.percent?.format(),
+            )
+        }
+    return WindowRegressionCheck.Evaluated(regressions)
+}
+
+internal fun comparableSemantics(
+    baselineResult: JsonObject,
+    baselineIdentity: JsonObject,
+    currentResult: JsonObject,
+    currentIdentity: JsonObject,
+    rpsTolerance: BigDecimal = DEFAULT_STAGE_RPS_TOLERANCE,
+): Boolean {
+    val baseKey = baseSemanticKey(baselineResult, baselineIdentity) ?: return false
+    val currentKey = baseSemanticKey(currentResult, currentIdentity) ?: return false
+    if (baseKey != currentKey) return false
+
+    val baseRaw = baselineIdentity["load_stages_sha256"]
+    val currentRaw = currentIdentity["load_stages_sha256"]
+    val baseHash = baselineIdentity.stringOrNull("load_stages_sha256")
+    val currentHash = currentIdentity.stringOrNull("load_stages_sha256")
+    if ((baseRaw != null && baseRaw !is JsonNull && baseHash == null) ||
+        (currentRaw != null && currentRaw !is JsonNull && currentHash == null)
+    ) {
+        return false
+    }
+    if (baseHash == currentHash) return true
+    if (baseHash == null || currentHash == null) return false
+
+    val baseBinding = baselineResult.stageBindingEvidence() ?: return false
+    val currentBinding = currentResult.stageBindingEvidence() ?: return false
+    if (baseBinding.stringOrNull("mode") != "declared_stages" ||
+        currentBinding.stringOrNull("mode") != "declared_stages"
+    ) {
+        return false
+    }
+    if (baseBinding.stringOrNull("declaration_sha256") != baseHash ||
+        currentBinding.stringOrNull("declaration_sha256") != currentHash
+    ) {
+        return false
+    }
+    val baseWindowIds = baseBinding.stringListOrNull("evaluated_window_ids") ?: return false
+    val currentWindowIds = currentBinding.stringListOrNull("evaluated_window_ids") ?: return false
+    if (baseWindowIds.isEmpty() || baseWindowIds != currentWindowIds) return false
+    val baseStages = baseBinding.stageIdRolesOrNull() ?: return false
+    val currentStages = currentBinding.stageIdRolesOrNull() ?: return false
+    if (baseStages.isEmpty() || baseStages != currentStages) return false
+
+    val tolerance = Rational.fromDecimal(rpsTolerance)
+    for (windowId in baseWindowIds) {
+        val baseSummary = baselineResult.windowSummary(windowId) ?: return false
+        val currentSummary = currentResult.windowSummary(windowId) ?: return false
+        if (baseSummary.sampleCount <= 0L || currentSummary.sampleCount <= 0L) return false
+        val baseRps = baseSummary.throughput ?: return false
+        val currentRps = currentSummary.throughput ?: return false
+        if (baseRps.isZero() || currentRps.isZero()) return false
+        val diff = (currentRps - baseRps).absoluteValue()
+        val minRps = if (currentRps <= baseRps) currentRps else baseRps
+        if (diff > tolerance * minRps) return false
+    }
+    return true
+}
+
+private fun JsonObject.stageBindingEvidence(): JsonObject? =
+    (this["evidence"] as? JsonArray)
+        ?.mapNotNull { it as? JsonObject }
+        ?.singleOrNull { it.stringOrNull("type") == "stage_binding" }
+
+private fun JsonObject.stringListOrNull(name: String): List<String>? {
+    val array = this[name] as? JsonArray ?: return null
+    val result = ArrayList<String>(array.size)
+    for (element in array) {
+        val value = (element as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: return null
+        result += value
+    }
+    return result
+}
+
+private fun JsonObject.stageIdRolesOrNull(): List<Pair<String, String>>? {
+    val array = this["stages"] as? JsonArray ?: return null
+    val result = ArrayList<Pair<String, String>>(array.size)
+    for (element in array) {
+        val obj = element as? JsonObject ?: return null
+        val id = obj.stringOrNull("id") ?: return null
+        val role = obj.stringOrNull("role") ?: return null
+        result += id to role
+    }
+    return result
+}
+
+private fun baseSemanticKey(
     result: JsonObject,
     identity: JsonObject,
 ): List<JsonElement>? {
@@ -675,9 +948,193 @@ private fun semanticKey(
     SEMANTIC_FIELDS.forEach { field -> values += identity[field] ?: return null }
     // ADR 0014, часть 5: плечо входит в ключ условно. Отсутствие у обоих анализов равно равенству, отсутствие у одного - несовместимость.
     values += identity["resource_arm"] ?: JsonNull
-    // ADR 0030, R6: the declared stages are a conditional link too; the windows 5-25 min and 5-30 min are different metrics.
-    values += identity["load_stages_sha256"] ?: JsonNull
     return values
+}
+
+private fun combinedNoiseThreshold(
+    metric: WindowMetric,
+    baselineNoise: Map<WindowMetric, Double>?,
+    currentNoise: Map<WindowMetric, Double>?,
+): Rational? {
+    val baseSe = baselineNoise?.get(metric) ?: return null
+    val curSe = currentNoise?.get(metric) ?: return null
+    val combinedSe = sqrt(baseSe * baseSe + curSe * curSe)
+    if (!combinedSe.isFinite() || combinedSe < 0.0) return null
+    return if (combinedSe == 0.0) {
+        Rational(BigInteger.ZERO, BigInteger.ONE)
+    } else {
+        Rational.fromDecimal(BigDecimal.valueOf(NOISE_Z_SIGMA * combinedSe))
+    }
+}
+
+private data class BlockAggregate(
+    val sampleCount: Long,
+    val errorCount: Long,
+    val maxLatencyMillis: Long,
+    val histogram: PackedHistogram,
+)
+
+private fun combineBlocks(
+    left: BlockAggregate?,
+    right: BlockAggregate?,
+): BlockAggregate? {
+    if (left == null) return right
+    if (right == null) return left
+    val merged = left.histogram.copy()
+    merged.add(right.histogram)
+    return BlockAggregate(
+        sampleCount = Math.addExact(left.sampleCount, right.sampleCount),
+        errorCount = Math.addExact(left.errorCount, right.errorCount),
+        maxLatencyMillis = maxOf(left.maxLatencyMillis, right.maxLatencyMillis),
+        histogram = merged,
+    )
+}
+
+private class TwoStackBlockQueue {
+    private class Entry(
+        val raw: BlockAggregate?,
+        val agg: BlockAggregate?,
+    )
+
+    private val inStack = ArrayList<Entry>()
+    private val outStack = ArrayList<BlockAggregate?>()
+
+    fun push(item: BlockAggregate?) {
+        val topAgg = inStack.lastOrNull()?.agg
+        inStack.add(Entry(item, combineBlocks(topAgg, item)))
+    }
+
+    fun pop() {
+        if (outStack.isEmpty()) {
+            while (inStack.isNotEmpty()) {
+                val entry = inStack.removeAt(inStack.lastIndex)
+                val outTop = outStack.lastOrNull()
+                outStack.add(combineBlocks(entry.raw, outTop))
+            }
+        }
+        if (outStack.isNotEmpty()) {
+            outStack.removeAt(outStack.lastIndex)
+        }
+    }
+
+    fun aggregate(): BlockAggregate? = combineBlocks(outStack.lastOrNull(), inStack.lastOrNull()?.agg)
+}
+
+private fun withinWindowStandardErrors(
+    window: WindowSummary,
+    series: RunLoadSeries?,
+): Map<WindowMetric, Double>? {
+    if (series == null || window.sampleCount <= 0L) return null
+    val cellCountLong = window.durationMillis / 1_000L
+    if (cellCountLong < NOISE_MIN_CELLS.toLong() || cellCountLong > NOISE_MAX_CELLS.toLong()) return null
+    val cellCount = cellCountLong.toInt()
+    val blockSize = minOf(NOISE_MAX_BLOCK, cellCount / 4)
+    if (blockSize < 2 || cellCount <= blockSize) return null
+
+    val cells = arrayOfNulls<BlockAggregate>(cellCount)
+    var nonEmptyCells = 0
+    for (bucket in series.buckets) {
+        if (bucket.sampleCount < 0L || bucket.errorCount < 0L || bucket.errorCount > bucket.sampleCount || bucket.maxLatencyMillis < 0L) {
+            return null
+        }
+        val epochMs = series.runStartEpochMillis + bucket.bucketStartMillis
+        if (epochMs < window.fromEpochMillis || epochMs >= window.toEpochMillis) continue
+        val idx = ((epochMs - window.fromEpochMillis) / 1_000L).toInt()
+        if (idx !in 0 until cellCount) continue
+        if (cells[idx] != null) return null
+        if (bucket.sampleCount == 0L) continue
+        val histogram =
+            try {
+                PackedHistogram.decodeFromCompressedByteBuffer(
+                    ByteBuffer.wrap(Base64.getDecoder().decode(bucket.hdrV2Base64)),
+                    MAX_HISTOGRAM_TRACKABLE_MS,
+                )
+            } catch (_: Exception) {
+                return null
+            }
+        if (histogram.totalCount != bucket.sampleCount) return null
+        cells[idx] = BlockAggregate(bucket.sampleCount, bucket.errorCount, bucket.maxLatencyMillis, histogram)
+        nonEmptyCells++
+    }
+    if (nonEmptyCells == 0) return null
+
+    val queue = TwoStackBlockQueue()
+    try {
+        for (i in 0 until blockSize) {
+            queue.push(cells[i])
+        }
+    } catch (_: RuntimeException) {
+        return null
+    }
+
+    val throughputValues = DoubleArray(cellCount)
+    val p50Values = ArrayList<Double>(cellCount)
+    val p95Values = ArrayList<Double>(cellCount)
+    val p99Values = ArrayList<Double>(cellCount)
+    val errorRateValues = ArrayList<Double>(cellCount)
+
+    for (i in 0 until cellCount) {
+        val agg = queue.aggregate()
+        val samples = agg?.sampleCount ?: 0L
+        throughputValues[i] = samples.toDouble() / blockSize.toDouble()
+        if (agg != null && samples > 0L) {
+            p50Values.add(minOf(agg.histogram.getValueAtPercentile(50.0), agg.maxLatencyMillis).toDouble())
+            p95Values.add(minOf(agg.histogram.getValueAtPercentile(95.0), agg.maxLatencyMillis).toDouble())
+            p99Values.add(minOf(agg.histogram.getValueAtPercentile(99.0), agg.maxLatencyMillis).toDouble())
+            errorRateValues.add(agg.errorCount.toDouble() / samples.toDouble())
+        }
+        if (i + 1 < cellCount) {
+            try {
+                queue.pop()
+                queue.push(cells[(i + blockSize) % cellCount])
+            } catch (_: RuntimeException) {
+                return null
+            }
+        }
+    }
+
+    fun computeSe(
+        values: List<Double>,
+        requireGtBlock: Boolean,
+    ): Double? {
+        val n = values.size
+        if (n < 2 || (requireGtBlock && n <= blockSize)) return null
+        var sum = 0.0
+        for (v in values) sum += v
+        val mean = sum / n.toDouble()
+        var sq = 0.0
+        for (v in values) {
+            val d = v - mean
+            sq += d * d
+        }
+        val varBlocks = sq / n.toDouble()
+        val se = sqrt(varBlocks * blockSize.toDouble() / cellCount.toDouble())
+        return if (se.isFinite() && se >= 0.0) se else null
+    }
+
+    fun computeSeArray(values: DoubleArray): Double? {
+        val n = values.size
+        if (n < 2) return null
+        var sum = 0.0
+        for (v in values) sum += v
+        val mean = sum / n.toDouble()
+        var sq = 0.0
+        for (v in values) {
+            val d = v - mean
+            sq += d * d
+        }
+        val varBlocks = sq / n.toDouble()
+        val se = sqrt(varBlocks * blockSize.toDouble() / cellCount.toDouble())
+        return if (se.isFinite() && se >= 0.0) se else null
+    }
+
+    return buildMap {
+        computeSeArray(throughputValues)?.let { put(WindowMetric.THROUGHPUT, it) }
+        computeSe(p50Values, requireGtBlock = true)?.let { put(WindowMetric.P50, it) }
+        computeSe(p95Values, requireGtBlock = true)?.let { put(WindowMetric.P95, it) }
+        computeSe(p99Values, requireGtBlock = true)?.let { put(WindowMetric.P99, it) }
+        computeSe(errorRateValues, requireGtBlock = true)?.let { put(WindowMetric.ERROR_RATE, it) }
+    }
 }
 
 private fun JsonObject.ratioOrNull(name: String): Rational? {
@@ -898,7 +1355,6 @@ private enum class ConditionDecision(
 private data class Candidate(
     val reference: Reference,
     val metrics: List<Rational>,
-    val semantics: List<JsonElement>,
 )
 
 private data class Score(
@@ -942,6 +1398,8 @@ private data class Rational(
     }
 
     operator fun times(value: BigInteger) = Rational(numerator * value, denominator)
+
+    operator fun times(other: Rational) = Rational(numerator * other.numerator, denominator * other.denominator)
 
     fun isZero(): Boolean = numerator.signum() == 0
 
@@ -1002,6 +1460,12 @@ private const val MAX_CANDIDATES = 20
 private const val MAX_SERIES_BYTES = 128
 private const val MAX_CONDITION_WINDOW_BYTES = 128
 private const val DISPLAY_SCALE = 6
+private const val NOISE_Z_SIGMA = 3.68
+private const val NOISE_MIN_CELLS = 8
+private const val NOISE_MAX_CELLS = 100_000
+private const val NOISE_MAX_BLOCK = 14
+private const val MAX_HISTOGRAM_TRACKABLE_MS = 86_400_000L
+internal val DEFAULT_STAGE_RPS_TOLERANCE = BigDecimal("0.05")
 private val HUNDRED = BigInteger.valueOf(100)
 private val REFERENCE_FIELDS = setOf("run_id", "analysis_id")
 private val SCORE_FIELDS = setOf("reference", "score")

@@ -242,6 +242,7 @@ export const OVERVIEW_LABELS = {
   openDeep: 'Открыть глубокий анализ',
   openSources: 'Открыть источники',
   openSetup: 'Открыть «Новый анализ»',
+  openCompare: 'Открыть сравнение',
 
   // Ёмкость по ступеням (тест максимума)
   capacityTitle: 'Ёмкость по ступеням',

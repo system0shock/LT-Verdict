@@ -1333,6 +1333,46 @@ class LocalApiTest {
         }
 
     @Test
+    fun `policy validate accepts baseline_regression and comparison API uses stage RPS tolerance and 1s bucket noise`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val validPolicy =
+                """{"schema_version":"policy.v1","policy_id":"reg","defaults":{"sample_floor":1,"min_samples":1,"baseline_regression":"fail"},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}]}"""
+            val invalidPolicy = validPolicy.replace("\"fail\"", "\"warn\"")
+            assertEquals(200, api.post("/api/policies/validate", "application/json", validPolicy.encodeToByteArray()).statusCode())
+            val invalidResponse = api.post("/api/policies/validate", "application/json", invalidPolicy.encodeToByteArray())
+            assertEquals(422, invalidResponse.statusCode())
+            assertEquals(
+                "UNKNOWN_BASELINE_REGRESSION_MODE",
+                invalidResponse
+                    .jsonObject()
+                    .getValue("errors")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("code")
+                    .jsonPrimitive.content,
+            )
+
+            // Two staged runs with slightly shifted stage boundary (same steady RPS) compare cleanly via API
+            val jtl = Files.readAllBytes(Path.of("fixtures/stages/ramp-steady-rampdown.jtl"))
+            val input = store.acceptInput(ByteArrayInputStream(jtl), "ramp.jtl")
+            val stagesA = Files.readString(Path.of("docs/contracts/stages/v1/examples/valid/ramp-steady-down.json"))
+            val stagesB = stagesA.replace("100000,", "100001,")
+            val baseId = api.createJob(input.runId, PERMISSIVE_POLICY, stages = stagesA.encodeToByteArray()).analysisId(api)
+            val curId = api.createJob(input.runId, PERMISSIVE_POLICY, stages = stagesB.encodeToByteArray()).analysisId(api)
+            assertEquals(200, api.selectManual(input.runId, baseId).statusCode())
+
+            val comparison =
+                api
+                    .get(
+                        "/api/runs/${input.runId}/analyses/$curId/comparison?series=release&baseline_window=steady&current_window=steady",
+                    ).jsonObject()
+            val window = comparison.getValue("window_comparison").jsonObject
+            assertFalse(window.getValue("status").jsonPrimitive.content == "NOT_EVALUATED")
+        }
+
+    @Test
     fun `manual baseline accepts only a PASS analysis`() =
         withServer { store, api ->
             val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
@@ -4237,6 +4277,77 @@ class LocalApiTest {
         }
     }
 
+    @Test
+    fun `POST jobs supports optional baseline reference for baseline_regression fail`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val fastJtl =
+                (
+                    "timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success," +
+                        "failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect\n" +
+                        "1767225600000,10,op,200,OK,t1,text,true,,100,10,1,1,null,0,0,0\n" +
+                        "1767225601000,10,op,200,OK,t1,text,true,,100,10,1,1,null,0,0,0\n"
+                ).encodeToByteArray()
+            val slowJtl =
+                (
+                    "timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success," +
+                        "failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect\n" +
+                        "1767225600000,500,op,200,OK,t1,text,true,,100,10,1,1,null,0,0,0\n" +
+                        "1767225601000,500,op,200,OK,t1,text,true,,100,10,1,1,null,0,0,0\n"
+                ).encodeToByteArray()
+            val fastInput = store.acceptInput(ByteArrayInputStream(fastJtl), "fast.jtl")
+            val slowInput = store.acceptInput(ByteArrayInputStream(slowJtl), "slow.jtl")
+            val regressionPolicy =
+                """{"schema_version":"policy.v1","policy_id":"reg-fail","defaults":{"sample_floor":1,"min_samples":1,"baseline_regression":"fail"},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}]}"""
+                    .encodeToByteArray()
+
+            val baselineId = api.createJob(fastInput.runId, PERMISSIVE_POLICY).analysisId(api)
+            val baselineRef = """{"run_id":"${fastInput.runId}","analysis_id":"$baselineId"}""".encodeToByteArray()
+
+            // Missing baseline with baseline_regression: fail -> NO_VERDICT (BASELINE_REQUIRED)
+            val noBaselineId = api.createJob(slowInput.runId, regressionPolicy).analysisId(api)
+            val noBaselineResult = api.get("/api/runs/${slowInput.runId}/analyses/$noBaselineId/result").jsonObject()
+            assertEquals("NO_VERDICT", noBaselineResult.getValue("policy_verdict").jsonPrimitive.content)
+            assertTrue(
+                noBaselineResult
+                    .getValue("analysis_coverage")
+                    .jsonObject
+                    .getValue("reasons")
+                    .jsonArray
+                    .any { it.jsonPrimitive.content == "BASELINE_REQUIRED" },
+            )
+
+            // Malformed or unknown baseline rejected at submission
+            assertError(api.createJob(slowInput.runId, regressionPolicy, baseline = """{"run_id":"bad"}""".encodeToByteArray()), 400)
+            assertError(
+                api.createJob(
+                    slowInput.runId,
+                    regressionPolicy,
+                    baseline = """{"run_id":"${fastInput.runId}","analysis_id":"${"0".repeat(64)}"}""".encodeToByteArray(),
+                ),
+                404,
+            )
+
+            // Regressed current against fast baseline -> FAIL with baseline_regression_failure
+            val regressedId = api.createJob(slowInput.runId, regressionPolicy, baseline = baselineRef).analysisId(api)
+            val regressedResult = api.get("/api/runs/${slowInput.runId}/analyses/$regressedId/result").jsonObject()
+            assertEquals("FAIL", regressedResult.getValue("policy_verdict").jsonPrimitive.content)
+            assertTrue(
+                regressedResult.getValue("findings").jsonArray.any {
+                    it.jsonObject
+                        .getValue("type")
+                        .jsonPrimitive.content == "baseline_regression_failure"
+                },
+            )
+            val regressedIdentity = store.readAnalysisIdentity(slowInput.runId, regressedId)!!
+            assertEquals(baselineId, regressedIdentity.getValue("baseline_analysis_id").jsonPrimitive.content)
+
+            // Non-regressed current against same baseline -> PASS
+            val passId = api.createJob(fastInput.runId, regressionPolicy, baseline = baselineRef).analysisId(api)
+            val passResult = api.get("/api/runs/${fastInput.runId}/analyses/$passId/result").jsonObject()
+            assertEquals("PASS", passResult.getValue("policy_verdict").jsonPrimitive.content)
+        }
+
     private fun uploadTemporaryFiles(): Set<Path> =
         Files.newDirectoryStream(Path.of(System.getProperty("java.io.tmpdir")), "ltv-upload-*.tmp").use { it.toSet() }
 
@@ -4543,8 +4654,10 @@ class LocalApiTest {
             capacity: ByteArray? = null,
             trend: ByteArray? = null,
             podView: ByteArray? = null,
+            stages: ByteArray? = null,
             jenkinsBuild: String? = null,
             commit: String? = null,
+            baseline: ByteArray? = null,
         ): HttpResponse<String> =
             multipart(
                 "/api/jobs",
@@ -4562,8 +4675,10 @@ class LocalApiTest {
                     if (capacity != null) add(FormPart("capacity_plan", capacity, "capacity.json", "application/json"))
                     if (trend != null) add(FormPart("trend_plan", trend, "trend.json", "application/json"))
                     if (podView != null) add(FormPart("pod_view", podView, "pod-view.json", "application/json"))
+                    if (stages != null) add(FormPart("stages", stages, "stages.json", "application/json"))
                     if (jenkinsBuild != null) add(FormPart("jenkins_build", jenkinsBuild.encodeToByteArray()))
                     if (commit != null) add(FormPart("commit", commit.encodeToByteArray()))
+                    if (baseline != null) add(FormPart("baseline", baseline, "baseline.json", "application/json"))
                 },
             )
 

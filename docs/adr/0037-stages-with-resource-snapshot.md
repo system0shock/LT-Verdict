@@ -219,12 +219,15 @@ postgres и pod-view. Порядок закрепляется золотым т�
   без снимка и со снимком без стадий получают прежние байты identity и результата;
   сохранённые каталоги анализа не перечитываются и не переписываются. Повторная
   отправка тех же входов возвращает сохранённый анализ, как сегодня.
-- Ключ сопоставимости (`semanticKey`, `BaselineComparison.kt:670-681`;
-  `comparisonSemanticKey`, `RunComparison.kt:316-327`) кода не меняет. Сочетание
-  «стадии и снимок» несовместимо и с «только стадиями», и с «только снимком»
-  (разные `modules`, `input_versions`, `limits`); два анализа сочетания с одним
-  объявлением стадий и одним плечом совместимы; разные объявления несовместимы
-  (звено `load_stages_sha256`). Слоты baseline ([ADR 0019](0019-release-history-and-baseline-eligibility.md))
+- Ключ сопоставимости (`comparableSemantics`, `BaselineComparison.kt`; `RunComparison.kt`):
+  в этом ADR кода не меняет. Сочетание «стадии и снимок» несовместимо и с «только
+  стадиями», и с «только снимком» (разные `modules`, `input_versions`, `limits`);
+  два анализа сочетания с одним объявлением стадий и одним плечом совместимы;
+  разные объявления совместимы только при совпадении структуры `(id, role)` стадий
+  и симметричного допуска `|cur - base| <= 0.05 * min(cur, base)` по `throughput_rps`
+  (`max(cur, base) / min(cur, base) <= 1.05`, от `−4,76 %` до `+5,00 %` относительно
+  baseline; уточнение W4.2 к [ADR 0030](0030-load-stages-steady-window.md) R6).
+  Слоты baseline ([ADR 0019](0019-release-history-and-baseline-eligibility.md))
   не меняются. Эталон ADR 0032 (D5) со стадиями берёт дельты из
   `window_metric_summary`, это работает и здесь.
 
@@ -313,7 +316,7 @@ ADR 0018, раздел 7.) Этот ADR расхождение не трогае
 | `policy.v1` | нет | — |
 | `capacity-plan.v1` | нет | — |
 | Identity | новых полей нет; `window-policy-evaluation` один раз в `modules` | `analysis_id` новый только у сочетания |
-| Ключ сопоставимости | кода не меняет | сочетание несовместимо с каждым режимом по отдельности |
+| Ключ сопоставимости | в этом ADR кода не меняет (позже уточнено в W4.2: симметричный допуск `max/min <= 1.05` по `min(cur, base)` RPS в `comparableSemantics`) | сочетание несовместимо с каждым режимом по отдельности |
 | CLI `ltv analyze` | `--stages` с `--resources` (снимок без окон) и с `--source` разрешены; со `--stages` снимок читается раньше политики (ошибка снимка сообщается раньше ошибки политики) | ослабление отказа; порядок чтения меняется только со `--stages` |
 | API задания анализа | часть `stages` с `resource_snapshot` (без окон) и с `source_request` разрешена | ослабление отказа |
 | Коды ошибок | новые: `STAGE_WINDOW_NO_FULL_CELLS`, `STAGES_CORRELATION_CONFLICT`, `STAGES_TREND_CONFLICT`; новая причина покрытия `STAGE_WINDOW_SNAPSHOT_PARTIAL`; `STAGES_RESOURCES_CONFLICT` с суженным условием (снимок с `windows`); `STAGES_SOURCE_CONFLICT` больше не выдаётся; `STAGES_CAPACITY_CONFLICT` прежний; стадии с планом корреляций или тренда без снимка получают `STAGES_CORRELATION_CONFLICT`/`STAGES_TREND_CONFLICT` вместо `DIAGNOSTIC_RESOURCE_REQUIRED`/`TREND_RESOURCE_REQUIRED` (в ядре, CLI и API; в API это `422 INVALID_STAGES` вместо `422 INVALID_DIAGNOSTICS`/`INVALID_TREND_PLAN`) | клиент, ждавший `STAGES_RESOURCES_CONFLICT` на любой снимок, теперь получает анализ; отказ корреляций и тренда со стадиями меняет только код |

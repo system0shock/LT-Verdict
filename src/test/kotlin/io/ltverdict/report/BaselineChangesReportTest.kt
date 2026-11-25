@@ -6,7 +6,10 @@ import io.ltverdict.core.StagedResults
 import io.ltverdict.integrations.report.renderConfluenceReport
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -246,6 +249,24 @@ class BaselineChangesReportTest {
     }
 
     @Test
+    fun `a row suppressed by within-window noise renders the localized reason`() {
+        val comparison =
+            steady(
+                window(
+                    "steady",
+                    "NO_MATERIAL_CHANGE",
+                    listOf(row("response_time_p50_ms", "ms", "200", "212", "12", "6", "NO_MATERIAL_CHANGE", "WITHIN_NOISE")),
+                ),
+            )
+
+        val html = renderHtmlReport(result, "fixed", null, comparison).decodeToString()
+        val text = summaryText("fixed", 0, result, null, comparison).decodeToString()
+
+        assertTrue(html.contains("без заметных изменений, в пределах внутриоконного шума"), html)
+        assertTrue(text.contains("без заметных изменений, в пределах внутриоконного шума"), text)
+    }
+
+    @Test
     fun `without a comparison every artifact is as before`() {
         val html = renderHtmlReport(result, "fixed", null).decodeToString()
         val ascii = renderAsciiDocReport(result, "fixed", null).decodeToString()
@@ -258,5 +279,38 @@ class BaselineChangesReportTest {
         assertEquals(summaryText("fixed", 0, result).decodeToString(), summaryText("fixed", 0, result, null, null).decodeToString())
         assertFalse(summaryText("fixed", 0, result).decodeToString().contains("baseline"))
         assertNull(Json.parseToJsonElement(summaryJson("fixed", result).decodeToString()).jsonObject["baseline_comparison"])
+    }
+
+    @Test
+    fun `html verdict block renders baseline regression failure headline count and p50 label`() {
+        val parsed = Json.parseToJsonElement(result.decodeToString()).jsonObject
+        val regressedResult =
+            buildJsonObject {
+                parsed.forEach { (k, v) -> put(k, v) }
+                put("policy_verdict", "FAIL")
+                put(
+                    "findings",
+                    buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put("id", "baseline-regression-failure-0123456789abcdef")
+                                put("type", "baseline_regression_failure")
+                                put("window_id", "steady")
+                                put("metric", "response_time_p50_ms")
+                                put("baseline_analysis_id", "b".repeat(64))
+                                put("baseline", "100")
+                                put("current", "140")
+                                put("delta", "40")
+                                put("delta_percent", "40")
+                            },
+                        )
+                    },
+                )
+            }
+        val html = renderHtmlReport(io.ltverdict.core.canonicalJson(regressedResult), "fixed").decodeToString()
+
+        assertTrue(html.contains("Прогон не проходит — обнаружена регрессия относительно baseline"), html)
+        assertTrue(html.contains("Регрессий относительно baseline: 1."), html)
+        assertTrue(html.contains("p50 отклика · окно steady: 100 → 140 (40 %)"), html)
     }
 }

@@ -498,3 +498,10 @@ for (const width of [1280, 375, 320]) {
     expect(size.scrollWidth).toBeLessThanOrEqual(size.innerWidth)
   })
 }
+
+test('WITHIN_NOISE reason is rendered in Russian inside window comparison table', async ({ page }) => {
+  await openCompare(page, { windowReasons: ['WITHIN_NOISE'], windowStatus: 'CANDIDATE' })
+  await compareWindows(page)
+  const window = page.getByTestId('window-comparison')
+  await expect(window).toContainText(COMPARE_LABELS.reasons(['WITHIN_NOISE']))
+})

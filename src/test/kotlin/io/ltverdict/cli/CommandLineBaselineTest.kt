@@ -444,6 +444,211 @@ class CommandLineBaselineTest {
         assertFalse(Files.readString(out.resolve("summary.txt")).contains("baseline"))
     }
 
+    @Test
+    fun `policy baseline_regression fail gates verdict exit code and separates cached analysis ids per baseline`() {
+        val baseline = save("base", load, "--stages", stages)
+        val fasterPath =
+            tempDir
+                .resolve("fast.jtl")
+                .also { path ->
+                    val lines = Files.readAllLines(Path.of(load))
+                    val body =
+                        lines.drop(1).map { line ->
+                            val cells = line.split(",").toMutableList()
+                            cells[1] = maxOf(1, cells[1].toInt() / 2).toString()
+                            cells.joinToString(",")
+                        }
+                    Files.write(path, listOf(lines.first()) + body)
+                }.toString()
+        val fastBaseline = save("fast-base", fasterPath, "--stages", stages, dataDir = baseline.dataDir)
+
+        val failOnRegressionPolicy =
+            policyWithDefaults(
+                "reg-fail",
+                """"sample_floor":1,"min_samples":1,"baseline_regression":"fail"""",
+                """{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}""",
+            )
+        val ignoreRegressionPolicy =
+            policyWithDefaults(
+                "reg-ignore",
+                """"sample_floor":1,"min_samples":1,"baseline_regression":"ignore"""",
+                """{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}""",
+            )
+
+        // 1. Missing --baseline with baseline_regression: fail -> exit 3 (NO_VERDICT, BASELINE_REQUIRED)
+        val missingBaseline =
+            run(
+                "analyze",
+                slow,
+                "--policy",
+                failOnRegressionPolicy,
+                "--stages",
+                stages,
+                "--data-dir",
+                baseline.dataDir.toString(),
+            )
+        assertEquals(3, missingBaseline.exitCode, missingBaseline.stderr)
+        val missingJson = Json.parseToJsonElement(missingBaseline.stdout).jsonObject
+        assertEquals("NO_VERDICT", missingJson.getValue("policy_verdict").jsonPrimitive.content)
+        assertTrue(
+            missingJson
+                .getValue("analysis_coverage")
+                .jsonObject
+                .getValue("reasons")
+                .jsonArray
+                .any { it.jsonPrimitive.content == "BASELINE_REQUIRED" },
+        )
+
+        // 2. Regression against baseline -> exit 2 (FAIL) even though policy rule p95 <= 100000 passed
+        val regOut = tempDir.resolve("out-reg-fail")
+        val regressed =
+            run(
+                "analyze",
+                slow,
+                "--policy",
+                failOnRegressionPolicy,
+                "--stages",
+                stages,
+                "--baseline",
+                baseline.result.toString(),
+                "--out-dir",
+                regOut.toString(),
+                "--data-dir",
+                baseline.dataDir.toString(),
+            )
+        assertEquals(2, regressed.exitCode, regressed.stderr)
+        val regJson = Json.parseToJsonElement(regressed.stdout).jsonObject
+        assertEquals("FAIL", regJson.getValue("policy_verdict").jsonPrimitive.content)
+        assertTrue(
+            regJson.getValue("findings").jsonArray.any {
+                it.jsonObject
+                    .getValue("type")
+                    .jsonPrimitive.content == "baseline_regression_failure"
+            },
+        )
+        val regAnalysisId = Regex("analysis_id=([0-9a-f]{64})").find(regressed.stderr)!!.groupValues[1]
+        val regIdentity =
+            Json
+                .parseToJsonElement(
+                    Files.readString(
+                        baseline.dataDir
+                            .resolve("runs")
+                            .resolve(regJson.getValue("run_id").jsonPrimitive.content)
+                            .resolve("analyses")
+                            .resolve(regAnalysisId)
+                            .resolve("identity.json"),
+                    ),
+                ).jsonObject
+        assertEquals(baseline.analysisId, regIdentity.getValue("baseline_analysis_id").jsonPrimitive.content)
+        assertTrue(Files.readString(regOut.resolve("junit.xml")).contains("<failure "))
+        assertTrue(Files.readString(regOut.resolve("report.html")).contains("baseline_regression"))
+        assertTrue(Files.readString(regOut.resolve("summary.txt")).contains("FAIL baseline_regression"))
+
+        // 3. Same JTL + policy against a DIFFERENT baseline produces a distinct analysis_id (no cache collision)
+        val regOut2 = tempDir.resolve("out-reg-fail-2")
+        val regressed2 =
+            run(
+                "analyze",
+                slow,
+                "--policy",
+                failOnRegressionPolicy,
+                "--stages",
+                stages,
+                "--baseline",
+                fastBaseline.result.toString(),
+                "--out-dir",
+                regOut2.toString(),
+                "--data-dir",
+                baseline.dataDir.toString(),
+            )
+        assertEquals(2, regressed2.exitCode, regressed2.stderr)
+        val regAnalysisId2 = Regex("analysis_id=([0-9a-f]{64})").find(regressed2.stderr)!!.groupValues[1]
+        assertFalse(regAnalysisId == regAnalysisId2)
+
+        // 4. Improvement / no regression against slow baseline -> exit 0 (PASS)
+        val passOut = tempDir.resolve("out-reg-pass")
+        val improved =
+            run(
+                "analyze",
+                load,
+                "--policy",
+                failOnRegressionPolicy,
+                "--stages",
+                stages,
+                "--baseline",
+                baseline.result.toString(),
+                "--out-dir",
+                passOut.toString(),
+                "--data-dir",
+                baseline.dataDir.toString(),
+            )
+        assertEquals(0, improved.exitCode, improved.stderr)
+        val improvedJson = Json.parseToJsonElement(improved.stdout).jsonObject
+        assertEquals("PASS", improvedJson.getValue("policy_verdict").jsonPrimitive.content)
+
+        // 5. Incompatible baseline (plain vs staged) -> exit 3 (NO_VERDICT, BASELINE_REGRESSION_NOT_EVALUATED)
+        val plainOut = tempDir.resolve("out-reg-incompat")
+        val incompatible =
+            run(
+                "analyze",
+                slow,
+                "--policy",
+                failOnRegressionPolicy,
+                "--baseline",
+                baseline.result.toString(),
+                "--out-dir",
+                plainOut.toString(),
+                "--data-dir",
+                baseline.dataDir.toString(),
+            )
+        assertEquals(3, incompatible.exitCode, incompatible.stderr)
+        val incompatJson = Json.parseToJsonElement(incompatible.stdout).jsonObject
+        assertEquals("NO_VERDICT", incompatJson.getValue("policy_verdict").jsonPrimitive.content)
+        assertTrue(
+            incompatJson
+                .getValue("analysis_coverage")
+                .jsonObject
+                .getValue("reasons")
+                .jsonArray
+                .any { it.jsonPrimitive.content == "BASELINE_REGRESSION_NOT_EVALUATED" },
+        )
+
+        // 6. baseline_regression: ignore preserves backward-compatible PASS (exit 0)
+        val ignoredOut = tempDir.resolve("out-reg-ignore")
+        val ignored =
+            run(
+                "analyze",
+                slow,
+                "--policy",
+                ignoreRegressionPolicy,
+                "--stages",
+                stages,
+                "--baseline",
+                baseline.result.toString(),
+                "--out-dir",
+                ignoredOut.toString(),
+                "--data-dir",
+                baseline.dataDir.toString(),
+            )
+        assertEquals(0, ignored.exitCode, ignored.stderr)
+        val ignoredJson = Json.parseToJsonElement(ignored.stdout).jsonObject
+        assertEquals("PASS", ignoredJson.getValue("policy_verdict").jsonPrimitive.content)
+    }
+
+    private fun policyWithDefaults(
+        name: String,
+        defaults: String,
+        rule: String,
+    ): String =
+        tempDir
+            .resolve("$name-policy.json")
+            .also {
+                Files.writeString(
+                    it,
+                    """{"schema_version":"policy.v1","policy_id":"$name","defaults":{$defaults},"rules":[$rule]}""",
+                )
+            }.toString()
+
     private fun policy(
         name: String,
         rule: String,

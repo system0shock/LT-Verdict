@@ -65,6 +65,7 @@ internal data class PolicyDefaultsV1(
     val maxMissingFraction: BigDecimal? = null,
     val maxGapCells: Int? = null,
     val missingTransaction: MissingTransactionMode? = null,
+    val baselineRegression: BaselineRegressionMode? = null,
 )
 
 internal enum class MissingTransactionMode(
@@ -72,6 +73,13 @@ internal enum class MissingTransactionMode(
 ) {
     NO_VERDICT("no_verdict"),
     WARN("warn"),
+}
+
+internal enum class BaselineRegressionMode(
+    val wireName: String,
+) {
+    IGNORE("ignore"),
+    FAIL("fail"),
 }
 
 internal data class PolicyRuleV1(

@@ -754,7 +754,10 @@ private fun parseDefaults(
     pointer: String,
 ): PolicyDefaultsV1 {
     val value = element.objectAt(pointer)
-    value.rejectUnknown(setOf("sample_floor", "min_samples", "max_missing_fraction", "max_gap_cells", "missing_transaction"), pointer)
+    value.rejectUnknown(
+        setOf("sample_floor", "min_samples", "max_missing_fraction", "max_gap_cells", "missing_transaction", "baseline_regression"),
+        pointer,
+    )
     return PolicyDefaultsV1(
         value.longInRangeAt("sample_floor", pointer),
         value.longInRangeAt("min_samples", pointer),
@@ -767,6 +770,15 @@ private fun parseDefaults(
                     "UNKNOWN_MISSING_TRANSACTION_MODE",
                     pointer.child("missing_transaction"),
                     unknownValue("missing_transaction mode", MissingTransactionMode.entries.map { mode -> mode.wireName }),
+                )
+        },
+        value["baseline_regression"]?.let {
+            val name = value.stringAt("baseline_regression", pointer)
+            BaselineRegressionMode.entries.find { mode -> mode.wireName == name }
+                ?: fail(
+                    "UNKNOWN_BASELINE_REGRESSION_MODE",
+                    pointer.child("baseline_regression"),
+                    unknownValue("baseline_regression mode", BaselineRegressionMode.entries.map { mode -> mode.wireName }),
                 )
         },
     )

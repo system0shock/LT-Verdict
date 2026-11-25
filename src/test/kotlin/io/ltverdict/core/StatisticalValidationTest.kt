@@ -469,7 +469,9 @@ internal object StatisticalValidationRunner {
         }
     }
 
-    private fun analysis(input: JsonObject): JsonObject {
+    private fun analysis(input: JsonObject): JsonObject = analyzeRun(input).first
+
+    private fun analyzeRun(input: JsonObject): Pair<JsonObject, RunLoadSeries?> {
         val run = input.getValue("run").jsonObject
         val load =
             run
@@ -489,7 +491,7 @@ internal object StatisticalValidationRunner {
                 first.identity,
                 first.resultBytes.contentEquals(replay.resultBytes) &&
                     first.identityBytes.contentEquals(replay.identityBytes),
-            )
+            ) to first.loadSeries
         } finally {
             DataDirectory.deleteTree(root)
         }
@@ -501,6 +503,7 @@ internal object StatisticalValidationRunner {
         val identity: JsonObject,
         val resultBytes: ByteArray,
         val identityBytes: ByteArray,
+        val loadSeries: RunLoadSeries?,
     )
 
     private fun analyze(
@@ -573,7 +576,14 @@ internal object StatisticalValidationRunner {
         require(documents.second == Json.parseToJsonElement(identityBytes.decodeToString()).jsonObject) {
             "PERSISTED_IDENTITY_MISMATCH"
         }
-        return StoredRun(input, documents.first, documents.second, resultBytes, identityBytes)
+        return StoredRun(
+            input,
+            documents.first,
+            documents.second,
+            resultBytes,
+            identityBytes,
+            store.readRunLoadSeries(input.runId, analysisId),
+        )
     }
 
     private fun analysisOutput(
@@ -617,14 +627,14 @@ internal object StatisticalValidationRunner {
                     "conditions_confirmed must be a boolean"
                 }
             }
-        val baseline =
-            analysis(
+        val (baseline, baselineSeries) =
+            analyzeRun(
                 buildJsonObject {
                     put("run", input.getValue("baseline").jsonObject)
                 },
             )
-        val current =
-            analysis(
+        val (current, currentSeries) =
+            analyzeRun(
                 buildJsonObject {
                     put("run", input.getValue("current").jsonObject)
                 },
@@ -656,6 +666,7 @@ internal object StatisticalValidationRunner {
                     input.getValue("current_window_id").jsonPrimitive.content,
                 ),
                 conditionsConfirmed = conditionsConfirmed,
+                series = ComparisonSeriesContext(baselineSeries, currentSeries),
             )
         return buildJsonObject {
             put("baseline", baseline)

@@ -114,6 +114,7 @@ private const val MAX_PRECISION = 400
 
 private val METRIC_WORDS =
     mapOf(
+        "response_time_p50_ms" to "p50 отклика",
         "response_time_p95_ms" to "p95 отклика",
         "response_time_p99_ms" to "p99 отклика",
         "error_rate_ratio" to "доля ошибок",
@@ -161,6 +162,7 @@ private fun verdictBlock(
     val resource = evidence.filter { it.string("type") == "resource_policy_check" && it.text("effect") == "sla" }
     val rules = business + resource
     val failed = rules.count { it.text("status") == "FAIL" }
+    val regressionFailures = result.array("findings").filter { it.text("type") == "baseline_regression_failure" }
     val unresolved = rules.count { it.text("status") == "NO_VERDICT" }
     // With a decided PASS/FAIL, an unresolved rule is a warned skip (missing_transaction=warn): it is not an evaluated check.
     val decided = verdict == "PASS" || verdict == "FAIL"
@@ -177,6 +179,8 @@ private fun verdictBlock(
                     "NO_POLICY" -> "Вердикта нет — не задана требуемая ёмкость или SLA-правила"
                     else -> null
                 }
+            verdict == "FAIL" && failed == 0 && regressionFailures.isNotEmpty() ->
+                "Прогон не проходит — обнаружена регрессия относительно baseline"
             verdict == "FAIL" -> "Прогон не проходит — нарушено проверок: $failed из $evaluated$skipped"
             verdict == "PASS" -> "Прогон проходит — нарушений нет, проверок: $evaluated$skipped"
             verdict == "NO_POLICY" -> "Вердикта нет — политика не задана"
@@ -229,12 +233,21 @@ private fun verdictBlock(
         }
     val items = failures + reasons.map { "<li><code>${escape(it)}</code>: ${escape(reasonWords(it) + reasonStages(it, evidence))}</li>" }
     val reasonList = if (items.isEmpty()) "<p>Причины в результате не указаны.</p>" else "<ul>${items.joinToString("")}</ul>"
+    val regressionCountNote =
+        if (regressionFailures.isNotEmpty()) {
+            " Регрессий относительно baseline: ${regressionFailures.size}."
+        } else {
+            ""
+        }
     val count =
         when {
             capacity && stages.isEmpty() -> "В результате нет данных по ступеням ёмкости."
-            capacity -> capacityCount(stages)
-            rules.isEmpty() -> "Проверок правил в результате нет."
-            else -> "Нарушено правил: $failed из $evaluated." + if (decided && unresolved > 0) " Не вычислено: $unresolved." else ""
+            capacity -> capacityCount(stages) + regressionCountNote
+            rules.isEmpty() -> "Проверок правил в результате нет." + regressionCountNote
+            else ->
+                "Нарушено правил: $failed из $evaluated." +
+                    (if (decided && unresolved > 0) " Не вычислено: $unresolved." else "") +
+                    regressionCountNote
         }
     val bound = if (capacity) capacityBound(result) else ""
     return "<section><h2>Вердикт и причины</h2><p><strong>${escape(headline)}</strong> <code>${escape(verdict ?: DASH)}</code></p>" +
@@ -321,10 +334,20 @@ private fun ruleFailureItems(
 ): List<String> {
     val metricsById = evidence.filter { it.string("type") == "metric_summary" }.associateBy { it.text("id") }
     val violations = result.array("findings").filter { it.text("type") == "resource_threshold_violation" }
+    val regressions =
+        result.array("findings").filter { it.text("type") == "baseline_regression_failure" }.map { item ->
+            val window = item.text("window_id")?.let { " · окно $it" } ?: ""
+            val metric = item.text("metric") ?: DASH
+            val base = item.text("baseline") ?: DASH
+            val cur = item.text("current") ?: DASH
+            val pct = item.text("delta_percent")?.let { " ($it %)" } ?: ""
+            "<li><code>baseline_regression</code>: ${escape("${metricWords(metric, item)}$window: $base → $cur$pct")}</li>"
+        }
     return business.map { "<li><code>${escape(it.text("rule_id") ?: DASH)}</code>: ${escape(businessFailureText(it, metricsById))}</li>" } +
         resource
             .filter { it.text("status") == "FAIL" }
-            .map { "<li><code>${escape(it.text("rule_id") ?: DASH)}</code>: ${escape(resourceFailureText(it, violations))}</li>" }
+            .map { "<li><code>${escape(it.text("rule_id") ?: DASH)}</code>: ${escape(resourceFailureText(it, violations))}</li>" } +
+        regressions
 }
 
 private fun businessFailureText(

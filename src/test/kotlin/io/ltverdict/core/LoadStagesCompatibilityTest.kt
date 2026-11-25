@@ -123,23 +123,76 @@ class LoadStagesCompatibilityTest {
     }
 
     @Test
-    fun `a staged analysis is comparable only with the same declaration`() =
+    fun `a staged analysis is comparable when stage structure and steady RPS match within tolerance`() =
         withService { store, service ->
             val data = accept(store, Files.readAllBytes(Path.of("fixtures/stages/ramp-steady-rampdown.jtl")))
             val policy = policy()
             val plain = saved(service.analyze(AnalysisRequest(data, policy)))
             val first = saved(service.analyze(AnalysisRequest(data, policy, stages = declared)), 'b')
             val sameDeclaration = saved(service.analyze(AnalysisRequest(data, policy, stages = stages(RAMP_STEADY_DOWN_SPACED))), 'c')
-            val otherDeclaration =
+            val slightlyShiftedBoundary =
                 saved(
                     service.analyze(AnalysisRequest(data, policy, stages = stages(RAMP_STEADY_DOWN.replace("100000,", "100001,")))),
                     'd',
                 )
+            val differentRoleOrId =
+                saved(
+                    service.analyze(
+                        AnalysisRequest(
+                            data,
+                            policy,
+                            stages = stages(RAMP_STEADY_DOWN.replace("\"id\": \"steady\"", "\"id\": \"steady-main\"")),
+                        ),
+                    ),
+                    'e',
+                )
+            // Higher steady RPS (> 5% difference) with a distinct stage declaration -> incompatible
+            val fasterData =
+                accept(
+                    store,
+                    Files
+                        .readAllLines(Path.of("fixtures/stages/ramp-steady-rampdown.jtl"))
+                        .let { lines ->
+                            val header = lines.first()
+                            val body = lines.drop(1)
+                            val steadyRows =
+                                body.filter { line ->
+                                    line.substringBefore(",").toLong() in 1_767_225_640_000L..1_767_225_700_000L
+                                }
+                            (listOf(header) + body + steadyRows)
+                                .joinToString("\n")
+                                .encodeToByteArray()
+                        },
+                )
+            val otherSteadyStages = stages(RAMP_STEADY_DOWN.replace("100000,", "100001,"))
+            val higherRps = saved(service.analyze(AnalysisRequest(fasterData, policy, stages = otherSteadyStages)), 'f')
 
             assertTrue(compatible(first, sameDeclaration))
-            assertFalse(compatible(first, otherDeclaration))
+            assertTrue(compatible(first, slightlyShiftedBoundary))
+            assertFalse(compatible(first, differentRoleOrId))
+            assertFalse(compatible(first, higherRps))
             assertFalse(compatible(first, plain))
             assertFalse(compatible(plain, first))
+
+            val dynamics = buildRunDynamics(first, listOf(slightlyShiftedBoundary, higherRps, plain))
+            assertEquals("2", dynamics.getValue("comparable_count").jsonPrimitive.content)
+            assertEquals("2", dynamics.getValue("excluded_incompatible_count").jsonPrimitive.content)
+            assertEquals(
+                JsonPrimitive(true),
+                compareTransactions(first.result, first.identity, slightlyShiftedBoundary.result, slightlyShiftedBoundary.identity)
+                    .getValue("compatible"),
+            )
+            assertEquals(
+                JsonPrimitive(false),
+                compareTransactions(first.result, first.identity, higherRps.result, higherRps.identity)
+                    .getValue("compatible"),
+            )
+            statisticalBaselineSelection(
+                "series",
+                listOf(first.reference, sameDeclaration.reference, slightlyShiftedBoundary.reference),
+                listOf(first.result, sameDeclaration.result, slightlyShiftedBoundary.result),
+                listOf(first.identity, sameDeclaration.identity, slightlyShiftedBoundary.identity),
+            )
         }
 
     @Test

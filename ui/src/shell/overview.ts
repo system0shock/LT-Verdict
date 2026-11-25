@@ -71,6 +71,7 @@ const openLabels: Record<string, string> = {
   'diagnostic-results': OVERVIEW_LABELS.openDiagnostics,
   'source-acquisition': OVERVIEW_LABELS.openSources,
   'policy-file': OVERVIEW_LABELS.openSetup,
+  'baseline-panel': OVERVIEW_LABELS.openCompare,
 }
 
 export function formatNumber(value: number, maxFractionDigits = 2): string {
@@ -206,7 +207,13 @@ export function attentionItems(result: AnalysisResult): AttentionItem[] {
   if (result.analysis_mode !== 'capacity_step') {
     for (const line of failedLinesOf(result)) {
       if (coveredEvidenceIds?.has(line.key)) continue
-      items.push(item(`violation:${line.key}`, 'violation', line.title, line.detail, { tab: 'tables', targetId: line.source === 'business' ? 'policy-results' : 'resource-results' }))
+      const target: AttentionTarget =
+        line.source === 'business'
+          ? { tab: 'tables', targetId: 'policy-results' }
+          : line.source === 'baseline'
+            ? { tab: 'compare', targetId: 'baseline-panel' }
+            : { tab: 'tables', targetId: 'resource-results' }
+      items.push(item(`violation:${line.key}`, 'violation', line.title, line.detail, target))
     }
   }
   if (result.analysis_mode === 'capacity_step' && result.policy_verdict === 'FAIL') {

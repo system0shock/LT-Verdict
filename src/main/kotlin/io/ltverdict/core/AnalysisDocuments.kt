@@ -115,6 +115,7 @@ internal data class AnalysisIdentityDocument(
     @SerialName("incident_method") val incidentMethod: String? = null,
     @SerialName("jenkins_build") val jenkinsBuild: String? = null,
     val commit: String? = null,
+    @SerialName("baseline_analysis_id") val baselineAnalysisId: String? = null,
     val engine: ComponentRef,
     val parsers: List<ComponentRef>,
     val modules: List<ComponentRef>,

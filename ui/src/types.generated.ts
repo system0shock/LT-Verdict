@@ -53,6 +53,7 @@ export interface AnalysisIdentityDocument {
   incident_method?: string
   jenkins_build?: string
   commit?: string
+  baseline_analysis_id?: string
   engine: ComponentRef
   parsers: Array<ComponentRef>
   modules: Array<ComponentRef>

@@ -172,6 +172,7 @@ const negatives = [
   ['extra identity key', 'AnalysisIdentityDocument', { ...identitySample, extra: 1 }],
   ['missing identity key', 'AnalysisIdentityDocument', Object.fromEntries(Object.entries(identitySample).filter(([key]) => key !== 'engine'))],
   ['wrong incident_method type', 'AnalysisIdentityDocument', { ...identitySample, incident_method: 123 }],
+  ['wrong baseline_analysis_id type', 'AnalysisIdentityDocument', { ...identitySample, baseline_analysis_id: 123 }],
 ]
 const richest = (tag) => [...samples, ...derivedSamples, ...inputSamples].filter((sample) => sample.type === tag).sort((a, b) => Object.keys(b).length - Object.keys(a).length)[0]
 const policyCheck = richest('policy_check')

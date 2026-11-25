@@ -1,11 +1,13 @@
 package io.ltverdict.storage
 
 import io.ltverdict.core.MAX_POD_VIEW_BYTES
+import io.ltverdict.core.RunLoadSeries
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.validateRunPeriod
 import io.ltverdict.ingest.SourceType
 import io.ltverdict.ingest.detectSource
+import io.ltverdict.metrics.NormalizedBucket
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -16,10 +18,12 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
+import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
@@ -504,6 +508,80 @@ internal class AnalysisStore(
             )
         }
 
+    fun readRunLoadSeries(
+        runId: String,
+        analysisId: String,
+    ): RunLoadSeries? {
+        val stored =
+            synchronized(dataDirectory.operationLock) {
+                dataDirectory.requireOpen()
+                readAnalysisUnlocked(runId, analysisId)
+            } ?: return null
+        if (stored.artifacts.none { it.path == "run.json" } ||
+            stored.artifacts.none { it.path == NORMALIZED_BUCKETS_FILE }
+        ) {
+            return null
+        }
+        return try {
+            val runFile = stored.path.resolve("run.json")
+            if (Files.isSymbolicLink(runFile) ||
+                !Files.isRegularFile(runFile, LinkOption.NOFOLLOW_LINKS) ||
+                Files.size(runFile) > MAX_LOAD_RUN_FILE_BYTES
+            ) {
+                return null
+            }
+            val runBytes =
+                Files.newInputStream(runFile, LinkOption.NOFOLLOW_LINKS).use {
+                    it.readNBytes(MAX_LOAD_RUN_FILE_BYTES.toInt() + 1)
+                }
+            if (runBytes.size > MAX_LOAD_RUN_FILE_BYTES) return null
+            val run = Json.parseToJsonElement(String(runBytes, UTF_8)).jsonObject
+            val started = Instant.parse((run["started_at"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null)
+            val ended = Instant.parse((run["ended_at"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null)
+            if (ended.isBefore(started)) return null
+
+            val normalizedFile = stored.path.resolve(NORMALIZED_BUCKETS_FILE)
+            if (Files.isSymbolicLink(normalizedFile) ||
+                !Files.isRegularFile(normalizedFile, LinkOption.NOFOLLOW_LINKS) ||
+                Files.size(normalizedFile) > MAX_NORMALIZED_SERIES_BYTES
+            ) {
+                return null
+            }
+            val buckets = ArrayList<NormalizedBucket>()
+            var previousOffset = -1L
+            var rows = 0
+            var totalBytes = 0L
+            Files.newInputStream(normalizedFile, LinkOption.NOFOLLOW_LINKS).bufferedReader(UTF_8).use { reader ->
+                while (true) {
+                    val line = reader.boundedSeriesLine() ?: break
+                    totalBytes += line.toByteArray(UTF_8).size + 1L
+                    rows++
+                    if (rows > MAX_NORMALIZED_SERIES_ROWS || totalBytes > MAX_NORMALIZED_SERIES_BYTES) return null
+                    val row = Json.parseToJsonElement(line).jsonObject
+                    val offset = row.nonStringLong("bucket_start_ms") ?: return null
+                    val sampleCount = row.nonStringLong("sample_count") ?: return null
+                    val errorCount = row.nonStringLong("error_count") ?: return null
+                    val maxLatency = row.nonStringLong("max_latency_ms") ?: return null
+                    val hdrBase64 = (row["hdr_v2_base64"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
+                    if (offset <= previousOffset ||
+                        offset % 1_000L != 0L ||
+                        sampleCount < 0L ||
+                        errorCount < 0L ||
+                        errorCount > sampleCount ||
+                        maxLatency < 0L
+                    ) {
+                        return null
+                    }
+                    previousOffset = offset
+                    buckets += NormalizedBucket(offset, sampleCount, errorCount, maxLatency, hdrBase64)
+                }
+            }
+            RunLoadSeries(started.toEpochMilli(), buckets, ended.toEpochMilli())
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     // History displays saved facts: hash-verify only the (bounded) documents consumed; raw inputs and other artifacts are never read.
     // ponytail: bounded directory scan; add an index only if histories routinely exceed these limits.
     fun readComparisonHistory(
@@ -980,7 +1058,33 @@ private const val POD_VIEW_FILE = "pod-view.json"
 
 private const val POLICY_FILE = "policy.json"
 
+private const val NORMALIZED_BUCKETS_FILE = "normalized-1s.ndjson"
+
 private const val MAX_POLICY_BYTES = 1_048_576
+
+private const val MAX_LOAD_RUN_FILE_BYTES = 65_536L
+
+private const val MAX_NORMALIZED_SERIES_ROWS = 100_000
+
+private const val MAX_NORMALIZED_SERIES_BYTES = 268_435_456L
+
+private const val MAX_NORMALIZED_LINE_CHARS = 1_048_576
+
+private fun BufferedReader.boundedSeriesLine(): String? {
+    val line = StringBuilder()
+    while (true) {
+        val code = read()
+        if (code == -1) return if (line.isEmpty()) null else line.toString()
+        if (code == '\n'.code) return line.toString()
+        if (code != '\r'.code) {
+            if (line.length >= MAX_NORMALIZED_LINE_CHARS) throw IllegalStateException("SERIES_LINE_TOO_LONG")
+            line.append(code.toChar())
+        }
+    }
+}
+
+private fun JsonObject.nonStringLong(name: String): Long? =
+    (this[name] as? JsonPrimitive)?.takeUnless { it.isString }?.content?.toLongOrNull()
 
 internal const val MAX_VERIFIED_RESULT_BYTES = 64 * 1024 * 1024
 

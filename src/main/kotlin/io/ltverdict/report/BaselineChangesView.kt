@@ -150,6 +150,7 @@ private fun statusText(row: JsonObject): String {
             "CONDITIONS_UNCONFIRMED" -> "условия не подтверждены"
             "ZERO_BASELINE" -> "baseline равен нулю"
             "EMPTY_WINDOW" -> "пустое окно"
+            "WITHIN_NOISE" -> "в пределах внутриоконного шума"
             else -> clean(reason)
         }
     return statusWords(status) + (extra?.let { ", $it" } ?: "")

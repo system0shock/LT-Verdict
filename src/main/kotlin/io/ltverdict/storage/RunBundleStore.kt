@@ -1,6 +1,7 @@
 package io.ltverdict.storage
 
 import io.ltverdict.core.AnalysisArtifacts
+import io.ltverdict.core.RunLoadSeries
 import io.ltverdict.core.WindowComparisonRequest
 import kotlinx.serialization.json.JsonObject
 import java.io.InputStream
@@ -150,6 +151,11 @@ internal class RunBundleStore(
         runId: String,
         analysisId: String,
     ): ComparisonDocuments? = analyses.readComparisonDocuments(runId, analysisId)
+
+    fun readRunLoadSeries(
+        runId: String,
+        analysisId: String,
+    ): RunLoadSeries? = analyses.readRunLoadSeries(runId, analysisId)
 
     fun readComparisonHistory(
         limit: Int = 1000,

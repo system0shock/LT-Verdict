@@ -48,6 +48,8 @@ export const REASONS: Record<string, ReasonEntry> = {
   SOURCE_ACQUISITION_FAILED: { noVerdict: false, text: 'Онлайн-источник не вернул данные.' },
   SOURCE_REQUEST_CAP_EXCEEDED: { noVerdict: false, text: 'Достигнут предел числа запросов к источнику, часть данных не запрошена.' },
   STAGE_WINDOW_SNAPSHOT_PARTIAL: { noVerdict: false, text: 'Снимок ресурсов покрывает окно стадии steady не целиком: ресурсные правила проверены только на покрытой части окна.' },
+  BASELINE_REQUIRED: { noVerdict: true, text: 'Политика требует сравнения с baseline (baseline_regression: fail), но эталонный анализ не передан.' },
+  BASELINE_REGRESSION_NOT_EVALUATED: { noVerdict: true, text: 'Не удалось оценить регрессию относительно baseline (несовместимые анализы, нет окна или недостаточно данных).' },
   // Оценка ёмкости
   CAPACITY_RUN_NOT_VALID: { noVerdict: true, text: 'Нагрузка разобрана не полностью, ёмкость оценить нельзя.' },
   CAPACITY_WINDOW_EVIDENCE_MISSING: { noVerdict: true, text: 'Для ступени нет окна или итогов окна.' },

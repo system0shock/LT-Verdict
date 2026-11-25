@@ -85,6 +85,23 @@ class PolicyTest {
     }
 
     @Test
+    fun `baseline regression mode parses and an unknown value lists the allowed ones`() {
+        val ignore = validatePolicy(ByteArrayInputStream(policyJson(defaults = """{"baseline_regression":"ignore"}""").encodeToByteArray()))
+        val fail = validatePolicy(ByteArrayInputStream(policyJson(defaults = """{"baseline_regression":"fail"}""").encodeToByteArray()))
+        val unknown = policyJson(defaults = """{"baseline_regression":"warn"}""").encodeToByteArray()
+
+        assertEquals(BaselineRegressionMode.IGNORE, (ignore as PolicyValidation.Valid).policy.defaults?.baselineRegression)
+        assertEquals(BaselineRegressionMode.FAIL, (fail as PolicyValidation.Valid).policy.defaults?.baselineRegression)
+        assertInvalid(unknown, "UNKNOWN_BASELINE_REGRESSION_MODE", "/defaults/baseline_regression")
+        assertInvalid(
+            policyJson(defaults = """{"baseline_regression":true}""").encodeToByteArray(),
+            "INVALID_TYPE",
+            "/defaults/baseline_regression",
+        )
+        assertTrue(message(unknown).endsWith("allowed: ignore, fail"), message(unknown))
+    }
+
+    @Test
     fun `unknown enum values name the allowed values`() {
         val platform = Files.readString(Path.of("docs/contracts/policy/v1/examples/valid/platform-services.json"))
         val cases =

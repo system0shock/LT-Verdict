@@ -119,6 +119,17 @@ baseline не меняются.** Звено добавляется по обр�
 стадии станет несовместимым и его нужно пересохранить (одна операция); обратный
 выбор меняет схему хранилища.
 
+> Уточнено в W4.2 (`comparableSemantics` в `BaselineComparison.kt` и `RunComparison.kt`):
+> при разных `load_stages_sha256` оба анализа со стадиями остаются сопоставимыми,
+> если у них совпадают `evaluated_window_ids` и последовательность `(id, role)`
+> в `stage_binding.stages`, а достигнутый `throughput_rps` каждого оценённого окна
+> удовлетворяет симметричному правилу `|cur - base| <= 0.05 * min(cur, base)`
+> (то есть `max(cur, base) / min(cur, base) <= 1.05`, что соответствует диапазону
+> от `−4,76 %` до `+5,00 %` относительно baseline и сохраняет симметрию
+> `comparableSemantics(A, B) == comparableSemantics(B, A)` для
+> `statisticalBaselineSelection` и `RunComparison`).
+> Прогоны со стадиями и без них по-прежнему несовместимы.
+
 **R8. Результат: только новые свидетельства, верхнеуровневых полей нет.**
 Добавляются одно `stage_binding` и по одному `window_metric_summary` на окно.
 Новое верхнеуровневое поле потребовало бы изменения белого списка в `AdvisoryAi.kt`
@@ -329,10 +340,10 @@ policy и снимка (дубли ключей, NaN, большие числа 
   `input_versions.stages` = `load-stages.v1` (новое необязательное поле); `limits` +=
   четыре лимита выше. Эти поля входят в ключ сопоставимости, поэтому режим стадий
   отличается от режима без стадий уже без правки ключа.
-- Ключ сопоставимости: условное звено `identity["load_stages_sha256"]` (R6) в
-  `semanticKey` (`BaselineComparison.kt`) и `comparisonSemanticKey`
-  (`RunComparison.kt`). Те же функции используют кандидаты baseline
-  (`BASELINE_MIXED_SEMANTICS`) и динамика прогонов.
+- Ключ сопоставимости: условное звено `identity["load_stages_sha256"]` (R6) и
+  допуск по уровню RPS окон `steady` (W4.2) в `comparableSemantics`
+  (`BaselineComparison.kt`, `RunComparison.kt`). Те же функции используют кандидаты
+  baseline (`BASELINE_MIXED_SEMANTICS`) и динамика прогонов.
 - `analysis_id` меняется только у анализов со стадиями. Повторная отправка тех же
   файлов без стадий возвращает старый сохранённый анализ.
 
@@ -400,7 +411,7 @@ policy и снимка (дубли ключей, NaN, большие числа 
 | API | multipart-часть задания анализа `stages` (одна); `422 INVALID_STAGES` с `error.details[{code, json_pointer, message}]` (как у остальных `INVALID_*`); `413 RESOURCE_LIMIT_EXCEEDED` при превышении размера; задание `FAILED` с `diagnostic.code = STAGE_OUTSIDE_RUN` | добавочное |
 | Коды ошибок | `INVALID_STAGES`, `STAGES_RESOURCES_CONFLICT`, `STAGES_CAPACITY_CONFLICT`, `STAGES_SOURCE_CONFLICT`, `STAGE_OUTSIDE_RUN` и коды валидатора (`STAGES_NO_STEADY` и др.) | новые коды |
 | Identity | `load_stages_sha256`, `load_stages_version`, `input_versions.stages`, модули `stage-window-evaluation` и `window-policy-evaluation`, четыре ключа `limits`; только при стадиях | условное; `analysis_id` меняется только у анализов со стадиями |
-| Ключ сопоставимости | условное звено `load_stages_sha256` в `semanticKey` и `comparisonSemanticKey` | прогоны со стадиями и без них несовместимы (`compatible = false`); слоты baseline не меняются |
+| Ключ сопоставимости | условное звено `load_stages_sha256` и симметричный допуск по `throughput_rps` (`\|cur - base\| <= 0.05 * min(cur, base)`, `max/min <= 1.05`, от `−4,76 %` до `+5,00 %` к baseline) при совпадении `(id, role)` в `comparableSemantics` (W4.2) | прогоны со стадиями и без них несовместимы (`compatible = false`); разные объявления с теми же окнами и `max/min <= 1.05` по RPS сопоставимы; слоты baseline не меняются |
 | Evidence результата | новое `stage_binding`; использование `window_metric_summary` в режиме без снимка; `analysis-result.v1` и верхнеуровневые поля не меняются | добавочное |
 | Каталог анализа | файл `load-stages.json` (канонические байты); `run.json` (`run.v1`) не меняется; маршрута скачивания нет | добавочное |
 | `junit.xml` | суффикс сообщения gate и дочерний `<system-out>` | только прогоны со стадиями |

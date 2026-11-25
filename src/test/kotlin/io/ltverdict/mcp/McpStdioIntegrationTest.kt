@@ -948,6 +948,180 @@ class McpStdioIntegrationTest {
         }
     }
 
+    @Test
+    fun `mcp analyze supports baseline regression gate and compare passes through RPS-tolerant WITHIN_NOISE`() {
+        val baseJtl = tempDir.resolve("mcp-base.jtl")
+        val curJtl = tempDir.resolve("mcp-cur.jtl")
+        val header =
+            "timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success," +
+                "failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect\n"
+        val baseRows =
+            (0..240).joinToString("") { sec ->
+                val ts = 1767225600000L + sec * 1000L
+                val lat = if ((sec / 20) % 2 == 0) 260 else 140
+                "$ts,$lat,GET /api,200,OK,t1,text,true,,100,10,1,1,null,0,0,0\n"
+            }
+        val noisyCurrentRows =
+            (0..240).joinToString("") { sec ->
+                val ts = 1767225600000L + sec * 1000L
+                val lat = if ((sec / 20) % 2 == 0) 272 else 152
+                "$ts,$lat,GET /api,200,OK,t1,text,true,,100,10,1,1,null,0,0,0\n"
+            }
+        val regressedJtl = tempDir.resolve("mcp-reg.jtl")
+        val regressedRows =
+            (0..240).joinToString("") { sec ->
+                val ts = 1767225600000L + sec * 1000L
+                "$ts,600,GET /api,200,OK,t1,text,true,,100,10,1,1,null,0,0,0\n"
+            }
+        Files.writeString(baseJtl, header + baseRows)
+        Files.writeString(curJtl, header + noisyCurrentRows)
+        Files.writeString(regressedJtl, header + regressedRows)
+
+        val stagesBase =
+            Json
+                .parseToJsonElement(
+                    """{"schema_version":"load-stages.v1","stages":[{"id":"ramp","role":"excluded","from_offset_ms":0,"to_offset_ms":40000},{"id":"steady","role":"steady","from_offset_ms":40000,"to_offset_ms":240000}]}""",
+                ).jsonObject
+        val stagesOtherDuration =
+            Json
+                .parseToJsonElement(
+                    """{"schema_version":"load-stages.v1","stages":[{"id":"ramp","role":"excluded","from_offset_ms":0,"to_offset_ms":39000},{"id":"steady","role":"steady","from_offset_ms":39000,"to_offset_ms":239000}]}""",
+                ).jsonObject
+        val regressionPolicy =
+            Json
+                .parseToJsonElement(
+                    """{"schema_version":"policy.v1","policy_id":"mcp-reg","defaults":{"sample_floor":1,"min_samples":1,"baseline_regression":"fail"},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":10000,"scope":{"kind":"overall"}}]}""",
+                ).jsonObject
+
+        DataDirectory.open(tempDir.resolve("mcp-reg-data")).use { directory ->
+            val store = RunBundleStore(directory)
+            val service = AnalysisService(store, EngineConfig())
+            val jobs = AnalysisJobs(1, service::analyze)
+            val server = startLocalServer(LocalApiContext(store, jobs), openBrowser = false)
+            try {
+                val (res1, _) =
+                    runMcpCli(
+                        server.origin,
+                        listOf(
+                            rpcReq(1, "initialize", buildJsonObject { put("protocolVersion", "2024-11-05") }),
+                            rpcNotif("notifications/initialized"),
+                            rpcReq(
+                                2,
+                                "tools/call",
+                                callArgs(
+                                    "analyze",
+                                    buildJsonObject {
+                                        put("input_path", baseJtl.toString())
+                                        put(
+                                            "policy",
+                                            Json
+                                                .parseToJsonElement(
+                                                    """{"schema_version":"policy.v1","policy_id":"mcp-base","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":10000,"scope":{"kind":"overall"}}]}""",
+                                                ).jsonObject,
+                                        )
+                                        put("stages", stagesBase)
+                                    },
+                                ),
+                            ),
+                        ),
+                    )
+                val baseAnalyze = res1.byId(2).toolPayload()
+                val baseRunId = baseAnalyze.getValue("run_id").jsonPrimitive.content
+                val baseAnalysisId = baseAnalyze.getValue("analysis_id").jsonPrimitive.content
+                val baselineRef =
+                    buildJsonObject {
+                        put("run_id", baseRunId)
+                        put("analysis_id", baseAnalysisId)
+                    }
+                setBaseline(server.origin, baseRunId, baseAnalysisId)
+
+                val (res2, _) =
+                    runMcpCli(
+                        server.origin,
+                        listOf(
+                            rpcReq(1, "initialize", buildJsonObject { put("protocolVersion", "2024-11-05") }),
+                            rpcNotif("notifications/initialized"),
+                            rpcReq(
+                                10,
+                                "tools/call",
+                                callArgs(
+                                    "analyze",
+                                    buildJsonObject {
+                                        put("input_path", curJtl.toString())
+                                        put("policy", regressionPolicy)
+                                        put("stages", stagesOtherDuration)
+                                        put("baseline", baselineRef)
+                                    },
+                                ),
+                            ),
+                            rpcReq(
+                                11,
+                                "tools/call",
+                                callArgs(
+                                    "analyze",
+                                    buildJsonObject {
+                                        put("input_path", regressedJtl.toString())
+                                        put("policy", regressionPolicy)
+                                        put("stages", stagesBase)
+                                        put("baseline", baselineRef)
+                                    },
+                                ),
+                            ),
+                        ),
+                    )
+                val noisyAnalyze = res2.byId(10).toolPayload()
+                assertEquals(JsonPrimitive("PASS"), noisyAnalyze["policy_verdict"])
+                val regAnalyze = res2.byId(11).toolPayload()
+                assertEquals(JsonPrimitive("FAIL"), regAnalyze["policy_verdict"])
+
+                val curRunId = noisyAnalyze.getValue("run_id").jsonPrimitive.content
+                val curAnalysisId = noisyAnalyze.getValue("analysis_id").jsonPrimitive.content
+                val (res3, _) =
+                    runMcpCli(
+                        server.origin,
+                        listOf(
+                            rpcReq(1, "initialize", buildJsonObject { put("protocolVersion", "2024-11-05") }),
+                            rpcNotif("notifications/initialized"),
+                            rpcReq(
+                                12,
+                                "tools/call",
+                                callArgs(
+                                    "compare",
+                                    buildJsonObject {
+                                        put("run_id", curRunId)
+                                        put("analysis_id", curAnalysisId)
+                                        put("baseline_window", "steady")
+                                        put("current_window", "steady")
+                                        put("series", "default")
+                                    },
+                                ),
+                            ),
+                        ),
+                    )
+                assertFalse(res3.byId(12).toolIsError()) { res3.byId(12).toolPayload().toString() }
+                val cmp = res3.byId(12).toolPayload()
+                val winMetrics =
+                    cmp
+                        .getValue("window_comparison")
+                        .jsonObject
+                        .getValue("metrics")
+                        .jsonArray
+                val p50Row =
+                    winMetrics
+                        .first {
+                            it.jsonObject
+                                .getValue("metric")
+                                .jsonPrimitive.content == "response_time_p50_ms"
+                        }.jsonObject
+                assertEquals(JsonPrimitive("NO_MATERIAL_CHANGE"), p50Row["status"])
+                assertEquals(JsonPrimitive("WITHIN_NOISE"), p50Row["reason"])
+            } finally {
+                server.close()
+                jobs.close()
+            }
+        }
+    }
+
     private fun runMcpCli(
         origin: String,
         requests: List<String>,

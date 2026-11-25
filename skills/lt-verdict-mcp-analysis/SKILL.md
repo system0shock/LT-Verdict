@@ -24,13 +24,13 @@ ltv mcp --data-dir <path> [--connections <profiles.json>]
 2. **Draft and validate `policy.v1`:**
    Construct an inline `policy` JSON object from explicit SLA targets or baseline expectations, then call `validate_policy`. Fix any returned JSON-pointer errors before running analysis.
 3. **Run deterministic analysis:**
-   Call `analyze` with `input_path` (regular non-symlink JTL or `simulation.log` path), the validated `policy`, optional `stages` / `resource_snapshot` / `source_request`, and optional release provenance (`jenkins_build`, `commit`).
+   Call `analyze` with `input_path` (regular non-symlink JTL or `simulation.log` path), the validated `policy`, optional `stages` / `resource_snapshot` / `source_request`, optional `baseline` (`{"run_id": "...", "analysis_id": "..."}` when `policy.defaults.baseline_regression` is `"fail"`), and optional release provenance (`jenkins_build`, `commit`).
 4. **Inspect synthesized incidents:**
    Call `list_incidents` with `run_id` and `analysis_id`. Handle absent `incidents` (legacy runs) or `NOT_EVALUATED` (`INVALID` runs) explicitly. Each returned incident includes `evidence_refs` JSON pointers (`analysis-result.json#/findings/...` and `analysis-result.json#/evidence/...`) for grounding.
 5. **Drill into transactions, resources, and baseline comparison:**
    - Call `list_transactions` (paginated, optional `window_id` and `query` filter) to inspect `metric_summary` rows and their `evidence_ref` pointers.
    - Call `get_resource_series` (`mode: "catalog"` first, then `mode: "values"` with up to 8 `series_ids` and `limit <= 500`) to inspect correlated system/generator telemetry without blowing up context.
-   - Call `compare` if a baseline is selected to inspect cross-run regressions.
+   - Call `compare` if a baseline is selected to inspect cross-run regressions (`NO_MATERIAL_CHANGE` with `reason: "WITHIN_NOISE"` means the delta is within the 1-second within-window block noise bound rather than a material regression; staged comparisons tolerate up to 5% steady-window RPS difference when stage `(id, role)` structure matches).
    - Call `get_result` (`include_evidence: false` by default, or paginated `include_evidence: true`) when full findings or coverage reasons are needed.
 6. **Formulate hypotheses and save self-reported advice:**
    Distinguish deterministic facts (`policy_verdict`, `run_validity`, `findings`) from advisory hypotheses. Persist conclusions via `save_advice` with `runner_id`, `model_id`, and an `ai-advice-output.v1` `output` object whose `hypotheses[].evidence_refs` cite only exact JSON pointers returned by `list_incidents`, `list_transactions`, or `get_result`.

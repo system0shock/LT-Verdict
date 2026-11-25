@@ -18,6 +18,7 @@ import io.ltverdict.sources.SourceAcquisition
 import io.ltverdict.sources.WindowedSourceRequest
 import io.ltverdict.sources.comparePostgresPhases
 import io.ltverdict.sources.readPostgresAnalysisInput
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -34,6 +35,14 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.time.Instant
 
+internal data class BaselineAnalysisInput(
+    val runId: String,
+    val analysisId: String,
+    val result: JsonObject,
+    val identity: JsonObject,
+    val loadSeries: RunLoadSeries? = null,
+)
+
 internal data class AnalysisRequest(
     val input: AcceptedInput,
     val policy: PolicyValidation.Valid?,
@@ -49,6 +58,7 @@ internal data class AnalysisRequest(
     val stages: LoadStagesValidation.Valid? = null,
     val jenkinsBuild: String? = null,
     val commit: String? = null,
+    val baseline: BaselineAnalysisInput? = null,
 )
 
 internal data class AnalysisOutcome(
@@ -152,6 +162,17 @@ internal class AnalysisService(
                 )
             }
         val postgresHash = postgres?.let(::postgresInputSha256)
+        val baselineRegressionMode =
+            request.policy
+                ?.policy
+                ?.defaults
+                ?.baselineRegression
+        val baselineAnalysisId =
+            if (baselineRegressionMode == BaselineRegressionMode.FAIL && request.baseline != null) {
+                request.baseline.analysisId
+            } else {
+                null
+            }
         val identity =
             analysisIdentity(
                 request.input,
@@ -167,6 +188,7 @@ internal class AnalysisService(
                 request.stages,
                 jenkinsBuild,
                 commit,
+                baselineAnalysisId,
             )
         val analysisId = sha256Hex(identity)
         store.readAnalysis(request.input.runId, analysisId)?.let { stored ->
@@ -585,7 +607,7 @@ internal class AnalysisService(
                 )
         }
         postgresContext?.let { evaluation = evaluation.copy(evidence = evaluation.evidence + it) }
-        val capacity =
+        var capacity =
             request.capacity?.let {
                 evaluateCapacity(
                     it.plan,
@@ -603,6 +625,72 @@ internal class AnalysisService(
                     coverageReasons = (evaluation.coverageReasons + it.coverageReasons).distinct(),
                     evidence = evaluation.evidence + it.evidence,
                 )
+        }
+        if (first.validity == RunValidity.VALID &&
+            baselineRegressionMode == BaselineRegressionMode.FAIL
+        ) {
+            val baselineInput = request.baseline
+            if (baselineInput == null) {
+                evaluation =
+                    evaluation.copy(
+                        verdict = PolicyVerdict.NO_VERDICT,
+                        coverageReasons = (evaluation.coverageReasons + "BASELINE_REQUIRED").distinct(),
+                    )
+                capacity = capacity?.copy(policyVerdict = PolicyVerdict.NO_VERDICT)
+            } else {
+                val preliminaryBytes = analysisResult(request.input.runId, first.validity, evaluation, mode, capacity)
+                val preliminaryResult = Json.parseToJsonElement(preliminaryBytes.decodeToString()).jsonObject
+                val currentIdentityJson = Json.parseToJsonElement(identity.decodeToString()).jsonObject
+                val currentSeries = RunLoadSeries(runStart, metrics.oneSecondBuckets, runEnd)
+                when (
+                    val regression =
+                        evaluateBaselineRegression(
+                            baselineInput.result,
+                            baselineInput.identity,
+                            preliminaryResult,
+                            currentIdentityJson,
+                            ComparisonSeriesContext(baselineInput.loadSeries, currentSeries),
+                        )
+                ) {
+                    BaselineRegressionOutcome.Pass -> Unit
+                    is BaselineRegressionOutcome.NotEvaluated -> {
+                        evaluation =
+                            evaluation.copy(
+                                verdict = PolicyVerdict.NO_VERDICT,
+                                coverageReasons = (evaluation.coverageReasons + "BASELINE_REGRESSION_NOT_EVALUATED").distinct(),
+                            )
+                        capacity = capacity?.copy(policyVerdict = PolicyVerdict.NO_VERDICT)
+                    }
+                    is BaselineRegressionOutcome.Regressed -> {
+                        val regressionFindings =
+                            regression.failures.map { failure ->
+                                val key = "baseline-regression-failure\u0000${failure.windowId ?: "overall"}\u0000${failure.metric}"
+                                buildJsonObject {
+                                    put("id", "baseline-regression-failure-${sha256Hex(key.encodeToByteArray()).take(16)}")
+                                    put("type", "baseline_regression_failure")
+                                    failure.windowId?.let { put("window_id", it) }
+                                    put("metric", failure.metric)
+                                    put("baseline_analysis_id", baselineInput.analysisId)
+                                    put("baseline", failure.baseline)
+                                    put("current", failure.current)
+                                    put("delta", failure.delta)
+                                    failure.deltaPercent?.let { put("delta_percent", it) }
+                                }
+                            }
+                        val nextVerdict =
+                            if (evaluation.verdict == PolicyVerdict.NO_VERDICT) PolicyVerdict.NO_VERDICT else PolicyVerdict.FAIL
+                        evaluation =
+                            evaluation.copy(
+                                verdict = nextVerdict,
+                                findings = evaluation.findings + regressionFindings,
+                            )
+                        capacity =
+                            capacity?.let {
+                                if (it.policyVerdict == PolicyVerdict.NO_VERDICT) it else it.copy(policyVerdict = PolicyVerdict.FAIL)
+                            }
+                    }
+                }
+            }
         }
         val result = analysisResult(request.input.runId, first.validity, evaluation, mode, capacity)
         val resourceBytes = request.resources?.rawBytes()

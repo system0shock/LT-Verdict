@@ -22,7 +22,7 @@ export interface RuleLine {
 }
 
 export interface FailedLine extends RuleLine {
-  source: 'business' | 'resource'
+  source: 'business' | 'resource' | 'baseline'
 }
 
 export interface CauseGroup {
@@ -77,6 +77,7 @@ export const MAX_LINES = 3
 export const MAX_SUBJECTS = 5
 
 export const METRIC_LABELS: Record<string, string> = {
+  response_time_p50_ms: 'p50 отклика',
   response_time_p95_ms: 'p95 отклика',
   response_time_p99_ms: 'p99 отклика',
   error_rate_ratio: 'доля ошибок',
@@ -344,15 +345,46 @@ export function diagnosticFailedLinesOf(result: AnalysisResult): Array<RuleLine 
     .map((check) => ({ ...resourceLine(check, violationsOf(violations, check)), source: 'resource' as const }))
 }
 
+interface BaselineRegressionFinding {
+  id?: string
+  type: 'baseline_regression_failure'
+  window_id?: string
+  metric: string
+  baseline?: string
+  current?: string
+  delta?: string
+  delta_percent?: string
+}
+
+function isBaselineRegressionFailure(finding: Record<string, unknown>): finding is Record<string, unknown> & BaselineRegressionFinding {
+  return finding.type === 'baseline_regression_failure' && typeof finding.metric === 'string'
+}
+
+function baselineRegressionLine(finding: Record<string, unknown> & BaselineRegressionFinding, index: number): FailedLine {
+  const windowId = typeof finding.window_id === 'string' ? finding.window_id : null
+  const windowText = windowId ? ` · окно ${windowId}` : ''
+  const base = typeof finding.baseline === 'string' ? finding.baseline : '—'
+  const cur = typeof finding.current === 'string' ? finding.current : '—'
+  const pct = typeof finding.delta_percent === 'string' ? ` (${finding.delta_percent} %)` : ''
+  return {
+    key: typeof finding.id === 'string' ? finding.id : `baseline-regression-${index}`,
+    title: `Регрессия относительно baseline · ${metricLabel(finding.metric, windowId)}${windowText}`,
+    detail: `${base} → ${cur}${pct}`,
+    source: 'baseline',
+  }
+}
+
 export function failedLinesOf(result: AnalysisResult): FailedLine[] {
   const { business, resource } = checksOf(result)
   const metrics = new Map(result.evidence.filter((item): item is MetricSummaryEvidence => item.type === 'metric_summary').map((item) => [item.id, item]))
   const violations = result.findings.filter(isViolation)
+  const regressions = result.findings.filter(isBaselineRegressionFailure)
   return [
     ...business.filter((check) => check.status === 'FAIL').map((check) => ({ ...businessLine(check, metrics), source: 'business' as const })),
     ...resource
       .filter((check) => check.status === 'FAIL' || (check.status === 'NO_VERDICT' && violationsOf(violations, check).length > 0))
       .map((check) => ({ ...resourceLine(check, violationsOf(violations, check)), source: 'resource' as const })),
+    ...regressions.map((finding, index) => baselineRegressionLine(finding, index)),
   ]
 }
 
@@ -397,12 +429,15 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
   const capacity = result.analysis_mode === 'capacity_step' ? result.capacity_summary : undefined
   const { business, resource } = checksOf(result)
   const metrics = new Map(result.evidence.filter((item): item is MetricSummaryEvidence => item.type === 'metric_summary').map((item) => [item.id, item]))
-  const failedLines = failedLinesOf(result).map(({ key, title, detail }) => ({ key, title, detail }))
+  const rawFailedLines = failedLinesOf(result)
+  const failedLines = rawFailedLines.map(({ key, title, detail }) => ({ key, title, detail }))
   const passedLines = [
     ...business.filter((check) => check.status === 'PASS').map((check) => businessLine(check, metrics)),
     ...resource.filter((check) => check.status === 'PASS').map((check) => resourceLine(check, [])),
   ]
   const total = business.length + resource.length
+  const ruleFailed = rawFailedLines.filter((line) => line.source !== 'baseline').length
+  const regressionFailed = rawFailedLines.length - ruleFailed
   const failed = failedLines.length
   const unresolved = business.filter((check) => check.status === 'NO_VERDICT').length + resource.filter((check) => check.status === 'NO_VERDICT').length
   // With a decided PASS/FAIL, an unresolved rule is a warned skip (missing_transaction=warn): it is not an evaluated check.
@@ -447,9 +482,19 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
     lead = `Граница ёмкости: ${bound}. Подробности по ступеням — в таблице на вкладке «Таблицы».`
     chip = 'оценка ёмкости'
   } else if (verdict === 'FAIL') {
-    headline = `Прогон не проходит — нарушено проверок: ${failed} из ${evaluated}${skipped}`
-    lead = 'Измеренные значения вышли за пороги правил. Первые нарушения показаны ниже, остальные — в таблицах правил.'
-    chip = `нарушено ${failed} из ${evaluated}`
+    if (ruleFailed === 0 && regressionFailed > 0) {
+      headline = 'Прогон не проходит — обнаружена регрессия относительно baseline'
+      lead = 'Пороги правил не нарушены, но обнаружена регрессия относительно baseline. Подробности показаны ниже.'
+      chip = `регрессия baseline (${regressionFailed})`
+    } else if (regressionFailed > 0) {
+      headline = `Прогон не проходит — нарушено проверок: ${ruleFailed} из ${evaluated}${skipped}; регрессий относительно baseline: ${regressionFailed}`
+      lead = 'Измеренные значения вышли за пороги правил и ухудшились относительно baseline. Первые нарушения показаны ниже.'
+      chip = `нарушено ${ruleFailed} из ${evaluated} · регрессия (${regressionFailed})`
+    } else {
+      headline = `Прогон не проходит — нарушено проверок: ${ruleFailed} из ${evaluated}${skipped}`
+      lead = 'Измеренные значения вышли за пороги правил. Первые нарушения показаны ниже, остальные — в таблицах правил.'
+      chip = `нарушено ${ruleFailed} из ${evaluated}`
+    }
     if (small > 0) {
       lead += SAMPLE_TEXT.lead(small)
       chip += SAMPLE_TEXT.chipSuffix

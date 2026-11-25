@@ -1,6 +1,8 @@
 package io.ltverdict.cli
 
 import io.ltverdict.core.STAGE_PROPOSAL_METHOD
+import io.ltverdict.core.StageLikeComparison
+import io.ltverdict.core.StageLikeStatus
 import io.ltverdict.core.StageProposal
 import io.ltverdict.core.StageProposalStatus
 import io.ltverdict.core.StageStretchFact
@@ -8,6 +10,7 @@ import io.ltverdict.core.SteadySteps
 import io.ltverdict.core.StretchLoad
 import io.ltverdict.core.StretchVerdict
 import io.ltverdict.core.decimal
+import io.ltverdict.core.matchLoadStages
 import io.ltverdict.core.proposalBytes
 import io.ltverdict.core.proposeLoadStages
 import io.ltverdict.ingest.detectSource
@@ -31,6 +34,7 @@ internal fun stagesCommand(
     val input = path(args[1])
     var out: Path? = null
     var steadySteps: SteadySteps? = null
+    var likePath: Path? = null
     var index = 2
     while (index < args.size) {
         if (index + 1 >= args.size) usage()
@@ -39,6 +43,7 @@ internal fun stagesCommand(
             "--out" -> if (out == null) out = path(value) else usage()
             "--steady-steps" ->
                 if (steadySteps == null) steadySteps = SteadySteps.entries.firstOrNull { it.wireName == value } ?: usage() else usage()
+            "--like" -> if (likePath == null) likePath = path(value) else usage()
             else -> usage()
         }
         index += 2
@@ -46,6 +51,7 @@ internal fun stagesCommand(
     val target = out
     if (target != null && Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw CliFailure(EXIT_INVALID_INPUT, "STAGES_OUT_EXISTS")
     requireRegularFile(input, EXIT_INVALID_INPUT, "INVALID_INPUT")
+    val like = likePath?.let(::readStages)
     val proposal =
         try {
             proposeLoadStages(detectSource(input), input, steadySteps ?: SteadySteps.TOP)
@@ -54,13 +60,24 @@ internal fun stagesCommand(
         } catch (_: IOException) {
             throw CliFailure(EXIT_INVALID_INPUT, "INPUT_READ_FAILED")
         }
-    // "\n" on every OS: the same input gives the same bytes of the explanation.
-    stderr.write(stageProposalLines(proposal).joinToString("") { "$it\n" }.toByteArray(StandardCharsets.UTF_8))
-    stderr.flush()
     if (proposal.status == StageProposalStatus.NOT_DETECTED) {
+        // "\n" on every OS: the same input gives the same bytes of the explanation.
+        stderr.write(stageProposalLines(proposal).joinToString("") { "$it\n" }.toByteArray(StandardCharsets.UTF_8))
+        stderr.flush()
         return if (proposal.reason == "INPUT_INVALID" || proposal.reason == "INPUT_CHANGED") EXIT_INVALID_INPUT else EXIT_NO_VERDICT
     }
-    val bytes = proposal.proposalBytes()
+    val bytes =
+        if (like == null) {
+            stderr.write(stageProposalLines(proposal).joinToString("") { "$it\n" }.toByteArray(StandardCharsets.UTF_8))
+            stderr.flush()
+            proposal.proposalBytes()
+        } else {
+            val comparison = matchLoadStages(proposal, like.stages)
+            stderr.write(stageLikeLines(comparison).joinToString("") { "$it\n" }.toByteArray(StandardCharsets.UTF_8))
+            stderr.flush()
+            if (comparison.status != StageLikeStatus.MATCHED) return EXIT_NO_VERDICT
+            like.canonicalBytes()
+        }
     if (target == null) {
         stdout.write(bytes)
         stdout.flush()
@@ -80,6 +97,47 @@ internal fun stageProposalLines(proposal: StageProposal): List<String> =
         val head = "stage_proposal status=${proposal.status} method=$STAGE_PROPOSAL_METHOD steady_steps=${proposal.steadySteps.wireName}"
         val detected = proposal.status == StageProposalStatus.DETECTED
         add(if (detected) "$head confidence=${proposal.confidence} calibrated=false" else "$head reason=${proposal.reason}")
+        addAll(stageProposalBodyLines(proposal))
+        proposal.detail?.let { add("detail $it") }
+        if (detected) add("next: review the stages, then run ltv analyze <input> --stages <file>")
+    }
+
+internal fun stageLikeLines(comparison: StageLikeComparison): List<String> =
+    buildList {
+        val proposal = comparison.proposal
+        val head =
+            "stage_proposal status=${if (comparison.status == StageLikeStatus.MATCHED) "MATCHED" else "NOT_MATCHED"} " +
+                "method=$STAGE_PROPOSAL_METHOD steady_steps=${proposal.steadySteps.wireName}"
+        add(
+            if (comparison.status == StageLikeStatus.MATCHED) {
+                "$head confidence=${proposal.confidence} calibrated=false"
+            } else {
+                "$head reason=${comparison.status.name}"
+            },
+        )
+        addAll(stageProposalBodyLines(proposal))
+        comparison.matches.forEach { fact ->
+            val overlap =
+                fact.overlapKind
+                    ?.let {
+                        " overlap_kind=${it.name} overlap_from_ms=${fact.overlapFromOffsetMillis} " +
+                            "overlap_to_ms=${fact.overlapToOffsetMillis}"
+                    }.orEmpty()
+            val outside = if (fact.outsideRun) " outside_run=true" else ""
+            add(
+                "like stage_id=${fact.declaredStageId} proposal_id=${fact.proposalStageId} " +
+                    "declared_from_ms=${fact.declaredFromOffsetMillis} declared_to_ms=${fact.declaredToOffsetMillis} " +
+                    "proposal_from_ms=${fact.proposalFromOffsetMillis} proposal_to_ms=${fact.proposalToOffsetMillis} " +
+                    "from_diff_ms=${fact.fromDiffMillis} to_diff_ms=${fact.toDiffMillis} " +
+                    "tolerance_ms=${comparison.toleranceMillis}$overlap$outside",
+            )
+        }
+        comparison.detail?.let { add("detail $it") }
+        if (comparison.status == StageLikeStatus.MATCHED) add("next: run ltv analyze <input> --stages <file>")
+    }
+
+private fun stageProposalBodyLines(proposal: StageProposal): List<String> =
+    buildList {
         if (proposal.runStartEpochMillis != null && proposal.runEndEpochMillis != null) {
             val cells =
                 proposal.cellMillis?.let { " cell_ms=$it cells=${proposal.cells} noise_rps=${decimal(proposal.noiseRps ?: 0.0)}" }.orEmpty()
@@ -120,8 +178,6 @@ internal fun stageProposalLines(proposal: StageProposal): List<String> =
                     it.stretch?.let(::stretchSuffix).orEmpty(),
             )
         }
-        proposal.detail?.let { add("detail $it") }
-        if (detected) add("next: review the stages, then run ltv analyze <input> --stages <file>")
     }
 
 private fun Double?.orDash() = this?.let(::decimal) ?: "-"

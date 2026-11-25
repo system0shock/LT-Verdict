@@ -5,6 +5,12 @@ import io.ltverdict.ingest.RunValidity
 import io.ltverdict.ingest.SampleKind
 import io.ltverdict.ingest.SourceType
 import io.ltverdict.ingest.parseInput
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.nio.file.Files
@@ -215,6 +221,237 @@ internal data class StageProposal(
 internal fun StageProposal.proposalBytes(): ByteArray {
     check(status == StageProposalStatus.DETECTED) { "NO_PROPOSAL" }
     return canonicalJson(stagesJson(stages))
+}
+
+internal fun stageProposalJson(proposal: StageProposal): JsonObject =
+    buildJsonObject {
+        put("status", proposal.status.name)
+        put("reason", proposal.reason?.let(::JsonPrimitive) ?: JsonNull)
+        put("detail", proposal.detail?.let(::JsonPrimitive) ?: JsonNull)
+        put("method", STAGE_PROPOSAL_METHOD)
+        put("steady_steps", proposal.steadySteps.wireName)
+        put("confidence", proposal.confidence?.name?.let(::JsonPrimitive) ?: JsonNull)
+        put("calibrated", false)
+        put("run_start_epoch_ms", proposal.runStartEpochMillis?.let(::JsonPrimitive) ?: JsonNull)
+        put("run_end_epoch_ms", proposal.runEndEpochMillis?.let(::JsonPrimitive) ?: JsonNull)
+        put("cell_ms", proposal.cellMillis?.let(::JsonPrimitive) ?: JsonNull)
+        put("cells", proposal.cells?.let(::JsonPrimitive) ?: JsonNull)
+        put("noise_rps", proposal.noiseRps?.let(::decimalNumber) ?: JsonNull)
+        put(
+            "segments",
+            buildJsonArray {
+                proposal.segments.forEach { segment ->
+                    add(
+                        buildJsonObject {
+                            put("from_offset_ms", segment.fromOffsetMillis)
+                            put("to_offset_ms", segment.toOffsetMillis)
+                            put("kind", segment.kind.name)
+                            put("level_rps", decimalNumber(segment.levelRps))
+                            put("drift", decimalNumber(segment.driftRatio))
+                            put("residual_cv", decimalNumber(segment.residualCv))
+                        },
+                    )
+                }
+            },
+        )
+        put(
+            "boundaries",
+            buildJsonArray {
+                proposal.boundaries.forEach { boundary ->
+                    add(
+                        buildJsonObject {
+                            put("stage_id", boundary.stageId)
+                            put("basis", boundary.basis)
+                            put("level_rps", boundary.levelRps?.let(::decimalNumber) ?: JsonNull)
+                            put("from_contrast_sigma", boundary.fromContrastSigma?.let(::decimalNumber) ?: JsonNull)
+                            put("to_contrast_sigma", boundary.toContrastSigma?.let(::decimalNumber) ?: JsonNull)
+                            put("trimmed_cells", boundary.trimmedCells)
+                        },
+                    )
+                }
+            },
+        )
+        put(
+            "stretches",
+            buildJsonArray {
+                proposal.stretches.forEach { add(stretchJson(it)) }
+            },
+        )
+        put(
+            "warnings",
+            buildJsonArray {
+                proposal.warnings.forEach { warning ->
+                    add(
+                        buildJsonObject {
+                            put("code", warning.code)
+                            put("stage_id", warning.stageId?.let(::JsonPrimitive) ?: JsonNull)
+                            put("at_offset_ms", warning.atOffsetMillis)
+                            put("from_rps", warning.fromRps?.let(::decimalNumber) ?: JsonNull)
+                            put("to_rps", warning.toRps?.let(::decimalNumber) ?: JsonNull)
+                            put("duration_ms", warning.durationMillis?.let(::JsonPrimitive) ?: JsonNull)
+                            put("stretch", warning.stretch?.let(::stretchJson) ?: JsonNull)
+                        },
+                    )
+                }
+            },
+        )
+        put("proposal", if (proposal.status == StageProposalStatus.DETECTED) stagesJson(proposal.stages) else JsonNull)
+    }
+
+private fun stretchJson(stretch: StageStretchFact): JsonObject =
+    buildJsonObject {
+        put("kind", stretch.kind)
+        put("from_offset_ms", stretch.fromOffsetMillis)
+        put("to_offset_ms", stretch.toOffsetMillis)
+        put("reference_id", stretch.referenceId)
+        put("samples", stretch.load.samples)
+        put("failures", stretch.load.failures)
+        put("error_ratio", decimalNumber(stretch.load.errorRatio))
+        put("mean_ms", decimalNumber(stretch.load.meanMillis))
+        put("reference_samples", stretch.reference.samples)
+        put("reference_failures", stretch.reference.failures)
+        put("reference_error_ratio", decimalNumber(stretch.reference.errorRatio))
+        put("reference_mean_ms", decimalNumber(stretch.reference.meanMillis))
+        put("verdict", stretch.verdict.name)
+    }
+
+private fun decimalNumber(value: Double): JsonPrimitive = JsonPrimitive(BigDecimal(value).setScale(3, RoundingMode.HALF_EVEN))
+
+internal enum class StageLikeStatus {
+    MATCHED,
+    LIKE_SHAPE_DIFFERS,
+    LIKE_BOUNDARY_SHIFTED,
+}
+
+internal data class StageLikeMatchFact(
+    val declaredStageId: String,
+    val proposalStageId: String,
+    val declaredFromOffsetMillis: Long,
+    val declaredToOffsetMillis: Long,
+    val proposalFromOffsetMillis: Long,
+    val proposalToOffsetMillis: Long,
+    val fromDiffMillis: Long,
+    val toDiffMillis: Long,
+    val overlapKind: StageSegmentKind? = null,
+    val overlapFromOffsetMillis: Long? = null,
+    val overlapToOffsetMillis: Long? = null,
+    val outsideRun: Boolean = false,
+)
+
+internal data class StageLikeComparison(
+    val status: StageLikeStatus,
+    val proposal: StageProposal,
+    val toleranceMillis: Long?,
+    val detail: String?,
+    val matches: List<StageLikeMatchFact>,
+)
+
+/**
+ * ADR 0036, D13 (`--like`): checks whether a previously accepted [declared] declaration matches [proposal] in step
+ * count, role sequence, and steady-stage boundary tolerance (`max(W, EDGE_TRIM_MAX_CELLS * W)`) without spilling
+ * into `RISING` or `IDLE` segments outside the matched proposal steady stage.
+ */
+internal fun matchLoadStages(
+    proposal: StageProposal,
+    declared: List<StageV1>,
+): StageLikeComparison {
+    check(proposal.status == StageProposalStatus.DETECTED) { "NO_PROPOSAL" }
+    val proposalSteps =
+        proposal.stages
+            .zip(proposal.boundaries)
+            .filter { (_, fact) -> fact.basis !in FRAMING_STAGE_BASES }
+            .map { (stage, _) -> stage }
+    val declaredSteps =
+        declared.filter {
+            it.role == StageRole.STEADY || STEP_STAGE_ID.matches(it.id) || GAP_STAGE_ID.matches(it.id)
+        }
+    if (declaredSteps.size != proposalSteps.size || declaredSteps.map { it.role } != proposalSteps.map { it.role }) {
+        val pSteady = proposalSteps.count { it.role == StageRole.STEADY }
+        val dSteady = declaredSteps.count { it.role == StageRole.STEADY }
+        val roles =
+            if (declaredSteps.size == proposalSteps.size) {
+                " declared_roles=${declaredSteps.joinToString(",") { it.role.wireName }} " +
+                    "proposal_roles=${proposalSteps.joinToString(",") { it.role.wireName }}"
+            } else {
+                ""
+            }
+        return StageLikeComparison(
+            StageLikeStatus.LIKE_SHAPE_DIFFERS,
+            proposal,
+            null,
+            "declared_steps=${declaredSteps.size} proposal_steps=${proposalSteps.size} " +
+                "declared_steady=$dSteady proposal_steady=$pSteady$roles",
+            emptyList(),
+        )
+    }
+    val cellMillis = checkNotNull(proposal.cellMillis)
+    val toleranceMillis = maxOf(cellMillis, EDGE_TRIM_MAX_CELLS * cellMillis)
+    val runMillis = checkNotNull(proposal.runEndEpochMillis) - checkNotNull(proposal.runStartEpochMillis)
+    val matches = ArrayList<StageLikeMatchFact>()
+    for ((dStage, pStage) in declaredSteps.zip(proposalSteps)) {
+        if (pStage.role != StageRole.STEADY) continue
+        val fromDiff = dStage.fromOffsetMillis - pStage.fromOffsetMillis
+        val toDiff = dStage.toOffsetMillis - pStage.toOffsetMillis
+        val outsideRun = dStage.fromOffsetMillis >= runMillis
+        var overlapKind: StageSegmentKind? = null
+        var overlapFrom: Long? = null
+        var overlapTo: Long? = null
+        val extensions =
+            listOf(
+                dStage.fromOffsetMillis to minOf(dStage.toOffsetMillis, pStage.fromOffsetMillis),
+                maxOf(dStage.fromOffsetMillis, pStage.toOffsetMillis) to dStage.toOffsetMillis,
+            ).filter { (extFrom, extTo) -> extFrom < extTo }
+        for (segment in proposal.segments) {
+            if (segment.kind != StageSegmentKind.RISING && segment.kind != StageSegmentKind.IDLE) continue
+            for ((extFrom, extTo) in extensions) {
+                val oFrom = maxOf(extFrom, segment.fromOffsetMillis)
+                val oTo = minOf(extTo, segment.toOffsetMillis)
+                if (oFrom < oTo) {
+                    overlapKind = segment.kind
+                    overlapFrom = oFrom
+                    overlapTo = oTo
+                    break
+                }
+            }
+            if (overlapKind != null) break
+        }
+        matches +=
+            StageLikeMatchFact(
+                dStage.id,
+                pStage.id,
+                dStage.fromOffsetMillis,
+                dStage.toOffsetMillis,
+                pStage.fromOffsetMillis,
+                pStage.toOffsetMillis,
+                fromDiff,
+                toDiff,
+                overlapKind,
+                overlapFrom,
+                overlapTo,
+                outsideRun,
+            )
+    }
+    val firstBad =
+        matches.firstOrNull { fact ->
+            fact.outsideRun ||
+                Math.abs(fact.fromDiffMillis) > toleranceMillis ||
+                Math.abs(fact.toDiffMillis) > toleranceMillis ||
+                fact.overlapKind != null
+        }
+    if (firstBad == null) {
+        return StageLikeComparison(StageLikeStatus.MATCHED, proposal, toleranceMillis, null, matches)
+    }
+    val maxShiftMillis = matches.maxOf { maxOf(Math.abs(it.fromDiffMillis), Math.abs(it.toDiffMillis)) }
+    val reasonPart =
+        when {
+            firstBad.outsideRun -> "outside_run=true"
+            firstBad.overlapKind != null ->
+                "overlap_kind=${firstBad.overlapKind.name} overlap_from_ms=${firstBad.overlapFromOffsetMillis} " +
+                    "overlap_to_ms=${firstBad.overlapToOffsetMillis}"
+            else -> "from_diff_ms=${firstBad.fromDiffMillis} to_diff_ms=${firstBad.toDiffMillis}"
+        }
+    val detail = "stage_id=${firstBad.declaredStageId} max_shift_ms=$maxShiftMillis tolerance_ms=$toleranceMillis $reasonPart"
+    return StageLikeComparison(StageLikeStatus.LIKE_BOUNDARY_SHIFTED, proposal, toleranceMillis, detail, matches)
 }
 
 internal fun proposeLoadStages(
@@ -903,3 +1140,7 @@ private const val DEGRADED_ERROR_NOISE_SIGMAS = 4.0
 private const val DEGRADED_LATENCY_FACTOR = 1.5
 private const val DEGRADED_LATENCY_MIN_INCREASE_MILLIS = 50.0
 private const val STOP_IN_FLIGHT_FACTOR = 2.0
+
+private val FRAMING_STAGE_BASES = setOf("LEAD_IN_IDLE", "BEFORE_FIRST_STEADY", "AFTER_LAST_STEADY")
+private val STEP_STAGE_ID = Regex("^step-\\d+$")
+private val GAP_STAGE_ID = Regex("^gap-\\d+$")

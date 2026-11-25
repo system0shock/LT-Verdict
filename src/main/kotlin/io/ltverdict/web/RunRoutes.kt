@@ -10,6 +10,9 @@ import io.ktor.server.request.contentType
 import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import io.ltverdict.core.proposeLoadStages
+import io.ltverdict.core.stageProposalJson
 import io.ltverdict.integrations.report.readRunTimeline
 import io.ltverdict.integrations.report.renderConfluenceReport
 import io.ltverdict.integrations.report.renderSavedLoadChart
@@ -17,6 +20,8 @@ import io.ltverdict.report.readErrorGroupsFile
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -35,8 +40,12 @@ import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Base64
+import java.util.concurrent.Semaphore
 
-internal fun Route.runRoutes(context: LocalApiContext) {
+internal fun Route.runRoutes(
+    context: LocalApiContext,
+    stageProposalPermit: Semaphore = Semaphore(1),
+) {
     get("/api/runs") {
         call.requireOnlyQueries("after", "limit")
         val after = call.singleQuery("after")
@@ -180,6 +189,29 @@ internal fun Route.runRoutes(context: LocalApiContext) {
                 put("next_from_ms", page.nextFromMillis?.let(::JsonPrimitive) ?: JsonNull)
             },
         )
+    }
+
+    post("/api/runs/{runId}/stage-proposal") {
+        call.requireOnlyQueries()
+        val input =
+            try {
+                withContext(Dispatchers.IO) { context.store.requireInput(call.parameters["runId"].orEmpty()) }
+            } catch (_: NoSuchElementException) {
+                notFound("Run was not found")
+            } catch (_: IllegalArgumentException) {
+                notFound("Run was not found")
+            }
+        if (!stageProposalPermit.tryAcquire()) conflict("BUSY", "Stage proposal is already running")
+        val proposal =
+            try {
+                withContext(Dispatchers.IO) {
+                    val jobContext = currentCoroutineContext()
+                    proposeLoadStages(input.sourceType, input.path, checkCancelled = { jobContext.ensureActive() })
+                }
+            } finally {
+                stageProposalPermit.release()
+            }
+        call.respondJson(stageProposalJson(proposal))
     }
 }
 

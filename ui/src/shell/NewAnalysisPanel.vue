@@ -8,6 +8,7 @@ import type {
   SourceProbeResponse,
   SourceProfile,
   SourceStepMode,
+  StageProposalResponse,
 } from '../types'
 import ModelChoice from './ModelChoice.vue'
 import { SETUP_LABELS } from './labels'
@@ -53,6 +54,11 @@ const props = defineProps<{
   aiRequested: boolean
   aiConfig?: AdvisoryAiConfig | null
   aiModel?: string
+  stagesJson?: string
+  stageProposal?: StageProposalResponse | null
+  stageProposalError?: string
+  stagesErrors?: PolicyError[]
+  proposingStages?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -82,6 +88,8 @@ const emit = defineEmits<{
   'open-rules': []
   'ai-requested': [value: boolean]
   'ai-model': [id: string]
+  'stages-json': [value: string]
+  'propose-stages': []
   analyze: []
   'analyze-pair': [slots: string[][]]
 }>()
@@ -152,6 +160,7 @@ const readiness = computed(() => buildReadiness({
   sourceRequestError: props.sourceRequestError,
   contextCount: props.sourceContextFiles.length,
   postgres: { pre: !!props.postgresPreFile, post: !!props.postgresPostFile, html: !!props.pgProfileHtmlFile },
+  hasStages: (props.stagesJson ?? '').trim().length > 0,
   pair: pairOn.value ? { blockers: pairBlockers.value, arms: pairArms.value } : null,
 }))
 
@@ -222,6 +231,131 @@ function levelLabel(level: ReadinessLevel) {
             <p class="field__hint">
               {{ inputFile?.name ?? SETUP_LABELS.inputNone }} {{ SETUP_LABELS.inputHint }}
             </p>
+          </div>
+          <div class="field">
+            <label for="stages-json">{{ SETUP_LABELS.stagesLabel }} <span class="muted">{{ SETUP_LABELS.optional }}</span></label>
+            <div class="policy-editor__actions">
+              <button
+                type="button"
+                class="button-secondary"
+                data-testid="stages-propose"
+                :disabled="busy || !inputFile"
+                @click="emit('propose-stages')"
+              >
+                {{ proposingStages ? SETUP_LABELS.stagesProposing : SETUP_LABELS.stagesPropose }}
+              </button>
+            </div>
+            <textarea
+              id="stages-json"
+              data-testid="stages-json"
+              class="control stages-json"
+              rows="8"
+              :value="stagesJson ?? ''"
+              :disabled="busy"
+              aria-describedby="stages-json-hint"
+              @input="emit('stages-json', ($event.target as HTMLTextAreaElement).value)"
+            />
+            <p
+              id="stages-json-hint"
+              class="field__hint"
+            >
+              {{ SETUP_LABELS.stagesHint }}
+            </p>
+            <ul
+              v-if="stagesErrors?.length"
+              class="field__errors"
+              data-testid="stages-errors"
+            >
+              <li
+                v-for="(error, index) in stagesErrors"
+                :key="`${error.code}-${error.json_pointer}-${index}`"
+                lang="en"
+              >
+                {{ error.json_pointer }}: {{ error.message }}
+              </li>
+            </ul>
+            <div
+              v-if="stageProposal || stageProposalError"
+              class="stages-explanation"
+              data-testid="stages-explanation"
+            >
+              <p
+                v-if="stageProposalError"
+                class="notice notice-fail"
+                role="alert"
+              >
+                {{ stageProposalError }}
+              </p>
+              <template v-else-if="stageProposal?.status === 'NOT_DETECTED'">
+                <p class="notice notice-warn">
+                  {{ SETUP_LABELS.stagesRefusedTitle }}:
+                  {{ SETUP_LABELS.stagesRefusals[stageProposal.reason ?? ''] ?? stageProposal.reason }}
+                  <span
+                    v-if="stageProposal.detail"
+                    lang="en"
+                  > ({{ stageProposal.detail }})</span>
+                </p>
+              </template>
+              <template v-else-if="stageProposal?.status === 'DETECTED'">
+                <h4>{{ SETUP_LABELS.stagesDetectedTitle }}</h4>
+                <p>
+                  {{ SETUP_LABELS.stagesConfidenceLabel }}:
+                  <strong>{{ SETUP_LABELS.stagesConfidence[stageProposal.confidence ?? ''] ?? stageProposal.confidence }}</strong>.
+                  <template v-if="!stageProposal.calibrated">
+                    {{ SETUP_LABELS.stagesUncalibrated }}
+                  </template>
+                </p>
+                <p class="field__hint">
+                  {{ SETUP_LABELS.stagesGrid(stageProposal.cell_ms, stageProposal.noise_rps, stageProposal.steady_steps) }}
+                </p>
+                <template v-if="stageProposal.boundaries.length">
+                  <p><strong>{{ SETUP_LABELS.stagesBoundariesTitle }}</strong></p>
+                  <ul>
+                    <li
+                      v-for="boundary in stageProposal.boundaries"
+                      :key="boundary.stage_id"
+                    >
+                      <code lang="en">{{ boundary.stage_id }}</code> —
+                      {{ SETUP_LABELS.stagesBasis[boundary.basis] ?? boundary.basis }}<template v-if="boundary.level_rps !== null">
+                        ({{ boundary.level_rps }} rps<template v-if="boundary.trimmed_cells > 0">
+                          , обрезано ячеек: {{ boundary.trimmed_cells }}
+                        </template>)
+                      </template>
+                    </li>
+                  </ul>
+                </template>
+                <template v-if="stageProposal.warnings.length">
+                  <p><strong>{{ SETUP_LABELS.stagesWarningsTitle }}</strong></p>
+                  <ul>
+                    <li
+                      v-for="(warning, index) in stageProposal.warnings"
+                      :key="`${warning.code}-${warning.at_offset_ms}-${index}`"
+                    >
+                      {{ SETUP_LABELS.stagesWarnings[warning.code] ?? warning.code }}
+                      (<code lang="en">{{ warning.code }}</code><template v-if="warning.stage_id">
+                        · <code lang="en">{{ warning.stage_id }}</code>
+                      </template> · {{ warning.at_offset_ms }} мс<template v-if="warning.stretch">
+                        · {{ SETUP_LABELS.stagesStretchVerdicts[warning.stretch.verdict] ?? warning.stretch.verdict }}
+                      </template>)
+                    </li>
+                  </ul>
+                </template>
+                <template v-if="stageProposal.stretches.length">
+                  <p><strong>{{ SETUP_LABELS.stagesStretchesTitle }}</strong></p>
+                  <ul>
+                    <li
+                      v-for="(stretch, index) in stageProposal.stretches"
+                      :key="`${stretch.kind}-${stretch.from_offset_ms}-${index}`"
+                    >
+                      {{ SETUP_LABELS.stagesStretchKinds[stretch.kind] ?? stretch.kind }}
+                      ({{ stretch.from_offset_ms }}–{{ stretch.to_offset_ms }} мс, опора <code lang="en">{{ stretch.reference_id }}</code>):
+                      <strong>{{ SETUP_LABELS.stagesStretchVerdicts[stretch.verdict] ?? stretch.verdict }}</strong>
+                      — {{ stretch.samples }} выб., ошибки {{ (stretch.error_ratio * 100).toFixed(1) }}%, ср. {{ stretch.mean_ms }} мс
+                    </li>
+                  </ul>
+                </template>
+              </template>
+            </div>
           </div>
         </section>
 

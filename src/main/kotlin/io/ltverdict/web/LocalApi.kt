@@ -48,6 +48,8 @@ internal data class LocalApiContext(
     // Test seam: production always uses the 4 GiB input limit.
     val uploadLimitBytes: Long = MAX_UPLOAD_BYTES,
     val sourceRegistry: SourceRegistry? = null,
+    // Test seam: production always uses one permit per server.
+    val stageProposalPermit: Semaphore = Semaphore(1),
 )
 
 internal fun LocalApiContext.sourceState(): SourceState =
@@ -68,6 +70,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
     val probePermit = Semaphore(2)
     val jenkinsPermit = Semaphore(1)
     val podViewPermit = kotlinx.coroutines.sync.Semaphore(1)
+    val stageProposalPermit = context.stageProposalPermit
 
     intercept(ApplicationCallPipeline.Plugins) {
         call.addSecurityHeaders()
@@ -140,7 +143,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             )
         }
 
-        runRoutes(context)
+        runRoutes(context, stageProposalPermit)
         grafanaRoutes(context)
         jenkinsRoutes(context, jenkinsPermit)
         baselineRoutes(context)

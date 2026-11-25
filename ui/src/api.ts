@@ -19,6 +19,7 @@ import type {
   BucketPage,
   JobStatus,
   Policy,
+  PolicyError,
   PolicyValidation,
   PostgresCaptureResponse,
   RunPage,
@@ -31,6 +32,7 @@ import type {
   SourceReloadResponse,
   SourceRequest,
   SourcesResponse,
+  StageProposalResponse,
   WindowComparisonRequest,
   Release,
   ReleaseList,
@@ -52,6 +54,7 @@ export class ApiError extends Error {
     message: string,
     // `error.limit` of the 422 codes that name a limit (baseline slots, condition records).
     readonly limit: number | null = null,
+    readonly details: PolicyError[] = [],
   ) {
     super(message)
   }
@@ -121,7 +124,14 @@ export function capturePostgresPhase(profileId: string, phase: 'pre' | 'post', p
   return request(`/api/sources/postgresql/${phase}`, { method: 'POST', headers: mutationHeaders(), body })
 }
 
-export function createJob(runId: string, policy: Policy | null, resources?: File | null, diagnostics?: File | null, sourceRequest?: SourceRequest | null, sourceContexts: File[] = [], postgresPre?: File | null, postgresPost?: File | null, pgProfileHtml?: File | null, capacity?: File | null, trend?: File | null): Promise<JobStatus> {
+export function proposeStages(runId: string): Promise<StageProposalResponse> {
+  return request(`/api/runs/${encodeURIComponent(runId)}/stage-proposal`, {
+    method: 'POST',
+    headers: mutationHeaders(),
+  })
+}
+
+export function createJob(runId: string, policy: Policy | null, resources?: File | null, diagnostics?: File | null, sourceRequest?: SourceRequest | null, sourceContexts: File[] = [], postgresPre?: File | null, postgresPost?: File | null, pgProfileHtml?: File | null, capacity?: File | null, trend?: File | null, stages?: Blob | null): Promise<JobStatus> {
   const body = new FormData()
   body.append('run_id', runId)
   if (policy) body.append('policy', new Blob([stringifyPolicy(policy)], { type: 'application/json' }), 'policy.json')
@@ -136,6 +146,7 @@ export function createJob(runId: string, policy: Policy | null, resources?: File
   if (pgProfileHtml) body.append('pg_profile_html', pgProfileHtml)
   if (capacity) body.append('capacity_plan', capacity)
   if (trend) body.append('trend_plan', trend)
+  if (stages) body.append('stages', stages, 'load-stages.json')
   return request('/api/jobs', { method: 'POST', headers: mutationHeaders(), body })
 }
 
@@ -298,9 +309,19 @@ function requireCsrf(): string {
 
 function apiError(status: number, text: string): ApiError {
   try {
-    const body = JSON.parse(text) as { error?: { code?: string; message?: string; limit?: unknown } }
+    const body = JSON.parse(text) as { error?: { code?: string; message?: string; limit?: unknown; details?: unknown } }
     const limit = typeof body.error?.limit === 'number' ? body.error.limit : null
-    return new ApiError(status, body.error?.code ?? 'REQUEST_FAILED', body.error?.message ?? 'Local request failed', limit)
+    const details = Array.isArray(body.error?.details)
+      ? body.error.details.filter(
+        (item): item is PolicyError =>
+          typeof item === 'object' &&
+          item !== null &&
+          typeof (item as PolicyError).code === 'string' &&
+          typeof (item as PolicyError).json_pointer === 'string' &&
+          typeof (item as PolicyError).message === 'string',
+      )
+      : []
+    return new ApiError(status, body.error?.code ?? 'REQUEST_FAILED', body.error?.message ?? 'Local request failed', limit, details)
   } catch {
     return new ApiError(status, 'REQUEST_FAILED', 'Local request failed')
   }

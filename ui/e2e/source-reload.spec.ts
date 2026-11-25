@@ -237,7 +237,7 @@ test('validates selected profile offline and executes profile_query-only probe w
 
   // Strictly no ad_hoc / expression field in DOM (ADR 0033 Q1)
   await expect(page.locator('#run-setup')).not.toContainText('ad_hoc')
-  await expect(page.locator('#run-setup textarea')).toHaveCount(0)
+  await expect(page.locator('#run-setup textarea:not([data-testid="stages-json"])')).toHaveCount(0)
 
   await page.getByTestId('probe-source').click()
   await expect(page.getByTestId('source-probe-error')).toHaveText(SETUP_LABELS.probeQueryRequired)

@@ -1027,3 +1027,81 @@ export interface ReleaseRequest {
 }
 
 export type ReleaseUpdate = Omit<ReleaseRequest, 'series' | 'run_id'>
+
+// Предложение стадий нагрузки (ADR 0036, D10, D12, D14): локальный маршрут без изменения analysis-result.v1.
+export type LoadStageRole = 'steady' | 'excluded'
+
+export interface LoadStageV1 {
+  id: string
+  role: LoadStageRole
+  from_offset_ms: number
+  to_offset_ms: number
+}
+
+export interface LoadStagesV1 {
+  schema_version: 'load-stages.v1'
+  stages: LoadStageV1[]
+}
+
+export type StageProposalStatus = 'DETECTED' | 'NOT_DETECTED'
+export type StageProposalConfidence = 'HIGH' | 'MEDIUM' | 'LOW'
+export type StageSegmentKind = 'IDLE' | 'FLAT' | 'RISING' | 'FALLING' | 'UNSTABLE'
+export type StageStretchVerdict = 'DEGRADED' | 'HEALTHY' | 'NOT_JUDGED'
+
+export interface StageStretchFact {
+  kind: 'TAIL' | 'AFTER_STEADY' | 'GAP' | 'STEP' | string
+  from_offset_ms: number
+  to_offset_ms: number
+  reference_id: string
+  samples: number
+  failures: number
+  error_ratio: number
+  mean_ms: number
+  reference_samples: number
+  reference_failures: number
+  reference_error_ratio: number
+  reference_mean_ms: number
+  verdict: StageStretchVerdict
+}
+
+export interface StageProposalResponse {
+  status: StageProposalStatus
+  reason: string | null
+  detail: string | null
+  method: string
+  steady_steps: 'top' | 'all'
+  confidence: StageProposalConfidence | null
+  calibrated: boolean
+  run_start_epoch_ms: number | null
+  run_end_epoch_ms: number | null
+  cell_ms: number | null
+  cells: number | null
+  noise_rps: number | null
+  segments: Array<{
+    from_offset_ms: number
+    to_offset_ms: number
+    kind: StageSegmentKind
+    level_rps: number
+    drift: number
+    residual_cv: number
+  }>
+  boundaries: Array<{
+    stage_id: string
+    basis: string
+    level_rps: number | null
+    from_contrast_sigma: number | null
+    to_contrast_sigma: number | null
+    trimmed_cells: number
+  }>
+  stretches: StageStretchFact[]
+  warnings: Array<{
+    code: string
+    stage_id: string | null
+    at_offset_ms: number
+    from_rps: number | null
+    to_rps: number | null
+    duration_ms: number | null
+    stretch: StageStretchFact | null
+  }>
+  proposal: LoadStagesV1 | null
+}

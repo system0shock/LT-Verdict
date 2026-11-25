@@ -28,6 +28,8 @@ const baselineWindow = ref('')
 const currentWindow = ref('')
 const minChangePercent = ref('5')
 const minErrorRateDelta = ref('0.001')
+const windowFilter = ref<'all' | 'candidate' | 'hardware' | 'load'>('all')
+const windowQuery = ref('')
 const error = ref('')
 const errorCode = ref('')
 const errorLang = ref<string | undefined>(undefined)
@@ -58,6 +60,22 @@ const emptyWindowNotes = computed(() => {
 const incompatible = computed(() => errorCode.value === 'BASELINE_MIXED_SEMANTICS'
   || comparison.value?.metrics.some((metric) => metric.reason === 'INCOMPATIBLE_METRIC_DEFINITION')
   || comparison.value?.window_comparison?.reasons.includes('INCOMPATIBLE_METRIC_DEFINITION'))
+
+const filteredWindowMetrics = computed(() => {
+  const all = comparison.value?.window_comparison?.metrics ?? []
+  const q = windowQuery.value.trim().toLowerCase()
+  return all.filter((item) => {
+    const isHw = Boolean(item.resource_series_id)
+    if (windowFilter.value === 'candidate' && item.status !== 'CANDIDATE') return false
+    if (windowFilter.value === 'hardware' && !isHw) return false
+    if (windowFilter.value === 'load' && isHw) return false
+    if (q) {
+      const hay = `${item.metric} ${item.entity ?? ''} ${item.resource_series_id ?? ''}`.toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return true
+  })
+})
 
 onMounted(loadBaseline)
 watch(() => props.selection, conditionBindingChanged)
@@ -710,6 +728,57 @@ function warningText(code: string): string {
           {{ labels.windowStats('current', comparison.window_comparison.current_sample_count, comparison.window_comparison.current_duration_ms) }}
         </p>
         <p>{{ labels.uncertaintyNote }}</p>
+        <div class="window-comparison-filters">
+          <input
+            v-model="windowQuery"
+            type="search"
+            data-testid="window-comparison-search"
+            placeholder="Поиск ресурса, сервиса или метрики…"
+            aria-label="Поиск в таблице сравнения окна"
+          >
+          <div
+            class="window-comparison-tabs"
+            role="tablist"
+            aria-label="Фильтр метрик сравнения окна"
+          >
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="windowFilter === 'all'"
+              data-testid="window-filter-all"
+              @click="windowFilter = 'all'"
+            >
+              Все ({{ comparison.window_comparison.metrics.length }})
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="windowFilter === 'candidate'"
+              data-testid="window-filter-candidate"
+              @click="windowFilter = 'candidate'"
+            >
+              Регрессии ({{ comparison.window_comparison.metrics.filter((m) => m.status === 'CANDIDATE').length }})
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="windowFilter === 'hardware'"
+              data-testid="window-filter-hardware"
+              @click="windowFilter = 'hardware'"
+            >
+              Аппаратные ресурсы ({{ comparison.window_comparison.metrics.filter((m) => Boolean(m.resource_series_id)).length }})
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="windowFilter === 'load'"
+              data-testid="window-filter-load"
+              @click="windowFilter = 'load'"
+            >
+              Нагрузка ({{ comparison.window_comparison.metrics.filter((m) => !m.resource_series_id).length }})
+            </button>
+          </div>
+        </div>
         <div
           class="table-wrap"
           tabindex="0"
@@ -736,7 +805,7 @@ function warningText(code: string): string {
             </thead>
             <tbody>
               <tr
-                v-for="(metric, index) in comparison.window_comparison.metrics"
+                v-for="(metric, index) in filteredWindowMetrics"
                 :key="`${metric.metric}-${metric.entity}-${metric.resource_series_id}-${index}`"
               >
                 <td>{{ labels.metric(metric.metric) }} / {{ metric.entity ?? labels.overall }} / {{ metric.resource_series_id ?? '—' }} / {{ labels.unit(metric.unit) }}</td>
@@ -770,4 +839,8 @@ function warningText(code: string): string {
 .baseline-panel[lang='ru'] p { overflow-wrap: anywhere; }
 .baseline-panel[lang='ru'] .notice { flex-wrap: wrap; }
 .baseline-panel[lang='ru'] pre { max-width: 100%; overflow-x: auto; }
+.window-comparison-filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 10px 0; }
+.window-comparison-tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-inset); }
+.window-comparison-tabs button { border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); }
+.window-comparison-tabs button[aria-selected="true"] { background: var(--surface); color: var(--text); font-weight: 600; }
 </style>

@@ -1,0 +1,2 @@
+- Upgraded `TimeChart` to v2 (`.shell` token resolution, multi-series/stacked lanes, `areaStyle`, `BarChart` error bars, breach `markArea`, tight Y-axis scaling, active cursor dots) and added a CSP-safe opaque Grafana-style floating tooltip (`ChartFloatingTooltip`) with click-to-pin across Compare, Release History, and Capacity Knee charts.
+- Expanded Compare (`BaselineCharts` / `CompareCursorChart`) with hardware/platform resource series overlays (`Отклик + Ресурсы` / `Аппаратные ресурсы` / `Нагрузка`) and widened Release History dynamics chart to full workspace width.

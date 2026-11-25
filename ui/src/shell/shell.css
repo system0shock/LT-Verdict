@@ -19,6 +19,15 @@
   --fail-bg: #FBE9E7;
   --info: #1D5FA8;
   --info-bg: #E4EEF9;
+  --c-0: #1D5FA8;
+  --c-1: #D97706;
+  --c-2: #0E8F86;
+  --c-3: #7B4FB3;
+  --c-4: #2563EB;
+  --c-5: #DB2777;
+  --c-6: #059669;
+  --c-7: #4F46E5;
+  --c-rest: #94A3B8;
   --shell-rail-width: 232px;
   --shell-radius: 8px;
   background: var(--canvas);
@@ -47,6 +56,15 @@
   --fail-bg: #3A1D1B;
   --info: #6FA8F0;
   --info-bg: #1B2C42;
+  --c-0: #6FA8F0;
+  --c-1: #FBBF24;
+  --c-2: #4FD1C5;
+  --c-3: #B794F4;
+  --c-4: #60A5FA;
+  --c-5: #F472B6;
+  --c-6: #34D399;
+  --c-7: #818CF8;
+  --c-rest: #64748B;
 }
 
 .shell .panel,
@@ -94,6 +112,11 @@
   display: grid;
   gap: 24px;
   min-width: 0;
+}
+
+.shell main:not([aria-label]) {
+  max-width: 1440px;
+  width: 100%;
 }
 
 .shell .shell-panel > *,

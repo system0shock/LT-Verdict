@@ -13,6 +13,7 @@ import {
 } from './capacityChart'
 import { CAPACITY_CHART_LABELS } from './labels.tables'
 import { capacityNumber } from './tables'
+import ChartFloatingTooltip, { type FloatingTooltipSection } from './ChartFloatingTooltip.vue'
 import { plotFraction } from './timeChart'
 
 echarts.use([LineChart, GridComponent, MarkLineComponent, MarkAreaComponent, SVGRenderer])
@@ -27,6 +28,9 @@ const props = withDefaults(defineProps<{
 const L = CAPACITY_CHART_LABELS
 const host = ref<HTMLElement | null>(null)
 const selected = ref<number | null>(null)
+const pointerPos = ref({ x: 0, y: 0 })
+const hoverActive = ref(false)
+const pinned = ref(false)
 let chart: echarts.ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
 let themeObserver: MutationObserver | null = null
@@ -45,7 +49,30 @@ const summaries = computed(() => {
   const unit = model.value?.unit ?? ''
   return plottablePoints.value.map((point) => capacityKneeReadout(point, unit))
 })
+const activePoint = computed(() => (selected.value === null ? null : plottablePoints.value[selected.value] ?? null))
 const activeSummary = computed(() => (selected.value === null ? null : summaries.value[selected.value] ?? null))
+
+const tooltipSections = computed<FloatingTooltipSection[]>(() => {
+  const pt = activePoint.value
+  if (!pt || !model.value) return []
+  const unit = model.value.unit ? ` ${model.value.unit}` : ''
+  const rows = [
+    {
+      key: 'load',
+      label: 'Нагрузка ступени',
+      value: `${capacityNumber(pt.load)}${unit}`,
+      color: '#60A5FA',
+    },
+    {
+      key: 'p95',
+      label: 'Отклик p95',
+      value: pt.p95Ms !== null ? `${capacityNumber(pt.p95Ms)} мс` : '—',
+      color: '#FBBF24',
+      breach: pt.verdict === 'FAIL',
+    },
+  ]
+  return [{ rows }]
+})
 
 const ariaDescription = computed(() => {
   if (!model.value) return ''
@@ -76,7 +103,8 @@ const guardRows = computed(() => {
 })
 
 function colors(): CapacityChartColors {
-  const css = getComputedStyle(document.documentElement)
+  const sourceEl = host.value?.closest('.shell') ?? document.documentElement
+  const css = getComputedStyle(sourceEl)
   const token = (name: string) => css.getPropertyValue(name).trim()
   return {
     brand: token('--brand'),
@@ -103,10 +131,28 @@ function draw() {
 function onPointer(event: PointerEvent) {
   const count = plottablePoints.value.length
   if (!count) return
+  if (pinned.value && event.type === 'pointermove') return
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   if (rect.width <= 0) return
   const fraction = plotFraction(event.clientX, rect)
   selected.value = Math.min(count - 1, Math.max(0, Math.round(fraction * (count - 1))))
+  pointerPos.value = { x: event.clientX, y: event.clientY }
+  hoverActive.value = true
+}
+
+function onPointerLeave() {
+  if (!pinned.value) hoverActive.value = false
+}
+
+function onChartClick(event: MouseEvent) {
+  if (selected.value === null) return
+  if (pinned.value) {
+    pinned.value = false
+    return
+  }
+  pointerPos.value = { x: event.clientX, y: event.clientY }
+  hoverActive.value = true
+  pinned.value = true
 }
 
 function focusCursor(event: FocusEvent) {
@@ -162,6 +208,8 @@ onBeforeUnmount(() => {
         :aria-label="ariaDescription"
         @pointermove="onPointer"
         @pointerdown="onPointer"
+        @pointerleave="onPointerLeave"
+        @click="onChartClick"
       >
         <div
           ref="host"
@@ -170,6 +218,16 @@ onBeforeUnmount(() => {
           aria-hidden="true"
         />
       </div>
+      <ChartFloatingTooltip
+        :visible="(hoverActive || pinned) && activePoint !== null"
+        :client-x="pointerPos.x"
+        :client-y="pointerPos.y"
+        :title="activePoint?.stageId ?? ''"
+        :meta="activePoint?.verdict ?? ''"
+        :sections="tooltipSections"
+        :pinned="pinned"
+        @unpin="pinned = false; hoverActive = false"
+      />
       <p
         class="capacity-knee-chart__readout"
         data-testid="capacity-knee-readout"

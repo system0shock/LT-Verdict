@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { RESOURCE_CHECK_LABELS, RESOURCE_TABLES_LABELS, TABLES_LABELS, TABLES_NAV_LABELS, TREND_LABELS } from '../src/shell/labels.tables'
+import { DIAGNOSTICS_LABELS, POSTGRES_LABELS, RESOURCE_CHECK_LABELS, RESOURCE_TABLES_LABELS, TABLES_LABELS, TABLES_NAV_LABELS, TREND_LABELS } from '../src/shell/labels.tables'
 
 const reference = { run_id: 'tables-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'tables.jtl' }
@@ -311,4 +311,55 @@ test('tables sub-tabs switch sections with keyboard and keep 100% Russian labels
   await page.keyboard.press('Home')
   await expect(page.locator('#policy-results')).toBeVisible()
   await expect(page.locator('#normalized-data')).toBeVisible()
+})
+
+test('regression: shellTables formats bucket rps/errors in ru-RU and localizes postgres changes & anomaly direction while preserving old shell', async ({ page }) => {
+  const withBucketsAndContext = {
+    ...failing,
+    evidence: [
+      ...failing.evidence,
+      {
+        id: 'pg-1', type: 'postgres_context', profile_id: 'pg-main', status: 'COMPLETE', reasons: [],
+        configuration_changes: [],
+        tables: [{ schema: 'public', table: 'orders', stable_key: ['id'], status: 'COMPLETE', reasons: [], row_count_delta: 1, inserted: 1, deleted: 0, updated: 1, changed_keys: [{ change: 'inserted', key: ['10'] }, { change: 'updated', key: ['42'] }, { change: 'deleted', key: ['7'] }], keys_truncated: false }],
+        statements: { status: 'COMPLETE', reasons: [], unmatched_pre: [], unmatched_post: [], rows: [] },
+        pg_profile: { status: 'COMPLETE', reasons: [] },
+      },
+    ],
+    findings: [
+      { id: 'ep-1', type: 'anomaly_episode', rule_id: 'cpu-spike', window_id: 'steady-1', reference_window_id: 'baseline-1', metric: 'cpu', entity: 'orders', from_epoch_ms: 1000, to_epoch_ms: 26000, duration_ms: 25000, direction: 'increase', observed_min: '10', observed_max: '90', unit: '%', max_abs_delta: '80', reasons: [] },
+    ],
+  }
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname
+    const method = route.request().method()
+    let body: unknown
+    if (path === '/api/bootstrap') body = { csrf_token: 'ui-test', max_upload_bytes: 1000000 }
+    else if (method === 'GET' && path === '/api/jobs') body = { jobs: [] }
+    else if (method === 'GET' && (path === '/api/jenkins' || path === '/api/grafana' || path === '/api/sources')) body = { profiles: [] }
+    else if (method === 'GET' && /\/advice$/.test(path)) body = { advice: null, job: null }
+    else if (path === '/api/runs') body = { runs: [run], next_after: null }
+    else if (path === '/api/baseline') body = { baseline: null }
+    else if (path.endsWith('/analyses')) body = { analyses: [{ analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: 'FAIL', run_validity: 'VALID' }], next_after: null }
+    else if (path.endsWith('/result')) body = withBucketsAndContext
+    else if (path.endsWith('/buckets')) body = { buckets: [{ bucket_start_ms: 0, sample_count: 1500, error_count: 1200, p95_latency_ms: 100, max_latency_ms: 200, hdr_v2_base64: 'AAAA' }], next_from_ms: null }
+    else throw new Error(`Unexpected UI request ${path}`)
+    await route.fulfill({ json: body })
+  })
+
+  await page.goto('/?shell=new')
+  await pickSavedAnalysis(page)
+  await page.locator('#shell-tab-tables').click()
+  const rowCells = page.locator('#normalized-data tbody tr').first().locator('td')
+  await expect(rowCells.nth(1)).toHaveText((1500).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+  await expect(rowCells.nth(2)).toHaveText((1200).toLocaleString('ru-RU'))
+  await expect(page.getByTestId('postgres-context')).toContainText(`${POSTGRES_LABELS.changes.inserted}: 10, ${POSTGRES_LABELS.changes.updated}: 42, ${POSTGRES_LABELS.changes.deleted}: 7`)
+  await expect(page.getByTestId('anomaly-episodes')).toContainText(DIAGNOSTICS_LABELS.directions.increase)
+
+  await page.goto('/?shell=old')
+  await pickSavedAnalysis(page)
+  const oldRowCells = page.locator('#normalized-data tbody tr').first().locator('td')
+  await expect(oldRowCells.nth(1)).toHaveText('1500.00')
+  await expect(page.getByTestId('postgres-context')).toContainText('inserted: 10, updated: 42, deleted: 7')
+  await expect(page.getByTestId('anomaly-episodes')).toContainText('increase')
 })

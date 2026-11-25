@@ -733,6 +733,7 @@ async function selectAnalysisById(analysisId: string) {
 async function selectAnalysis(analysis: AnalysisSummary, options: { tabAtStart?: number; switchTab?: boolean } = {}) {
   const runId = currentRun.value?.run_id
   if (!runId) return
+  const tabAtStart = options.tabAtStart ?? tabRevision
   if (shellNew && selectedAnalysisId.value === analysis.analysis_id) {
     if (result.value) {
       if (options.switchTab !== false) activeTab.value = 'overview'
@@ -740,14 +741,13 @@ async function selectAnalysis(analysis: AnalysisSummary, options: { tabAtStart?:
     }
     if (activeAnalysisLoad && activeAnalysisLoad.runId === runId && activeAnalysisLoad.analysisId === analysis.analysis_id) {
       await activeAnalysisLoad.promise
-      if (options.switchTab !== false && result.value && selectedAnalysisId.value === analysis.analysis_id) {
+      if (options.switchTab !== false && result.value && selectedAnalysisId.value === analysis.analysis_id && tabRevision === tabAtStart) {
         activeTab.value = 'overview'
       }
       return
     }
   }
   const revision = ++analysisRevision
-  const tabAtStart = options.tabAtStart ?? tabRevision
   adviceAutoFor.value = null
   job.value = null
   uploadProgress.value = 0
@@ -824,6 +824,7 @@ function showError(failure: unknown) {
 
 // Opens the analysis of a history row; the baseline panel shows the baseline of the release series.
 async function openReference({ release, analysis }: { release: Release; analysis: ReleaseAnalysis }, tab: ShellTabKey) {
+  const tabAtStart = tabRevision
   showBaselineSeries(release.series)
   const runPromise = selectRun(runs.value.find((run) => run.run_id === release.run_id) ?? runSummaryFromId(release.run_id), { autoOpen: false })
   const runRevision = analysisRevision
@@ -833,7 +834,7 @@ async function openReference({ release, analysis }: { release: Release; analysis
   const loadRevision = analysisRevision
   await analysisPromise
   if (loadRevision !== analysisRevision || currentRun.value?.run_id !== release.run_id || selectedAnalysisId.value !== analysis.analysis_id) return
-  activeTab.value = tab
+  if (result.value !== null && tabRevision === tabAtStart) activeTab.value = tab
 }
 
 function showBaselineSeries(series: string) {

@@ -70,10 +70,16 @@ export function releaseRequest(
   }
 }
 
-// "2026-10-05T21:56:29Z" -> "2026-10-05 21:56 UTC"; any other form stays as is.
+// "2026-10-05T21:56:29Z" -> "2026-10-05 21:56 UTC"; non-UTC offsets keep their offset without claiming UTC.
 export function formatStarted(value: string): string {
-  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(value)
-  return match ? `${match[1]} ${match[2]} UTC` : value
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2}|[+-]\d{4})?$/.exec(value)
+  if (!match) return value
+  const zone = match[3]
+  if (!zone) return `${match[1]} ${match[2]}`
+  if (zone === 'Z' || zone === '+00:00' || zone === '-00:00' || zone === '+0000' || zone === '-0000') {
+    return `${match[1]} ${match[2]} UTC`
+  }
+  return `${match[1]} ${match[2]} ${zone}`
 }
 
 // A release analysis shaped like the list of saved analyses of a run, so the app can open it.
@@ -164,7 +170,8 @@ export interface HistoryChartColors {
 }
 
 export function shortDynamicsLabel(label: string): string {
-  return label.length > 10 ? `${label.slice(0, 9)}...` : label
+  const chars = [...label]
+  return chars.length > 10 ? `${chars.slice(0, 9).join('')}...` : label
 }
 
 // Points of the p95 chart in ascending time order; a release without a number is not drawn.
@@ -185,8 +192,14 @@ export function historyDynamicsOption(
   baselineValue: number | null = null,
 ): EChartsCoreOption {
   const hasBaseline = baselineValue !== null && Number.isFinite(baselineValue)
-  const maxValue = Math.max(1, ...points.map((point) => point.value), hasBaseline ? baselineValue : 0)
-  const axis = valueAxis(0, maxValue)
+  let minValue = hasBaseline ? Math.min(0, baselineValue) : 0
+  let maxValue = hasBaseline ? Math.max(1, baselineValue) : 1
+  for (const point of points) {
+    if (!Number.isFinite(point.value)) continue
+    if (point.value < minValue) minValue = point.value
+    if (point.value > maxValue) maxValue = point.value
+  }
+  const axis = valueAxis(minValue, maxValue)
   const text = { color: colors.muted, fontSize: 12, fontFamily: colors.fontFamily }
   return {
     animation: false,

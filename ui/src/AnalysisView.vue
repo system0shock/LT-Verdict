@@ -206,8 +206,10 @@ const bucketRows = computed(() => {
     rows.push({
       id: `bucket-${start}`,
       time: `${start} ${ru ? NORMALIZED_LABELS.unit : 'ms'}`,
-      rps: (bucket.sample_count / props.bucketRollup).toFixed(2),
-      errors: bucket.error_count.toLocaleString(),
+      rps: ru
+        ? (bucket.sample_count / props.bucketRollup).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : (bucket.sample_count / props.bucketRollup).toFixed(2),
+      errors: ru ? bucket.error_count.toLocaleString('ru-RU') : bucket.error_count.toLocaleString(),
       p95: millis(bucket.p95_latency_ms),
       max: millis(bucket.max_latency_ms),
       status: ru ? NORMALIZED_LABELS.available : 'Available',
@@ -1155,7 +1157,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
               <td>{{ formatOptional(table.row_count_delta) }}</td>
               <td>{{ formatOptional(table.inserted) }} / {{ formatOptional(table.deleted) }} / {{ formatOptional(table.updated) }}</td>
               <td>
-                {{ table.changed_keys.map((change) => `${change.change}: ${change.key.join(' / ')}`).join(', ') || '—' }}{{ table.keys_truncated ? (shellTables ? POSTGRES_LABELS.truncated : ' [truncated]') : '' }}
+                {{ table.changed_keys.map((change) => `${shellTables ? (POSTGRES_LABELS.changes[change.change] ?? change.change) : change.change}: ${change.key.join(' / ')}`).join(', ') || '—' }}{{ table.keys_truncated ? (shellTables ? POSTGRES_LABELS.truncated : ' [truncated]') : '' }}
               </td>
             </tr>
           </tbody>
@@ -1405,7 +1407,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
               <td>{{ item.rule_id }} / {{ item.window_id }} / {{ item.reference_window_id }}</td>
               <td>{{ item.metric }} / {{ item.entity }}</td>
               <td>{{ item.from_epoch_ms }}–{{ item.to_epoch_ms }}</td>
-              <td>{{ formatDuration(Number(item.duration_ms)) }} / {{ item.direction }}</td>
+              <td>{{ formatDuration(Number(item.duration_ms)) }} / {{ shellTables ? (DIAGNOSTICS_LABELS.directions[String(item.direction ?? '')] ?? item.direction) : item.direction }}</td>
               <td>{{ formatOptional(item.observed_min) }}–{{ formatOptional(item.observed_max) }} {{ item.unit }}</td>
               <td>{{ formatOptional(item.max_abs_delta) }}</td>
               <td>{{ arrayAt(item, 'reasons').join(', ') || '—' }}</td>

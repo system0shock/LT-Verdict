@@ -198,11 +198,18 @@ export function queryTransactions(rows: readonly TxRow[], query: TxQuery): TxRow
     .filter((row) => (`${row.path} ${row.label}`).toLowerCase().includes(text) && (query.status === 'all' || row.status === query.status))
     .sort((left, right) => {
       if (query.sort === 'impact') return impact(left, right)
-      const order = query.sort === 'label'
-        ? compareExact(`${left.path}/${left.label}`, `${right.path}/${right.label}`)
-        : query.sort === 'status'
-          ? TX_STATUS_RANK[left.status] - TX_STATUS_RANK[right.status]
-          : left.sort[query.sort] - right.sort[query.sort]
+      if (query.sort === 'label' || query.sort === 'status') {
+        const order = query.sort === 'label'
+          ? compareExact(`${left.path}/${left.label}`, `${right.path}/${right.label}`)
+          : TX_STATUS_RANK[left.status] - TX_STATUS_RANK[right.status]
+        return order * query.dir || impact(left, right)
+      }
+      const leftVal = left.sort[query.sort]
+      const rightVal = right.sort[query.sort]
+      const leftMissing = !Number.isFinite(leftVal) || leftVal < 0
+      const rightMissing = !Number.isFinite(rightVal) || rightVal < 0
+      if (leftMissing !== rightMissing) return leftMissing ? 1 : -1
+      const order = leftMissing ? 0 : leftVal - rightVal
       return order * query.dir || impact(left, right)
     })
 }
@@ -240,11 +247,19 @@ const capacityGroups = new Intl.NumberFormat('ru-RU')
 // Capacity values are exact decimals: the digits are kept as the server sent them (no rounding), only grouped and with a decimal comma.
 export function capacityNumber(value: number | string | null | undefined): string {
   if (value == null) return TABLES_LABELS.noData
-  const text = String(value)
+  if (typeof value === 'number' && !Number.isFinite(value)) return TABLES_LABELS.noData
+  const text = String(value).trim()
+  if (text === '') return TABLES_LABELS.noData
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text)
-  if (!match) return Number.isFinite(Number(value)) ? new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 20 }).format(Number(value)) : text
+  if (!match) {
+    const numeric = Number(text)
+    if (!Number.isFinite(numeric)) return text
+    return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 20 }).format(numeric === 0 ? 0 : numeric)
+  }
+  const integer = BigInt(match[2])
   const fraction = (match[3] ?? '').replace(/0+$/, '')
-  return `${match[1]}${capacityGroups.format(BigInt(match[2]))}${fraction ? `,${fraction}` : ''}`
+  const sign = integer === 0n && fraction === '' ? '' : match[1]
+  return `${sign}${capacityGroups.format(integer)}${fraction ? `,${fraction}` : ''}`
 }
 const capacityReasons = (codes: string[] | undefined) => (codes ?? []).map((code) => ({ code, text: verdictReasonText(code) }))
 
@@ -327,14 +342,23 @@ function compareNumbers(left: number, right: number): number {
   return left < right ? -1 : 1
 }
 
+function parseTrendNumber(display: string): number {
+  const trimmed = display.trim()
+  if (!trimmed || trimmed === TREND_LABELS.noData) return Number.NEGATIVE_INFINITY
+  const match = /^([+-]?\d+(?:[.,]\d+)?(?:[eE][+-]?\d+)?)(?:\s|$)/.exec(trimmed)
+  if (!match) return Number.NEGATIVE_INFINITY
+  const parsed = Number(match[1].replace(',', '.'))
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY
+}
+
 export function sortTrendRows(rows: readonly TrendRow[], sort: TrendSortKey, dir: 1 | -1): TrendRow[] {
   if (sort === 'default') return [...rows]
   return rows.map((row, index) => ({ row, index })).sort((left, right) => {
     let order = 0
     if (sort === 'status') order = (TREND_STATUS_RANK[left.row.status] ?? 9) - (TREND_STATUS_RANK[right.row.status] ?? 9)
     else if (sort === 'slope' || sort === 'shift' || sort === 'median') {
-      const leftVal = trendSortValues.get(left.row)?.[sort] ?? Number.NEGATIVE_INFINITY
-      const rightVal = trendSortValues.get(right.row)?.[sort] ?? Number.NEGATIVE_INFINITY
+      const leftVal = trendSortValues.get(left.row)?.[sort] ?? parseTrendNumber(left.row[sort])
+      const rightVal = trendSortValues.get(right.row)?.[sort] ?? parseTrendNumber(right.row[sort])
       order = compareNumbers(leftVal, rightVal)
     } else order = compareExact(left.row[sort], right.row[sort])
     return order * dir || left.index - right.index
@@ -342,7 +366,8 @@ export function sortTrendRows(rows: readonly TrendRow[], sort: TrendSortKey, dir
 }
 
 function trendMeasure(value: string | null | undefined, unit: string | null, slope = false): string {
-  return value == null ? TREND_LABELS.noData : `${value.replace('.', ',')}${unit == null ? '' : ` ${unit}${slope ? '/\u0441' : ''}`}`
+  const trimmed = value?.trim()
+  return !trimmed ? TREND_LABELS.noData : `${trimmed.replace('.', ',')}${unit == null ? '' : ` ${unit}${slope ? '/\u0441' : ''}`}`
 }
 
 export function trendView(result: AnalysisResult): TrendView | null {
@@ -450,6 +475,7 @@ export function tablesTargetSubTab(result: AnalysisResult | null, targetId: stri
     const evidenceId = targetId.slice(3)
     const match = result.evidence.find((item) => 'id' in item && item.id === evidenceId)
     if (match?.type === 'metric_summary' && match.scope.kind === 'transaction') return 'transactions'
+    if (match?.type === 'resource_policy_check') return 'resources'
     return 'rules'
   }
   return 'all'

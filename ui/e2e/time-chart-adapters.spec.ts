@@ -240,3 +240,35 @@ test('loadSeries and compareLanes guard NaN bucket metrics and zero rollup', () 
   const lanes = compareLanes(nanSeries, tainted, null)
   expect([lanes.rps.hi, lanes.errors.hi, lanes.p95.hi]).toEqual([0, 0, 0])
 })
+
+test('regression: compareThresholds skips negative/non-finite thresholds and compareFrame handles large arrays', () => {
+  const result = {
+    evidence: [
+      { id: 'c-neg', type: 'policy_check', rule_id: 'r-neg', metric: 'response_time_p95_ms', operator: 'lte', threshold: -5, status: 'FAIL', scope: { kind: 'overall' } },
+      { id: 'c-nan', type: 'policy_check', rule_id: 'r-nan', metric: 'throughput_rps', operator: 'gte', threshold: Number.NaN, status: 'NO_VERDICT', scope: { kind: 'overall' } },
+      { id: 'c-ok', type: 'policy_check', rule_id: 'r-ok', metric: 'response_time_p95_ms', operator: 'lte', threshold: 250, status: 'PASS', scope: { kind: 'overall' } },
+    ],
+  } as unknown as AnalysisResult
+  expect(compareThresholds(result)).toEqual({
+    rps: [],
+    p95: [{ id: 'r-ok', value: 250, text: COMPARE_LABELS.chartsThresholdMark('250', 'мс'), violated: false }],
+  })
+
+  const largePoints = Array.from({ length: 200_000 }, (_, index) => ({
+    startMs: index * 1000,
+    rps: 10,
+    errors: 0,
+    p95: 50,
+  }))
+  const emptySeries = loadSeries([], 1)
+  expect(compareFrame({ ...emptySeries, points: largePoints }, emptySeries)).toEqual({
+    fromMs: 0,
+    toMs: 199_999_000,
+    originMs: 0,
+  })
+  expect(compareFrame({ ...emptySeries, points: [{ startMs: Number.NaN, rps: 0, errors: 0, p95: 0 }] }, emptySeries)).toEqual({
+    fromMs: 0,
+    toMs: 1000,
+    originMs: 0,
+  })
+})

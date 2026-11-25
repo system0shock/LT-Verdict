@@ -34,7 +34,7 @@ export function compareThresholds(
   const seen = new Set<string>()
   for (const check of checks) {
     if (check.metric !== 'throughput_rps' && check.metric !== 'response_time_p95_ms') continue
-    if (!Number.isFinite(check.threshold)) continue
+    if (!Number.isFinite(check.threshold) || check.threshold < 0) continue
     const key = `${check.metric}:${check.rule_id}:${check.threshold}`
     if (seen.has(key)) continue
     seen.add(key)
@@ -91,13 +91,21 @@ export function compareLanes(
 }
 
 export function compareFrame(currentSeries: LoadSeries, baselineSeries: LoadSeries): ChartFrame {
-  const times = [
-    ...currentSeries.points.map((point) => point.startMs),
-    ...baselineSeries.points.map((point) => point.startMs),
-  ]
-  if (!times.length) return { fromMs: 0, toMs: Math.max(currentSeries.rollupSeconds, baselineSeries.rollupSeconds) * 1000, originMs: 0 }
-  const first = Math.min(...times)
-  const last = Math.max(...times)
+  let first = Infinity
+  let last = -Infinity
+  for (const point of currentSeries.points) {
+    if (!Number.isFinite(point.startMs)) continue
+    if (point.startMs < first) first = point.startMs
+    if (point.startMs > last) last = point.startMs
+  }
+  for (const point of baselineSeries.points) {
+    if (!Number.isFinite(point.startMs)) continue
+    if (point.startMs < first) first = point.startMs
+    if (point.startMs > last) last = point.startMs
+  }
+  if (!Number.isFinite(first) || !Number.isFinite(last)) {
+    return { fromMs: 0, toMs: Math.max(currentSeries.rollupSeconds, baselineSeries.rollupSeconds) * 1000, originMs: 0 }
+  }
   if (last > first) return { fromMs: first, toMs: last, originMs: 0 }
   const half = Math.max(currentSeries.rollupSeconds, baselineSeries.rollupSeconds) * 500
   return { fromMs: first - half, toMs: first + half, originMs: 0 }

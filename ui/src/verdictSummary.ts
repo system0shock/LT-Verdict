@@ -98,14 +98,17 @@ function isViolation(finding: Record<string, unknown>): finding is Record<string
 }
 
 function ratioValue(value: number | ExactRatio | undefined): number | null {
-  if (typeof value === 'number') return value
-  if (value && value.denominator !== 0) return value.numerator / value.denominator
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (value && Number.isFinite(value.numerator) && Number.isFinite(value.denominator) && value.denominator !== 0) {
+    const ratio = value.numerator / value.denominator
+    return Number.isFinite(ratio) ? ratio : null
+  }
   return null
 }
 
 export function valueText(metric: string, value: number | ExactRatio | undefined, digits = 2): string {
   const number = ratioValue(value)
-  if (number === null) return 'нет данных'
+  if (number === null || !Number.isFinite(number)) return 'нет данных'
   const format = (amount: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: digits }).format(amount)
   if (metric === 'error_rate_ratio') return `${format(number * 100)} %`
   if (metric === 'throughput_rps') return `${format(number)} RPS`

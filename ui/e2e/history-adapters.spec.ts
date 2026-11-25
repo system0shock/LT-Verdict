@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { BASELINE_ERROR_LABELS } from '../src/shell/labels'
 import { HISTORY_LABELS } from '../src/shell/labels.history'
-import { DEFAULT_VISIBLE_RELEASES, dynamicsPoints, historyDynamicsOption, type DynamicsPoint, type HistoryChartColors } from '../src/shell/history'
+import { DEFAULT_VISIBLE_RELEASES, dynamicsPoints, formatStarted, historyDynamicsOption, shortDynamicsLabel, type DynamicsPoint, type HistoryChartColors } from '../src/shell/history'
 import type { Release, ReleaseAnalysis, ReleaseProfile } from '../src/types'
 
 // The tab against a mocked server: table, expansion, numbers and their absence, the form payload, error phrases, accessibility.
@@ -530,4 +530,21 @@ test('the statistical count and the suggestion look beyond the four shown releas
   await expect(rowsOf(page)).toHaveCount(DEFAULT_VISIBLE_RELEASES)
   await expect(page.getByTestId('history-statistical-hint')).toHaveCount(0)
   await expect(page.getByTestId('history-statistical')).toBeVisible()
+})
+
+test('regression: formatStarted timezone, shortDynamicsLabel surrogate pairs, and negative yAxis min', () => {
+  expect(formatStarted('2026-10-05T21:56:29Z')).toBe('2026-10-05 21:56 UTC')
+  expect(formatStarted('2026-10-05T21:56:29+00:00')).toBe('2026-10-05 21:56 UTC')
+  expect(formatStarted('2026-10-05T21:56:29+03:00')).toBe('2026-10-05 21:56 +03:00')
+  expect(formatStarted('2026-10-05T21:56:29+03:00')).not.toContain('UTC')
+
+  expect(shortDynamicsLabel('🚀'.repeat(6))).toBe('🚀'.repeat(6))
+  const truncated = shortDynamicsLabel('🚀'.repeat(12))
+  expect(truncated).toBe(`${'🚀'.repeat(9)}...`)
+  expect([...truncated]).toHaveLength(12)
+  expect(() => encodeURIComponent(truncated)).not.toThrow()
+
+  const colors: HistoryChartColors = { brand: '#1', pass: '#2', fail: '#3', warn: '#4', text: '#5', muted: '#6', border: '#7', fontFamily: 'sans-serif' }
+  const option = historyDynamicsOption([{ release: release(1), verdict: 'PASS', value: -10 }], colors, null)
+  expect((option.yAxis as { min: number }).min).toBe(-10)
 })

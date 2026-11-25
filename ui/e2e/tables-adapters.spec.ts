@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { AnalysisResult, CapacitySummary } from '../src/types'
 import {
+  capacityNumber,
   capacityView,
   DEFAULT_TX_QUERY,
   queryTransactions,
@@ -325,4 +326,54 @@ test('trend and resource summary sorting treats empty strings as missing and kee
   expect(sortResourceSummaries(summaries, 'min', 1).map((r) => r.id)).toEqual(['s-empty', 's-null', 's-neg', 's-pos'])
   expect(sortResourceSummaries(summaries, 'min', -1).map((r) => r.id)).toEqual(['s-pos', 's-neg', 's-empty', 's-null'])
   expect(sortResourceSummaries(summaries, 'observed_cells', 1).map((r) => r.id)).toEqual(['s-empty', 's-null', 's-neg', 's-pos'])
+})
+
+test('regression: boundary sanitization, missing tx sort at end, cloned trend sort, and resource ev target', () => {
+  expect(capacityNumber('')).toBe(TABLES_LABELS.noData)
+  expect(capacityNumber('   ')).toBe(TABLES_LABELS.noData)
+  expect(capacityNumber('-0.00')).toBe('0')
+  expect(capacityNumber(-0)).toBe('0')
+  expect(capacityNumber(Number.NaN)).toBe(TABLES_LABELS.noData)
+
+  const emptyTrend = trendView(build({
+    evidence: [{ ...trendCheck, id: 't-blank', check_id: 'blank', slope_per_second: '', split_half_shift: '   ', median: '' }],
+  }))!
+  expect(emptyTrend.rows[0].slope).toBe(TREND_LABELS.noData)
+  expect(emptyTrend.rows[0].shift).toBe(TREND_LABELS.noData)
+  expect(emptyTrend.rows[0].median).toBe(TREND_LABELS.noData)
+
+  const [nanRule] = ruleRows(build({
+    evidence: [overall, check({ observed: Number.NaN }), check({ id: 'c-inf', observed: Number.POSITIVE_INFINITY })],
+  }))
+  expect(nanRule.observed).toBe(TABLES_LABELS.noData)
+
+  const txWithMissingAndZero = transactionRows(build({
+    evidence: [
+      overall,
+      transaction('m-missing', 'GET /missing', { latency_ms: { p50: Number.NaN, p95: null, p99: Number.POSITIVE_INFINITY, max: 20 } }),
+      transaction('m-zero', 'GET /zero', { latency_ms: { p50: 0, p95: 0, p99: 0, max: 0 } }),
+      transaction('m-fast', 'GET /fast', { latency_ms: { p50: 5, p95: 10, p99: 15, max: 20 } }),
+    ],
+  }))
+  expect(txWithMissingAndZero[0].p50).toBe(TABLES_LABELS.noData)
+  expect(txWithMissingAndZero[0].p99).toBe(TABLES_LABELS.noData)
+  expect(queryTransactions(txWithMissingAndZero, { ...DEFAULT_TX_QUERY, sort: 'p95', dir: 1 }).map((r) => r.label)).toEqual([
+    'GET /zero', 'GET /fast', 'GET /missing',
+  ])
+  expect(queryTransactions(txWithMissingAndZero, { ...DEFAULT_TX_QUERY, sort: 'p95', dir: -1 }).map((r) => r.label)).toEqual([
+    'GET /fast', 'GET /zero', 'GET /missing',
+  ])
+
+  const trends = trendView(build({
+    evidence: [
+      { ...trendCheck, id: 't1', check_id: 'ten', slope_per_second: '10' },
+      { ...trendCheck, id: 't2', check_id: 'two', slope_per_second: '2' },
+    ],
+  }))!.rows.map((row) => ({ ...row }))
+  expect(sortTrendRows(trends, 'slope', 1).map((r) => r.check)).toEqual(['two', 'ten'])
+
+  const withResourceCheck = build({
+    evidence: [{ id: 'res-check-1', type: 'resource_policy_check', window_id: 'w1', rule_id: 'cpu', series_id: 's', unit: '%', operator: 'gt', threshold: '80', effect: 'sla', status: 'FAIL', reason: null }],
+  })
+  expect(tablesTargetSubTab(withResourceCheck, 'ev-res-check-1')).toBe('resources')
 })

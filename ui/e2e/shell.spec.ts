@@ -338,3 +338,102 @@ test('new shell handles a run with 0 analyses and a run with multiple analyses c
   await page.locator(`button[title="${secondId}"]`).click()
   await expect(page.locator('#verdict')).toContainText('PASS')
 })
+
+test('regression: openReference stays on current tab on result error and manual tab switches win over in-flight navigation', async ({ page }) => {
+  let failResult = true
+  let releaseSecondResult!: () => void
+  const secondResultGate = new Promise<void>((resolve) => { releaseSecondResult = resolve })
+  let holdSecondResult = false
+
+  await page.route('**/api/**', async (route) => {
+    const url = new URL(route.request().url())
+    const path = url.pathname
+    const method = route.request().method()
+    let body: unknown
+    let status = 200
+    if (path === '/api/bootstrap') body = { csrf_token: 'ui-test', max_upload_bytes: 1000000 }
+    else if (method === 'GET' && path === '/api/jobs') body = { jobs: [] }
+    else if (method === 'GET' && (path === '/api/jenkins' || path === '/api/grafana' || path === '/api/sources')) body = { profiles: [] }
+    else if (method === 'GET' && /\/advice$/.test(path)) body = { advice: null, job: null }
+    else if (path === '/api/baseline') body = { baseline: null, baselines: [] }
+    else if (path === '/api/releases' && method === 'GET') {
+      body = {
+        releases: [{
+          schema_version: 'local-release.v1', release_id: '20260101000001-11111111', series: 'S', label: 'v1.0', run_id: 'rel-run',
+          started_at: '2026-01-01T10:00:00Z',
+          analyses: [{ analysis_id: 'b'.repeat(64), arm: null, coverage_reasons: [], coverage_status: 'COMPLETE', policy_sha256: 'c'.repeat(64), policy_verdict: 'PASS', run_validity: 'VALID', analysis_state: 'OK', baseline_eligible: true, ineligible_reasons: [] }],
+          profile: null, notes: null, created_at: '2026-01-01T10:00:00Z', updated_at: '2026-01-01T10:00:00Z', baseline_eligible: true, ineligible_reasons: [],
+        }],
+        next_after: null, series_summary: [{ series: 'S', count: 1 }], corrupt_count: 0, corrupt_names: [],
+      }
+    } else if (path.endsWith('/analytics')) body = { schema_version: 'saved-analytics.v1', history_scan_truncated: false, history_scan_limit: 1000, history_metadata_byte_limit: 16777216, history_integrity: 'SAVED_DOCUMENT_HASHES', transactions: null, overlay: null, metric_packs: { schema_version: 'metric-packs.v1', packs: [] }, dynamics: null }
+    else if (path === '/api/runs') body = { runs: [run], next_after: null }
+    else if (path.endsWith('/analyses')) {
+      const aid = path.includes('rel-run') ? 'b'.repeat(64) : reference.analysis_id
+      body = { analyses: [{ analysis_id: aid, policy_sha256: 'c'.repeat(64), policy_verdict: 'PASS', run_validity: 'VALID' }], next_after: null }
+    } else if (path.endsWith('/result')) {
+      if (path.includes('rel-run') && failResult) {
+        status = 500
+        body = { error: { code: 'BOOM', message: 'Result failed' } }
+      } else if (path.includes('rel-run') && holdSecondResult) {
+        await secondResultGate
+        body = { ...failing, run_id: 'rel-run', policy_verdict: 'PASS' }
+      } else {
+        body = failing
+      }
+    } else if (path.endsWith('/buckets')) body = { buckets: [], next_from_ms: null }
+    else throw new Error(`Unexpected UI request ${path}`)
+    await route.fulfill({ status, json: body })
+  })
+
+  await page.goto('/?shell=new')
+  await tabByKey(page, 'history').click()
+  await expect(page.getByTestId('release-row')).toHaveCount(1)
+  await page.getByTestId('release-row').first().getByRole('button', { name: /Открыть/ }).click()
+  await expect(page.getByRole('alert')).toContainText('Result failed')
+  await expect(tabByKey(page, 'history')).toHaveAttribute('aria-selected', 'true')
+
+  failResult = false
+  holdSecondResult = true
+  await page.getByTestId('release-row').first().getByRole('button', { name: /Открыть/ }).click()
+  await tabByKey(page, 'rules').click()
+  await expect(tabByKey(page, 'rules')).toHaveAttribute('aria-selected', 'true')
+  releaseSecondResult()
+  await expect(page.getByTestId('verdict-chip')).toContainText('PASS')
+  await expect(tabByKey(page, 'rules')).toHaveAttribute('aria-selected', 'true')
+})
+
+test('regression: joining an in-flight selectAnalysis respects subsequent manual tab switches', async ({ page }) => {
+  let releaseResult!: () => void
+  const resultGate = new Promise<void>((resolve) => { releaseResult = resolve })
+
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname
+    const method = route.request().method()
+    let body: unknown
+    if (path === '/api/bootstrap') body = { csrf_token: 'ui-test', max_upload_bytes: 1000000 }
+    else if (method === 'GET' && path === '/api/jobs') body = { jobs: [] }
+    else if (method === 'GET' && (path === '/api/jenkins' || path === '/api/grafana' || path === '/api/sources')) body = { profiles: [] }
+    else if (method === 'GET' && /\/advice$/.test(path)) body = { advice: null, job: null }
+    else if (path === '/api/baseline') body = { baseline: null }
+    else if (path === '/api/runs') body = { runs: [run], next_after: null }
+    else if (path.endsWith('/analyses')) body = { analyses: [{ analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: 'FAIL', run_validity: 'VALID' }], next_after: null }
+    else if (path.endsWith('/result')) {
+      await resultGate
+      body = failing
+    } else if (path.endsWith('/buckets')) body = { buckets: [], next_from_ms: null }
+    else throw new Error(`Unexpected UI request ${path}`)
+    await route.fulfill({ json: body })
+  })
+
+  await page.goto('/?shell=new')
+  await page.getByRole('button', { name: 'shell.jtl' }).click()
+  const analysisBtn = page.locator(`button[title="${reference.analysis_id}"]`)
+  await expect(analysisBtn).toBeVisible()
+  await analysisBtn.click()
+  await tabByKey(page, 'tables').click()
+  await expect(tabByKey(page, 'tables')).toHaveAttribute('aria-selected', 'true')
+  releaseResult()
+  await expect(page.getByTestId('verdict-chip')).toContainText('FAIL')
+  await expect(tabByKey(page, 'tables')).toHaveAttribute('aria-selected', 'true')
+})

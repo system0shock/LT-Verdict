@@ -178,6 +178,8 @@ let policyRevision = 0
 let policyFileCheck: Promise<unknown> | null = null
 let policyEdits = 0
 let adviceRevision = 0
+let sourceValidationRevision = 0
+let sourceProbeRevision = 0
 let uploadAbort: AbortController | null = null
 
 const verdictSummary = computed(() => {
@@ -314,7 +316,13 @@ function selectTrend(file: File | null) {
 }
 
 function selectSourceProfiles(ids: string[]) {
+  sourceValidationRevision += 1
+  sourceProbeRevision += 1
   sourceProfileIds.value = ids
+  validatingSources.value = false
+  sourceValidation.value = null
+  sourceValidationError.value = ''
+  probingSource.value = false
   sourceProbeResult.value = null
   sourceProbeError.value = ''
   if (ids.length) {
@@ -352,8 +360,12 @@ async function reloadSourceProfiles() {
     if (postgresProfileId.value && !postgresProfiles.value.some((profile) => profile.id === postgresProfileId.value)) {
       postgresProfileId.value = ''
     }
+    sourceValidationRevision += 1
+    sourceProbeRevision += 1
+    validatingSources.value = false
     sourceValidation.value = null
     sourceValidationError.value = ''
+    probingSource.value = false
     sourceProbeResult.value = null
     sourceProbeError.value = ''
     sourceReloadStatus.value = SETUP_LABELS.reloadProfilesSummary(
@@ -370,7 +382,8 @@ async function reloadSourceProfiles() {
 }
 
 async function validateSourceProfiles() {
-  if (validatingSources.value || sourcesBusy()) return
+  if (validatingSources.value || reloadingSources.value || sourcesBusy()) return
+  const revision = ++sourceValidationRevision
   validatingSources.value = true
   sourceValidation.value = null
   sourceValidationError.value = ''
@@ -381,16 +394,19 @@ async function validateSourceProfiles() {
         : sourceProfileIds.value.length === 0 && postgresProfileId.value
           ? postgresProfileId.value
           : undefined
-    sourceValidation.value = await validateSources(selectedId)
+    const response = await validateSources(selectedId)
+    if (revision !== sourceValidationRevision) return
+    sourceValidation.value = response
   } catch (failure) {
+    if (revision !== sourceValidationRevision) return
     sourceValidationError.value = sourceOperationErrorText(failure)
   } finally {
-    validatingSources.value = false
+    if (revision === sourceValidationRevision) validatingSources.value = false
   }
 }
 
 async function probeSelectedSource(rawQueryId: string) {
-  if (probingSource.value || sourcesBusy()) return
+  if (probingSource.value || reloadingSources.value || sourcesBusy()) return
   const profileId = sourceProfileIds.value.length === 1 ? sourceProfileIds.value[0] : ''
   const queryId = rawQueryId.trim()
   if (!profileId || !queryId) {
@@ -398,15 +414,19 @@ async function probeSelectedSource(rawQueryId: string) {
     sourceProbeError.value = SETUP_LABELS.probeQueryRequired
     return
   }
+  const revision = ++sourceProbeRevision
   probingSource.value = true
   sourceProbeResult.value = null
   sourceProbeError.value = ''
   try {
-    sourceProbeResult.value = await probeSourceQuery({ profile_id: profileId, query_id: queryId })
+    const response = await probeSourceQuery({ profile_id: profileId, query_id: queryId })
+    if (revision !== sourceProbeRevision) return
+    sourceProbeResult.value = response
   } catch (failure) {
+    if (revision !== sourceProbeRevision) return
     sourceProbeError.value = sourceOperationErrorText(failure)
   } finally {
-    probingSource.value = false
+    if (revision === sourceProbeRevision) probingSource.value = false
   }
 }
 
@@ -418,6 +438,12 @@ function selectSourceContexts(files: File[]) {
 }
 
 function selectPostgresProfile(id: string) {
+  if (sourceProfileIds.value.length === 0) {
+    sourceValidationRevision += 1
+    validatingSources.value = false
+    sourceValidation.value = null
+    sourceValidationError.value = ''
+  }
   postgresProfileId.value = id
   errorMessage.value = ''
 }

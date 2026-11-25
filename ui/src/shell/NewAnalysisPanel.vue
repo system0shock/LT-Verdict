@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   AdvisoryAiConfig,
   Policy,
@@ -117,6 +117,23 @@ function setPairSlot(index: number, ids: string[]) {
   pairSlots.value = pairSlots.value.map((slot, position) => (position === index ? ids : slot))
   emitPairProfiles()
 }
+
+watch(
+  () => props.sourceProfiles,
+  (profiles) => {
+    const validIds = new Set(profiles.map((profile) => profile.id))
+    let changed = false
+    const nextSlots = pairSlots.value.map((slot) => {
+      const filtered = slot.filter((id) => validIds.has(id))
+      if (filtered.length !== slot.length) changed = true
+      return filtered
+    })
+    if (!changed) return
+    pairSlots.value = nextSlots
+    if (pairOn.value) emitPairProfiles()
+  },
+  { deep: true },
+)
 
 function start() {
   if (pairOn.value) emit('analyze-pair', pairSlots.value)

@@ -535,6 +535,7 @@ export const SETUP_LABELS = {
   postgresNoneItem: 'не используется',
   pairOk: (arms: string[]) => `${arms.length} ${pluralRu(arms.length, 'задание', 'задания', 'заданий')}, плечи ${arms.join(' и ')}`,
   pairArmEmpty: (number: number) => `плечо ${number}: выберите профили источника с метриками`,
+  pairMissingProfile: (number: number, id: string) => `плечо ${number}: профиль ${id} не найден в текущей конфигурации`,
   pairNoArm: (number: number, id: string) => `плечо ${number}: профиль ${id} не объявляет плечо (поле arm в конфигурации)`,
   pairMixed: (number: number) => `плечо ${number}: профили объявляют разные плечи`,
   pairSame: (arm: string) => `плечи совпадают: оба объявляют ${arm}`,

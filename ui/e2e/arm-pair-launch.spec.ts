@@ -189,6 +189,9 @@ test('pairLaunchBlockers names each reason once and passes a clean pair', () => 
   expect(pairLaunchBlockers([['prom-a1'], ['prom-a2']], catalog)).toEqual([SETUP_LABELS.pairSame('A')])
   expect(pairLaunchBlockers([[], ['app-logs']], catalog)).toEqual([SETUP_LABELS.pairArmEmpty(1), SETUP_LABELS.pairArmEmpty(2)])
   expect(pairLaunchBlockers([['prom-a1', 'prom-b'], ['prom-plain']], catalog)).toEqual([SETUP_LABELS.pairMixed(1), SETUP_LABELS.pairNoArm(2, 'prom-plain')])
+  expect(pairLaunchBlockers([['prom-deleted', 'prom-a1'], ['prom-b']], catalog)).toEqual([
+    SETUP_LABELS.pairMissingProfile(1, 'prom-deleted'),
+  ])
 })
 
 test('pairSourceRequests copies the shared window into one request per arm', () => {

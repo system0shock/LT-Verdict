@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ApiError, getBuckets, getResourceSeriesCatalog, getResourceSeriesValues, resourceSeriesValuesPath } from '../api'
 import type { AnalysisResult, AnalysisSummary, Bucket, ResourceSeriesCatalog, ResourceSeriesEntry } from '../types'
 import { DEEP_LABELS } from './labels'
@@ -19,7 +19,8 @@ const props = withDefaults(defineProps<{
   runId: string
   analysisId: string
   analyses?: AnalysisSummary[]
-}>(), { analyses: () => [] })
+  focus?: { stageId?: string; seriesId?: string; nonce: number } | null
+}>(), { analyses: () => [], focus: null })
 const emit = defineEmits<{ 'select-analysis': [analysisId: string] }>()
 
 const origin = runStartMs(props.result)
@@ -228,8 +229,35 @@ async function refresh(includeLoad: boolean) {
   }
 }
 
+function applyFocus(target: { stageId?: string; seriesId?: string } | null | undefined) {
+  if (!target) return
+  if (target.stageId) {
+    const stage = stageList.value.find((item) => item.id === target.stageId)
+    if (stage) {
+      const fmt = (min: number) => String(Math.round(min * 1000) / 1000)
+      periodFrom.value = fmt(Math.max(0, stage.fromMin))
+      periodTo.value = fmt(Math.max(0, stage.toMin))
+      applied.value = { from: stage.fromMin, to: stage.toMin }
+      activeStageId.value = stage.id
+      invalidPeriod.value = false
+    }
+  }
+  if (target.seriesId && catalog.value.some((entry) => entry.id === target.seriesId)) {
+    if (!selected.value.includes(target.seriesId)) {
+      selected.value = selected.value.length >= MAX_SELECTED_SERIES
+        ? [...selected.value.slice(0, MAX_SELECTED_SERIES - 1), target.seriesId]
+        : [...selected.value, target.seriesId]
+    }
+    primaryKey.value = target.seriesId
+  }
+}
+
 async function initialize() {
-  if (origin === null) { await refresh(true); return }
+  if (origin === null) {
+    applyFocus(props.focus)
+    await refresh(true)
+    return
+  }
   const current = ++revision
   controller = new AbortController()
   loading.value = true
@@ -254,6 +282,7 @@ async function initialize() {
     catalog.value = entries
     selected.value = defaultSelection(entries, props.result)
     if (props.result.run_validity === 'INVALID' && selected.value.length) primaryKey.value = selected.value[0]
+    applyFocus(props.focus)
     await refresh(true)
   } catch (cause) {
     if (current !== revision || controller?.signal.aborted) return
@@ -309,6 +338,11 @@ function jumpToPods() {
   el?.scrollIntoView()
   document.getElementById('pod-heatmap-title')?.focus?.()
 }
+watch(() => props.focus?.nonce, () => {
+  if (!loadPhaseDone || !props.focus) return
+  applyFocus(props.focus)
+  void refresh(true)
+})
 onMounted(() => { void initialize() })
 onUnmounted(() => { revision += 1; controller?.abort() })
 </script>

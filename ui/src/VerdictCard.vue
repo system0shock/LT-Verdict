@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { VerdictSummary } from './verdictSummary'
 
-defineProps<{ summary: VerdictSummary }>()
+withDefaults(defineProps<{ summary: VerdictSummary; showThresholds?: boolean }>(), { showThresholds: false })
 </script>
 
 <template>
@@ -29,6 +29,26 @@ defineProps<{ summary: VerdictSummary }>()
         {{ summary.headline }}
       </h2>
       <p>{{ summary.lead }}</p>
+
+      <div
+        v-if="showThresholds && summary.kpis.length"
+        class="verdict-kpis"
+        data-testid="verdict-kpis"
+        role="region"
+        aria-label="Ключевые пороги правил"
+      >
+        <div
+          v-for="kpi in summary.kpis"
+          :key="kpi.key"
+          class="verdict-kpi"
+          data-testid="verdict-kpi"
+          :data-status="kpi.status"
+        >
+          <span class="verdict-kpi__label">{{ kpi.label }}</span>
+          <strong class="verdict-kpi__value">{{ kpi.observed }}</strong>
+          <span class="verdict-kpi__threshold muted">порог {{ kpi.threshold }}</span>
+        </div>
+      </div>
 
       <template v-if="summary.linesTitle">
         <h3>{{ summary.linesTitle }}</h3>

@@ -8,15 +8,19 @@ import { PLOT_INSET, cursorX, laneGrid, laneOption, type ChartColors, type Chart
 
 echarts.use([LineChart, GridComponent, MarkAreaComponent, MarkLineComponent, SVGRenderer])
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   lane: ChartLane
   frame: ChartFrame
   stages: ChartStage[]
   flags: LaneFlags
-  cursorMs: number | null
-  cursorValue: string
-  cursorTime: string | null
-}>()
+  cursorMs?: number | null
+  cursorValue?: string
+  cursorTime?: string | null
+}>(), {
+  cursorMs: null,
+  cursorValue: '',
+  cursorTime: null,
+})
 
 const host = ref<HTMLElement | null>(null)
 // Not reactive: the instance is driven only by the props watcher, never by the cursor.

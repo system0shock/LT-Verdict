@@ -95,6 +95,7 @@ internal fun renderHtmlReport(
         head + summary + warningBlock + stageBlock(notice) + verdictBlock(result, evidence) + diagnosticsBlock(result, evidence) +
             runSection(timeline) +
             overallSection(evidence, notice) +
+            incidentsSection(result) +
             errorGroupsSection(errorGroupsView(result, errorGroups)) + rulesSection(evidence) + transactionsSection(result, evidence) +
             changes + limitationsBlock(result, evidence) + appendix + "</main></body></html>"
     return html.encodeToByteArray()
@@ -103,7 +104,7 @@ internal fun renderHtmlReport(
 private const val APPENDIX_NOTE =
     "Сырые данные анализа для сверки и обработки программами; расшифровка есть в разделах выше. Блоки свёрнуты: раскройте нужный."
 private const val NO_DATA = "нет данных"
-private const val DASH = "—"
+internal const val DASH = "—"
 private const val NBSP = " "
 private const val MAX_TRANSACTION_ROWS = 200
 private const val MAX_DIGITS = 20
@@ -365,7 +366,7 @@ private fun resourceFailureText(
 
 private val UTC_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC)
 
-private fun utcText(epochMillis: BigDecimal?): String =
+internal fun utcText(epochMillis: BigDecimal?): String =
     epochMillis?.let { runCatching { "${UTC_FORMAT.format(Instant.ofEpochMilli(it.toLong()))} UTC" }.getOrNull() } ?: DASH
 
 private fun failedDiagnosticChecks(evidence: List<JsonObject>): List<JsonObject> =
@@ -692,7 +693,7 @@ private fun limitationsBlock(
     return "<section><h2>Ограничения</h2>$body</section>"
 }
 
-private fun table(
+internal fun table(
     label: String,
     heads: List<String>,
     rows: String,
@@ -913,7 +914,7 @@ private fun valueText(value: Any?): String =
         else -> value.toString()
     }
 
-private fun escape(value: String): String =
+internal fun escape(value: String): String =
     buildString(value.length) {
         value.forEach {
             append(

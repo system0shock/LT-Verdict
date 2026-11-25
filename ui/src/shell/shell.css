@@ -371,3 +371,71 @@
   display: grid;
   gap: 4px;
 }
+
+.shell .verdict-strip {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.shell .verdict-facts {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 680px) {
+  .shell .verdict-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.shell .verdict-main > * {
+  min-width: 0;
+}
+
+.shell .verdict-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.shell .verdict-kpi {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--shell-radius);
+  background: var(--surface);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.shell .verdict-kpi[data-status="FAIL"] {
+  border-left-color: var(--fail);
+}
+
+.shell .verdict-kpi[data-status="PASS"] {
+  border-left-color: var(--pass);
+}
+
+.shell .verdict-kpi[data-status="NO_VERDICT"] {
+  border-left-color: var(--warn);
+}
+
+.shell .verdict-kpi__label,
+.shell .verdict-kpi__threshold {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.shell .verdict-kpi__value {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.shell #overview-stages,
+.shell #overview-incidents,
+.shell #overview-trends,
+.shell #overview-platform {
+  scroll-margin-top: 96px;
+}

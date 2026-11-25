@@ -43,6 +43,15 @@ export interface StageTable {
   note: string
 }
 
+export interface VerdictKpi {
+  key: string
+  ruleId: string
+  label: string
+  status: 'PASS' | 'FAIL' | 'NO_VERDICT'
+  observed: string
+  threshold: string
+}
+
 export interface VerdictSummary {
   verdict: Verdict
   headline: string
@@ -56,6 +65,7 @@ export interface VerdictSummary {
   notes: CauseGroup[]
   facts: Array<{ label: string; value: string }>
   stages: StageTable | null
+  kpis: VerdictKpi[]
 }
 
 // Фраза генерируется при отрисовке из stage_binding и в результате не хранится (R10); те же слова в HTML-отчёте (report/StageNotice.kt).
@@ -346,6 +356,42 @@ export function failedLinesOf(result: AnalysisResult): FailedLine[] {
   ]
 }
 
+const KPI_STATUS_RANK: Record<'FAIL' | 'NO_VERDICT' | 'PASS', number> = { FAIL: 0, NO_VERDICT: 1, PASS: 2 }
+
+export function thresholdKpis(result: AnalysisResult, limit = 6): VerdictKpi[] {
+  const { business, resource } = checksOf(result)
+  const metrics = new Map(result.evidence.filter((item): item is MetricSummaryEvidence => item.type === 'metric_summary').map((item) => [item.id, item]))
+  const all: VerdictKpi[] = [
+    ...business.map((check): VerdictKpi => {
+      const scope = check.scope ?? (check.metric_evidence_id ? metrics.get(check.metric_evidence_id)?.scope : undefined)
+      const sign = check.operator === 'lte' ? '≤' : '≥'
+      const scopeText = scope && scope.kind === 'transaction' ? ` · ${scope.label}` : ''
+      return {
+        key: `b:${check.id}`,
+        ruleId: check.rule_id,
+        label: `${check.rule_id}${scopeText} (${metricLabel(check.metric, check.window_id)})`,
+        status: check.status,
+        observed: valueText(check.metric, check.observed, 2),
+        threshold: `${sign} ${valueText(check.metric, check.threshold, 2)}`,
+      }
+    }),
+    ...resource.map((check): VerdictKpi => {
+      const sign = check.operator === 'gt' ? '≤' : '≥'
+      return {
+        key: `r:${check.id}`,
+        ruleId: check.rule_id,
+        label: `${check.rule_id} (${check.series_id})`,
+        status: check.status,
+        observed: check.status === 'FAIL' ? 'нарушено' : check.status === 'PASS' ? 'в норме' : 'нет данных',
+        threshold: `${sign} ${check.threshold}${check.unit ? ` ${check.unit}` : ''}`,
+      }
+    }),
+  ]
+  return all
+    .sort((a, b) => KPI_STATUS_RANK[a.status] - KPI_STATUS_RANK[b.status])
+    .slice(0, limit)
+}
+
 export function summarizeVerdict(result: AnalysisResult, context: { policySha256?: string; policyId?: string | null; tabs?: boolean } = {}): VerdictSummary {
   const verdict = result.policy_verdict
   const capacity = result.analysis_mode === 'capacity_step' ? result.capacity_summary : undefined
@@ -473,5 +519,6 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
       ...policyFact,
     ],
     stages: binding ? stageTable(binding) : null,
+    kpis: capacity ? [] : thresholdKpis(result),
   }
 }

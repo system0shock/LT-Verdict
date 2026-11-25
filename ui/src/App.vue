@@ -1049,9 +1049,16 @@ async function showVerdict() {
   verdict?.focus({ preventScroll: true })
 }
 
+const deepFocus = ref<{ stageId?: string; seriesId?: string; nonce: number } | null>(null)
+let deepFocusNonce = 0
+
 async function jumpTo(target: AttentionTarget) {
   if (shellNew && target.tab === 'tables' && tablesSubTab.value !== 'all') {
     tablesSubTab.value = tablesTargetSubTab(result.value, target.targetId)
+  }
+  if (shellNew && target.tab === 'deep' && (target.stageId || target.seriesId)) {
+    deepFocusNonce += 1
+    deepFocus.value = { stageId: target.stageId, seriesId: target.seriesId, nonce: deepFocusNonce }
   }
   activeTab.value = target.tab
   await nextTick()
@@ -1237,6 +1244,7 @@ function focusPolicy() {
           <VerdictCard
             v-if="verdictSummary && shownIn('overview')"
             :summary="verdictSummary"
+            :show-thresholds="shellNew"
           />
 
           <OverviewPanel
@@ -1256,6 +1264,7 @@ function focusPolicy() {
             :run-id="result.run_id"
             :analysis-id="selectedAnalysisId"
             :analyses="analyses"
+            :focus="deepFocus"
             @select-analysis="selectAnalysisById"
           />
 
@@ -1422,7 +1431,7 @@ function focusPolicy() {
 
           <div
             v-if="result && selectedAnalysisId"
-            v-show="shownIn('overview')"
+            v-show="!shellNew || activeTab === 'history'"
             class="bucket-controls"
             :aria-label="downloadLabels.group"
             :lang="shellNew ? 'ru' : undefined"
@@ -1499,7 +1508,7 @@ function focusPolicy() {
 
           <AnalyticsPanel
             v-if="selectedReference"
-            v-show="shownIn('overview')"
+            v-show="!shellNew || activeTab === 'history'"
             :selection="selectedReference"
             :working="working"
             :series="baselineSeries"
@@ -1524,7 +1533,7 @@ function focusPolicy() {
           />
 
           <GrafanaPanel
-            v-if="selectedReference && shownIn('overview')"
+            v-if="selectedReference && !shellNew"
             :selection="selectedReference"
           />
 

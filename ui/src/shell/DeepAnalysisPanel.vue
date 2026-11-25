@@ -21,7 +21,10 @@ const props = withDefaults(defineProps<{
   analyses?: AnalysisSummary[]
   focus?: { stageId?: string; seriesId?: string; nonce: number } | null
 }>(), { analyses: () => [], focus: null })
-const emit = defineEmits<{ 'select-analysis': [analysisId: string] }>()
+const emit = defineEmits<{
+  'select-analysis': [analysisId: string]
+  'open-overview': []
+}>()
 
 const origin = runStartMs(props.result)
 const originMs = origin ?? 0
@@ -32,9 +35,11 @@ const grid = ref<SnapshotGrid | null>(null)
 const selected = ref<string[]>([])
 const pinnedLoad = ref<string[]>(['load-rps', 'load-p95'])
 const primaryKey = ref<string>('load-rps')
-const deepMode = ref<'focus' | 'workbench'>('focus')
+const deepMode = ref<'workbench' | 'focus'>('workbench')
+const rubDomain = ref<'all' | 'load' | 'platform'>('all')
 const catalogGrouping = ref<'role' | 'service'>('role')
 const onlyDeviations = ref(false)
+const openServices = ref<Record<string, boolean>>({})
 const filter = ref('')
 const serviceFilter = ref('')
 const periodFrom = ref('')
@@ -51,6 +56,7 @@ const loading = ref(false)
 const error = ref('')
 const loadOutside = ref(false)
 const truncated = ref<number | null>(null)
+const laneOrder = ref<string[]>([])
 let revision = 0
 let controller: AbortController | null = null
 let loadPhaseDone = false
@@ -59,6 +65,7 @@ const loadKeySet = new Set(LOAD_CATALOG_ITEMS.map((item) => item.key))
 const stageList = computed(() => stageButtons(props.result, catalogWindows.value, originMs))
 const stages = computed(() => deepStages(props.result, catalogWindows.value, originMs))
 const groupedCatalog = computed(() => groupMetricCatalog(catalog.value, filter.value, serviceFilter.value))
+
 const violatedSeriesIds = computed(() => {
   const ids = new Set<string>()
   for (const item of props.result.evidence) {
@@ -67,6 +74,7 @@ const violatedSeriesIds = computed(() => {
   }
   return ids
 })
+
 const filteredPlatformByRole = computed(() => {
   const filterList = (list: ResourceSeriesEntry[]) => (
     onlyDeviations.value ? list.filter((entry) => violatedSeriesIds.value.has(entry.id)) : list
@@ -76,16 +84,22 @@ const filteredPlatformByRole = computed(() => {
     generator: filterList(groupedCatalog.value.platformByRole.generator),
   }
 })
+
 const filteredPlatformByService = computed(() => {
-  const map = new Map<string, ResourceSeriesEntry[]>()
+  const map = new Map<string, { entries: ResourceSeriesEntry[]; badCount: number }>()
   for (const entry of [...filteredPlatformByRole.value.system, ...filteredPlatformByRole.value.generator]) {
     const svc = entry.entity || 'Без сервиса'
-    const bucket = map.get(svc) ?? []
-    bucket.push(entry)
+    const bucket = map.get(svc) ?? { entries: [], badCount: 0 }
+    bucket.entries.push(entry)
+    if (violatedSeriesIds.value.has(entry.id)) bucket.badCount += 1
     map.set(svc, bucket)
   }
-  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  return [...map.entries()].sort((a, b) => {
+    if (b[1].badCount !== a[1].badCount) return b[1].badCount - a[1].badCount
+    return a[0].localeCompare(b[0])
+  })
 })
+
 const arms = computed(() => armAnalyses(props.analyses, props.analysisId))
 const hasPodView = computed(() => podViewGroups(props.analyses, props.analysisId).length > 0)
 const showPeriodPanel = computed(() => (hasSnapshot.value ? Boolean(grid.value) : stageList.value.length > 0 || load.value.length > 0))
@@ -114,6 +128,33 @@ const pinnedTracks = computed<DeepTrack[]>(() => {
   return [...loadItems, ...resourceItems]
 })
 
+const workbenchTracks = computed<DeepTrack[]>(() => {
+  const map = new Map<string, DeepTrack>()
+  const loadByKey = new Map(load.value.map((track) => [track.key, track]))
+  for (const key of pinnedLoad.value) {
+    const track = loadByKey.get(key)
+    if (track) map.set(track.key, track)
+  }
+  for (const id of selected.value) {
+    const track = resourcesMap.value.get(id)
+    if (track) map.set(track.key, track)
+  }
+  if (!map.size && primaryTrack.value) map.set(primaryTrack.value.key, primaryTrack.value)
+  const ordered: DeepTrack[] = []
+  for (const key of laneOrder.value) {
+    const t = map.get(key)
+    if (t) { ordered.push(t); map.delete(key) }
+  }
+  for (const t of map.values()) ordered.push(t)
+  return ordered
+})
+
+const activeTrackCount = computed(() => (
+  deepMode.value === 'workbench'
+    ? workbenchTracks.value.length
+    : (primaryTrack.value ? 1 : 0) + pinnedTracks.value.length
+))
+
 const primaryStats = computed(() => (primaryTrack.value ? windowMetricStats(primaryTrack.value, axis.value) : null))
 const statTiles = computed(() => {
   const track = primaryTrack.value
@@ -139,6 +180,58 @@ const statTiles = computed(() => {
 })
 
 const offset = (ms: number) => (ms < 0 ? `-${formatOffset(-ms)}` : formatOffset(ms))
+
+function isServiceOpen(svcName: string, idx: number): boolean {
+  if (filter.value.trim().length > 0) return true
+  if (svcName in openServices.value) return openServices.value[svcName]
+  return idx < 3
+}
+
+function toggleServiceGroup(svcName: string, idx: number) {
+  openServices.value = { ...openServices.value, [svcName]: !isServiceOpen(svcName, idx) }
+}
+
+function moveTrack(key: string, dir: -1 | 1) {
+  const keys = workbenchTracks.value.map((t) => t.key)
+  const idx = keys.indexOf(key)
+  const next = idx + dir
+  if (idx < 0 || next < 0 || next >= keys.length) return
+  ;[keys[idx], keys[next]] = [keys[next], keys[idx]]
+  laneOrder.value = keys
+}
+
+function removeTrack(key: string) {
+  if (loadKeySet.has(key)) {
+    pinnedLoad.value = pinnedLoad.value.filter((k) => k !== key)
+  } else {
+    const rawId = key.startsWith('resource:') ? key.slice('resource:'.length) : key
+    selected.value = selected.value.filter((id) => id !== rawId && id !== key)
+  }
+}
+
+function applyPreset(kind: 'problem' | 'loadOnly' | 'single') {
+  if (kind === 'problem') {
+    pinnedLoad.value = ['load-rps', 'load-p95']
+    selected.value = defaultSelection(catalog.value, props.result)
+    laneOrder.value = []
+    if (loadPhaseDone && hasSnapshot.value) void refresh(false)
+  } else if (kind === 'loadOnly') {
+    pinnedLoad.value = ['load-rps', 'load-p95', 'load-errors']
+    selected.value = []
+    laneOrder.value = []
+  } else {
+    const first = workbenchTracks.value[0]?.key ?? 'load-rps'
+    if (loadKeySet.has(first)) {
+      pinnedLoad.value = [first]
+      selected.value = []
+    } else {
+      const rawId = first.startsWith('resource:') ? first.slice('resource:'.length) : first
+      pinnedLoad.value = []
+      selected.value = [rawId]
+    }
+    laneOrder.value = [first]
+  }
+}
 
 async function fetchBuckets(range: { fromMs: number; toMs: number } | null, chosenRollup: number, signal: AbortSignal) {
   const buckets: Bucket[] = []
@@ -310,6 +403,8 @@ async function initialize() {
     grid.value = snapshotGrid
     catalogWindows.value = windows
     catalog.value = entries
+    const distinctEntities = new Set(entries.map((e) => e.entity).filter(Boolean))
+    if (distinctEntities.size > 1) catalogGrouping.value = 'service'
     selected.value = defaultSelection(entries, props.result)
     if (props.result.run_validity === 'INVALID' && selected.value.length) primaryKey.value = selected.value[0]
     applyFocus(props.focus)
@@ -334,6 +429,12 @@ function toggleLoadPin(key: string, checked: boolean) {
 }
 function selectPrimaryMetric(key: string) {
   primaryKey.value = key
+  if (deepMode.value === 'workbench') {
+    if (loadKeySet.has(key) && !pinnedLoad.value.includes(key)) pinnedLoad.value = [...pinnedLoad.value, key]
+    else if (!loadKeySet.has(key) && !selected.value.includes(key) && selected.value.length < MAX_SELECTED_SERIES) {
+      selected.value = [...selected.value, key]
+    }
+  }
   const needsFetch = !loadKeySet.has(key) && !resourcesMap.value.has(key) && hasSnapshot.value && grid.value !== null
   if (needsFetch && loadPhaseDone) void refresh(false)
 }
@@ -383,497 +484,1074 @@ onUnmounted(() => { revision += 1; controller?.abort() })
     data-testid="deep-panel"
     lang="ru"
   >
-    <section
-      class="panel"
-      aria-labelledby="deep-title"
-    >
-      <div class="deep-header-row">
+    <div class="deep-top-bar">
+      <div class="deep-top-bar__copy">
         <h2
           id="deep-title"
           tabindex="-1"
         >
           {{ DEEP_LABELS.title }}
         </h2>
-        <div class="deep-nav-actions">
-          <div
-            class="deep-mode-switcher"
-            role="group"
-            aria-label="Режим глубокого анализа"
-          >
-            <button
-              type="button"
-              class="stage-btn"
-              data-testid="deep-mode-workbench"
-              :aria-pressed="deepMode === 'workbench' ? 'true' : 'false'"
-              @click="deepMode = 'workbench'"
-            >
-              Свободное сравнение (стопка)
-            </button>
-            <button
-              type="button"
-              class="stage-btn"
-              data-testid="deep-mode-focus"
-              :aria-pressed="deepMode === 'focus' ? 'true' : 'false'"
-              @click="deepMode = 'focus'"
-            >
-              Фокус на одном ряде
-            </button>
-          </div>
-          <div
-            v-if="arms.length > 1"
-            class="arm-switcher"
-            data-testid="deep-arm-switcher"
-            role="group"
-            :aria-label="DEEP_LABELS.armTitle"
-          >
-            <button
-              v-for="arm in arms"
-              :key="arm.arm"
-              type="button"
-              class="stage-btn"
-              :data-testid="'deep-arm-' + arm.arm"
-              :aria-pressed="arm.analysisId === analysisId ? 'true' : 'false'"
-              @click="emit('select-analysis', arm.analysisId)"
-            >
-              {{ DEEP_LABELS.armButton(arm.arm) }}
-            </button>
-          </div>
+        <p class="v4-sub">
+          Слева — фасетный рубрикатор метрик и сервисов. Справа — свободная стопка дорожек или фокус на одном ряде.
+        </p>
+      </div>
+      <div class="deep-nav-actions">
+        <div
+          class="v4-seg"
+          role="group"
+          aria-label="Режим глубокого анализа"
+        >
           <button
-            v-if="hasPodView"
             type="button"
-            class="stage-btn"
-            data-testid="deep-pod-jump"
-            @click="jumpToPods"
+            data-testid="deep-mode-workbench"
+            :aria-pressed="deepMode === 'workbench' ? 'true' : 'false'"
+            @click="deepMode = 'workbench'"
           >
-            {{ DEEP_LABELS.podJump }}
+            Свободное сравнение (стопка)
+          </button>
+          <button
+            type="button"
+            data-testid="deep-mode-focus"
+            :aria-pressed="deepMode === 'focus' ? 'true' : 'false'"
+            @click="deepMode = 'focus'"
+          >
+            Фокус на одном ряде
           </button>
         </div>
+        <div
+          v-if="arms.length > 1"
+          class="v4-seg"
+          data-testid="deep-arm-switcher"
+          role="group"
+          :aria-label="DEEP_LABELS.armTitle"
+        >
+          <button
+            v-for="arm in arms"
+            :key="arm.arm"
+            type="button"
+            :data-testid="'deep-arm-' + arm.arm"
+            :aria-pressed="arm.analysisId === analysisId ? 'true' : 'false'"
+            @click="emit('select-analysis', arm.analysisId)"
+          >
+            {{ DEEP_LABELS.armButton(arm.arm) }}
+          </button>
+        </div>
+        <button
+          v-if="hasPodView"
+          type="button"
+          class="v4-btn"
+          data-testid="deep-pod-jump"
+          @click="jumpToPods"
+        >
+          {{ DEEP_LABELS.podJump }}
+        </button>
+        <button
+          type="button"
+          class="v4-btn"
+          @click="emit('open-overview')"
+        >
+          ← В Обзор
+        </button>
       </div>
-      <p class="muted">
-        {{ DEEP_LABELS.lead }}
-      </p>
-      <p class="muted">
-        {{ DEEP_LABELS.readNote }}
-      </p>
+    </div>
+
+    <div
+      v-if="!hasSnapshot || loading || error"
+      class="deep-banners"
+    >
       <p
         v-if="!hasSnapshot"
+        class="v4-sub"
         data-testid="deep-no-snapshot"
       >
         {{ DEEP_LABELS.noSnapshot }}
       </p>
       <p
-        v-if="hasSnapshot"
-        class="muted"
-        data-testid="deep-clock-note"
-      >
-        {{ DEEP_LABELS.clockNote }}
-      </p>
-      <p
         v-if="loading"
+        class="v4-sub"
         role="status"
       >
         {{ DEEP_LABELS.loading }}
       </p>
       <p
         v-if="error"
+        class="notice notice-fail"
         role="alert"
         data-testid="deep-error"
       >
         {{ error }}
       </p>
-    </section>
+    </div>
+
     <div class="deep-layout">
-      <div class="deep-main">
-        <section
-          v-if="showPeriodPanel"
-          class="panel"
-          aria-labelledby="deep-period-title"
-        >
-          <h2 id="deep-period-title">
-            {{ DEEP_LABELS.periodTitle }}
-          </h2>
-          <div
-            v-if="stageList.length"
-            class="stage-bar"
-            data-testid="deep-stage-bar"
-            role="group"
-            :aria-label="DEEP_LABELS.stagesTitle"
-          >
-            <button
-              type="button"
-              class="stage-btn"
-              data-testid="deep-stage-all"
-              :aria-pressed="applied === null ? 'true' : 'false'"
-              @click="wholePeriod"
-            >
-              {{ DEEP_LABELS.periodAll }}
-            </button>
-            <button
-              v-for="stage in stageList"
-              :key="stage.id"
-              type="button"
-              class="stage-btn"
-              :data-testid="'deep-stage-' + stage.id"
-              :aria-pressed="activeStageId === stage.id ? 'true' : 'false'"
-              @click="selectStage(stage)"
-            >
-              {{ stage.id }}
-            </button>
-          </div>
-          <div class="period-fields">
-            <label>{{ DEEP_LABELS.periodFrom }}<input
-              v-model="periodFrom"
-              data-testid="deep-period-from"
-              type="number"
-              min="0"
-              step="any"
-            ></label>
-            <label>{{ DEEP_LABELS.periodTo }}<input
-              v-model="periodTo"
-              data-testid="deep-period-to"
-              type="number"
-              min="0"
-              step="any"
-            ></label>
-          </div>
-          <div class="period-actions">
-            <button
-              type="button"
-              data-testid="deep-period-apply"
-              @click="applyPeriod"
-            >
-              {{ DEEP_LABELS.periodApply }}
-            </button>
-            <button
-              type="button"
-              data-testid="deep-period-all"
-              @click="wholePeriod"
-            >
-              {{ DEEP_LABELS.periodAll }}
-            </button>
-          </div>
-          <p
-            v-if="invalidPeriod"
-            role="alert"
-          >
-            {{ DEEP_LABELS.periodInvalid }}
-          </p>
-          <p
-            v-if="applied"
-            data-testid="deep-period-snapped"
-          >
-            {{ DEEP_LABELS.periodSnapped(offset(axis.fromMs - originMs), offset(axis.toMs - originMs)) }}
-          </p>
-          <p
-            v-if="hasSnapshot && grid"
-            data-testid="deep-step-note"
-            class="muted"
-          >
-            {{ DEEP_LABELS.cellStep(stepMs / 1000) }}
-          </p>
-          <p
-            data-testid="deep-load-note"
-            class="muted"
-          >
-            {{ DEEP_LABELS.loadRollup(rollup) }}
-          </p>
-        </section>
-        <section
-          class="panel"
-          aria-labelledby="deep-chart-title"
-        >
-          <h2 id="deep-chart-title">
-            {{ DEEP_LABELS.chartAria }}
-          </h2>
-          <DeepCursorChart
-            v-if="(primaryTrack || pinnedTracks.length) && axis.toMs > axis.fromMs"
-            :primary-track="primaryTrack"
-            :tracks="pinnedTracks"
-            :axis="axis"
-            :origin-ms="originMs"
-            :stages="stages"
-            :mode="deepMode"
-          />
-          <p v-if="loadOutside">
-            {{ DEEP_LABELS.loadOutsideRun }}
-          </p>
-          <p v-else-if="!load.some((track) => track.points.length) && !loading">
-            {{ DEEP_LABELS.loadEmpty }}
-          </p>
-          <p v-if="truncated !== null">
-            {{ DEEP_LABELS.loadTruncated(truncated) }}
-          </p>
-        </section>
-        <section
-          v-if="primaryTrack && statTiles.length"
-          class="panel"
-          aria-labelledby="deep-stats-title"
-          data-testid="deep-stats"
-        >
-          <h2 id="deep-stats-title">
-            {{ DEEP_LABELS.statsTitle }}: {{ primaryTrack.label }}
-          </h2>
-          <dl
-            class="deep-stat-grid"
-            data-testid="deep-stat-tiles"
-          >
-            <div
-              v-for="tile in statTiles"
-              :key="tile.key"
-              class="deep-stat-tile"
-              data-testid="deep-stat-tile"
-              :data-stat="tile.key"
-              :data-value="tile.raw"
-            >
-              <dt>{{ tile.label }}</dt>
-              <dd>{{ tile.value }}</dd>
-            </div>
-          </dl>
-        </section>
-      </div>
+      <!-- LEFT: Faceted Scalable Rubricator (Mockup v4.4) -->
       <aside
         v-if="showCatalogPanel"
-        class="panel"
+        class="panel rubricator-panel"
         aria-labelledby="deep-series-title"
         data-testid="deep-catalog"
       >
-        <h2 id="deep-series-title">
-          {{ DEEP_LABELS.catalogTitle }}
-        </h2>
-        <label class="search-label">{{ DEEP_LABELS.seriesFilter }}<input
-          v-model="filter"
-          type="search"
-          data-testid="deep-series-filter"
-        ></label>
-        <label
-          v-if="hasSnapshot && groupedCatalog.services.length"
-          class="search-label"
-        >{{ DEEP_LABELS.serviceFilter }}<select
-          v-model="serviceFilter"
-          data-testid="deep-service-filter"
-        >
-          <option value="">{{ DEEP_LABELS.serviceAll }}</option>
-          <option
-            v-for="svc in groupedCatalog.services"
-            :key="svc"
-            :value="svc"
-          >{{ svc }}</option>
-        </select></label>
-
-        <div
-          v-for="group in groupedCatalog.groups.filter((g) => g.key !== 'platform' && g.loadItems.length)"
-          :key="group.key"
-          class="catalog-group"
-          :data-testid="'deep-group-' + group.key"
-        >
-          <h3>{{ group.label }}</h3>
-          <div class="catalog-rows">
-            <div
-              v-for="item in group.loadItems"
-              :key="item.key"
-              class="series-row"
-            >
-              <input
-                type="checkbox"
-                :data-testid="'deep-pin-' + item.key"
-                :aria-label="`${DEEP_LABELS.pinToggle}: ${item.label}`"
-                :checked="pinnedLoad.includes(item.key)"
-                @change="toggleLoadPin(item.key, ($event.target as HTMLInputElement).checked)"
-              >
-              <button
-                type="button"
-                class="metric-select-btn"
-                :data-testid="'deep-metric-select-' + item.key"
-                :aria-pressed="primaryKey === item.key ? 'true' : 'false'"
-                @click="selectPrimaryMetric(item.key)"
-              >
-                <span>{{ item.label }}</span>
-                <span class="muted"> ({{ item.unit }})</span>
-              </button>
-            </div>
-          </div>
+        <div class="rub-head">
+          <h3 id="deep-series-title">
+            {{ DEEP_LABELS.catalogTitle }}
+          </h3>
+          <span
+            v-if="hasSnapshot && grid"
+            class="v4-sub v4-num"
+            data-testid="deep-selected-count"
+          >{{ DEEP_LABELS.seriesCount(selected.length, MAX_SELECTED_SERIES) }}</span>
         </div>
 
         <div
           v-if="hasSnapshot && grid"
-          class="catalog-group"
-          data-testid="deep-group-platform"
+          class="v4-seg rub-domain-seg"
+          role="group"
+          aria-label="Домен метрик"
         >
-          <h3>{{ DEEP_LABELS.groupLabels.platform }}</h3>
-          <div class="catalog-facet-controls">
-            <div
-              class="deep-mode-switcher"
-              role="group"
-              aria-label="Группировка каталога платформы"
-            >
-              <button
-                type="button"
-                class="stage-btn"
-                data-testid="deep-group-by-role"
-                :aria-pressed="catalogGrouping === 'role' ? 'true' : 'false'"
-                @click="catalogGrouping = 'role'"
-              >
-                По ролям
-              </button>
-              <button
-                type="button"
-                class="stage-btn"
-                data-testid="deep-group-by-service"
-                :aria-pressed="catalogGrouping === 'service' ? 'true' : 'false'"
-                @click="catalogGrouping = 'service'"
-              >
-                По сервисам
-              </button>
-            </div>
-            <label
-              v-if="violatedSeriesIds.size > 0"
-              class="catalog-only-bad"
-            >
-              <input
-                v-model="onlyDeviations"
-                type="checkbox"
-                data-testid="deep-only-deviations"
-              >
-              Только с отклонениями ({{ violatedSeriesIds.size }})
-            </label>
-          </div>
-          <p data-testid="deep-selected-count">
-            {{ DEEP_LABELS.seriesCount(selected.length, MAX_SELECTED_SERIES) }}
-          </p>
-          <p
-            v-if="selected.length >= MAX_SELECTED_SERIES"
-            data-testid="deep-limit-hint"
+          <button
+            type="button"
+            :aria-pressed="rubDomain === 'all'"
+            @click="rubDomain = 'all'"
           >
-            {{ DEEP_LABELS.limitReached(MAX_SELECTED_SERIES) }}
-          </p>
-          <p v-if="!catalog.length">
-            {{ DEEP_LABELS.seriesEmpty }}
-          </p>
-          <p v-else-if="!filteredPlatformByRole.system.length && !filteredPlatformByRole.generator.length">
-            {{ DEEP_LABELS.seriesNone }}
-          </p>
+            Все
+          </button>
+          <button
+            type="button"
+            :aria-pressed="rubDomain === 'load'"
+            @click="rubDomain = 'load'"
+          >
+            Нагрузка ({{ LOAD_CATALOG_ITEMS.length }})
+          </button>
+          <button
+            type="button"
+            :aria-pressed="rubDomain === 'platform'"
+            @click="rubDomain = 'platform'"
+          >
+            Платформа ({{ catalog.length }})
+          </button>
+        </div>
+
+        <div
+          v-if="hasSnapshot && grid && rubDomain !== 'load'"
+          class="rub-subbar"
+        >
           <div
-            v-if="catalogGrouping === 'role'"
-            class="series-list"
+            class="v4-seg"
+            role="group"
+            aria-label="Группировка каталога платформы"
           >
-            <template
-              v-for="roleKey in (['system', 'generator'] as const)"
-              :key="roleKey"
+            <button
+              type="button"
+              data-testid="deep-group-by-service"
+              :aria-pressed="catalogGrouping === 'service' ? 'true' : 'false'"
+              @click="catalogGrouping = 'service'"
             >
-              <div
-                v-if="filteredPlatformByRole[roleKey].length"
-                class="role-subgroup"
-                :data-testid="'deep-role-' + roleKey"
-              >
-                <p class="role-heading muted">
-                  {{ DEEP_LABELS.roleLabels[roleKey] }}
-                </p>
+              По сервисам
+            </button>
+            <button
+              type="button"
+              data-testid="deep-group-by-role"
+              :aria-pressed="catalogGrouping === 'role' ? 'true' : 'false'"
+              @click="catalogGrouping = 'role'"
+            >
+              По ролям
+            </button>
+          </div>
+          <select
+            v-if="groupedCatalog.services.length > 1"
+            v-model="serviceFilter"
+            class="v4-inp rub-svc-select"
+            data-testid="deep-service-filter"
+            :aria-label="DEEP_LABELS.serviceFilter"
+          >
+            <option value="">
+              {{ DEEP_LABELS.serviceAll }} ({{ groupedCatalog.services.length }})
+            </option>
+            <option
+              v-for="svc in groupedCatalog.services"
+              :key="svc"
+              :value="svc"
+            >
+              {{ svc }}
+            </option>
+          </select>
+        </div>
+
+        <input
+          v-model="filter"
+          type="search"
+          class="v4-inp"
+          data-testid="deep-series-filter"
+          placeholder="Быстрый поиск ряда / сервиса…"
+          :aria-label="DEEP_LABELS.seriesFilter"
+        >
+
+        <label
+          v-if="hasSnapshot && grid && violatedSeriesIds.size > 0"
+          class="v4-check"
+        >
+          <input
+            v-model="onlyDeviations"
+            type="checkbox"
+            data-testid="deep-only-deviations"
+          >
+          Показывать только с отклонениями ({{ violatedSeriesIds.size }})
+        </label>
+
+        <p
+          v-if="hasSnapshot && grid && selected.length >= MAX_SELECTED_SERIES"
+          class="v4-sub rub-limit-hint"
+          data-testid="deep-limit-hint"
+        >
+          {{ DEEP_LABELS.limitReached(MAX_SELECTED_SERIES) }}
+        </p>
+
+        <div class="rub-scroll">
+          <!-- Load metric groups -->
+          <template v-if="rubDomain !== 'platform'">
+            <div
+              v-for="group in groupedCatalog.groups.filter((g) => g.key !== 'platform' && g.loadItems.length)"
+              :key="group.key"
+              class="rub-group"
+              :data-testid="'deep-group-' + group.key"
+            >
+              <div class="rub-group__hd rub-group__hd--static">
+                <span>{{ group.label }}</span>
+                <span class="v4-sub v4-num">{{ group.loadItems.length }}</span>
+              </div>
+              <div class="rub-items">
                 <div
-                  v-for="entry in filteredPlatformByRole[roleKey]"
-                  :key="entry.id"
-                  class="series-row"
+                  v-for="item in group.loadItems"
+                  :key="item.key"
+                  class="rub-row"
+                  :class="{ 'in-stack': pinnedLoad.includes(item.key), 'is-primary': deepMode === 'focus' && primaryKey === item.key }"
                 >
-                  <input
-                    type="checkbox"
-                    :data-testid="'deep-series-' + entry.id"
-                    :aria-label="`${DEEP_LABELS.pinToggle}: ${entry.id}`"
-                    :checked="selected.includes(entry.id)"
-                    :disabled="!selected.includes(entry.id) && selected.length >= MAX_SELECTED_SERIES"
-                    @change="toggle(entry.id, ($event.target as HTMLInputElement).checked)"
-                  >
                   <button
                     type="button"
-                    class="metric-select-btn"
-                    :data-testid="'deep-metric-select-' + entry.id"
-                    :aria-pressed="primaryKey === entry.id ? 'true' : 'false'"
-                    @click="selectPrimaryMetric(entry.id)"
+                    class="rub-pick"
+                    :data-testid="'deep-metric-select-' + item.key"
+                    :aria-pressed="primaryKey === item.key ? 'true' : 'false'"
+                    :title="item.label"
+                    @click="selectPrimaryMetric(item.key)"
                   >
-                    <strong>{{ entry.id }}</strong>
-                    <br>
-                    <span class="muted">{{ DEEP_LABELS.seriesMeta(entry.unit, entry.entity) }}</span>
-                    <span
-                      v-if="entry.observed_cells === 0"
-                      class="muted"
-                    >, {{ DEEP_LABELS.noValuesBadge }}</span>
+                    {{ item.label }}
                   </button>
+                  <span class="v4-sub v4-num">{{ item.unit }}</span>
+                  <label
+                    class="add-lane-toggle"
+                    :class="{ on: pinnedLoad.includes(item.key) }"
+                    :title="pinnedLoad.includes(item.key) ? 'Убрать дорожку' : 'Добавить дорожку'"
+                  >
+                    <input
+                      type="checkbox"
+                      class="sr-check"
+                      :data-testid="'deep-pin-' + item.key"
+                      :aria-label="`${DEEP_LABELS.pinToggle}: ${item.label}`"
+                      :checked="pinnedLoad.includes(item.key)"
+                      @change="toggleLoadPin(item.key, ($event.target as HTMLInputElement).checked)"
+                    >
+                    <span aria-hidden="true">{{ pinnedLoad.includes(item.key) ? '✓' : '+' }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- Platform series groups -->
+          <div
+            v-if="hasSnapshot && grid && rubDomain !== 'load'"
+            class="rub-platform-wrap"
+            data-testid="deep-group-platform"
+          >
+            <p
+              v-if="!catalog.length"
+              class="v4-sub"
+            >
+              {{ DEEP_LABELS.seriesEmpty }}
+            </p>
+            <p
+              v-else-if="!filteredPlatformByRole.system.length && !filteredPlatformByRole.generator.length"
+              class="v4-sub"
+            >
+              {{ DEEP_LABELS.seriesNone }}
+            </p>
+
+            <!-- Grouped by Service (collapsible accordions — Mockup v4.4) -->
+            <template v-else-if="catalogGrouping === 'service'">
+              <div
+                class="rub-service-groups"
+                data-testid="deep-service-groups"
+              >
+                <div
+                  v-for="([svcName, group], idx) in filteredPlatformByService"
+                  :key="svcName"
+                  class="rub-group"
+                >
+                  <button
+                    type="button"
+                    class="rub-group__hd"
+                    :aria-expanded="isServiceOpen(svcName, idx)"
+                    @click="toggleServiceGroup(svcName, idx)"
+                  >
+                    <span class="rub-group__name">{{ isServiceOpen(svcName, idx) ? '▾' : '▸' }} {{ svcName }}</span>
+                    <span class="rub-group__meta">
+                      <span
+                        v-if="group.badCount > 0"
+                        class="v4-pill v4-pill--crit"
+                      >откл.</span>
+                      <span
+                        v-else
+                        class="v4-sub v4-num"
+                      >{{ group.entries.length }}</span>
+                    </span>
+                  </button>
+                  <div
+                    v-if="isServiceOpen(svcName, idx)"
+                    class="rub-items"
+                  >
+                    <div
+                      v-for="entry in group.entries"
+                      :key="entry.id"
+                      class="rub-row"
+                      :class="{ 'in-stack': selected.includes(entry.id), 'is-primary': deepMode === 'focus' && primaryKey === entry.id }"
+                    >
+                      <button
+                        type="button"
+                        class="rub-pick"
+                        :data-testid="'deep-metric-select-' + entry.id"
+                        :aria-pressed="primaryKey === entry.id ? 'true' : 'false'"
+                        :title="entry.id"
+                        @click="selectPrimaryMetric(entry.id)"
+                      >
+                        <span
+                          v-if="violatedSeriesIds.has(entry.id)"
+                          class="rub-dot-crit"
+                          aria-hidden="true"
+                        >●</span>
+                        {{ entry.metric }}
+                      </button>
+                      <span
+                        class="v4-sub v4-num"
+                        :class="{ 'rub-meta-crit': violatedSeriesIds.has(entry.id) }"
+                      >{{ entry.observed_cells === 0 ? 'нет' : entry.unit }}</span>
+                      <label
+                        class="add-lane-toggle"
+                        :class="{ on: selected.includes(entry.id), disabled: !selected.includes(entry.id) && selected.length >= MAX_SELECTED_SERIES }"
+                        :title="selected.includes(entry.id) ? 'Убрать дорожку' : 'Добавить дорожку'"
+                      >
+                        <input
+                          type="checkbox"
+                          class="sr-check"
+                          :data-testid="'deep-series-' + entry.id"
+                          :aria-label="`${DEEP_LABELS.pinToggle}: ${entry.id}`"
+                          :checked="selected.includes(entry.id)"
+                          :disabled="!selected.includes(entry.id) && selected.length >= MAX_SELECTED_SERIES"
+                          @change="toggle(entry.id, ($event.target as HTMLInputElement).checked)"
+                        >
+                        <span aria-hidden="true">{{ selected.includes(entry.id) ? '✓' : '+' }}</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
             </template>
-          </div>
-          <div
-            v-else
-            class="series-list"
-            data-testid="deep-service-groups"
-          >
-            <div
-              v-for="[svcName, entries] in filteredPlatformByService"
-              :key="svcName"
-              class="role-subgroup"
-            >
-              <p class="role-heading muted">
-                {{ svcName }} ({{ entries.length }})
-              </p>
-              <div
-                v-for="entry in entries"
-                :key="entry.id"
-                class="series-row"
+
+            <!-- Grouped by Role (system / generator) -->
+            <template v-else>
+              <template
+                v-for="roleKey in (['system', 'generator'] as const)"
+                :key="roleKey"
               >
-                <input
-                  type="checkbox"
-                  :data-testid="'deep-series-' + entry.id"
-                  :aria-label="`${DEEP_LABELS.pinToggle}: ${entry.id}`"
-                  :checked="selected.includes(entry.id)"
-                  :disabled="!selected.includes(entry.id) && selected.length >= MAX_SELECTED_SERIES"
-                  @change="toggle(entry.id, ($event.target as HTMLInputElement).checked)"
+                <div
+                  v-if="filteredPlatformByRole[roleKey].length"
+                  class="rub-group"
+                  :data-testid="'deep-role-' + roleKey"
                 >
-                <button
-                  type="button"
-                  class="metric-select-btn"
-                  :data-testid="'deep-metric-select-' + entry.id"
-                  :aria-pressed="primaryKey === entry.id ? 'true' : 'false'"
-                  @click="selectPrimaryMetric(entry.id)"
-                >
-                  <strong>{{ entry.metric }}</strong>
-                  <span class="muted"> ({{ entry.unit }})</span>
-                </button>
-              </div>
-            </div>
+                  <div class="rub-group__hd rub-group__hd--static">
+                    <span>{{ DEEP_LABELS.roleLabels[roleKey] }}</span>
+                    <span class="v4-sub v4-num">{{ filteredPlatformByRole[roleKey].length }}</span>
+                  </div>
+                  <div class="rub-items">
+                    <div
+                      v-for="entry in filteredPlatformByRole[roleKey]"
+                      :key="entry.id"
+                      class="rub-row"
+                      :class="{ 'in-stack': selected.includes(entry.id), 'is-primary': deepMode === 'focus' && primaryKey === entry.id }"
+                    >
+                      <button
+                        type="button"
+                        class="rub-pick"
+                        :data-testid="'deep-metric-select-' + entry.id"
+                        :aria-pressed="primaryKey === entry.id ? 'true' : 'false'"
+                        :title="entry.id"
+                        @click="selectPrimaryMetric(entry.id)"
+                      >
+                        <span
+                          v-if="violatedSeriesIds.has(entry.id)"
+                          class="rub-dot-crit"
+                          aria-hidden="true"
+                        >●</span>
+                        {{ entry.id }}
+                      </button>
+                      <span
+                        class="v4-sub v4-num"
+                        :class="{ 'rub-meta-crit': violatedSeriesIds.has(entry.id) }"
+                      >{{ entry.observed_cells === 0 ? DEEP_LABELS.noValuesBadge : entry.unit }}</span>
+                      <label
+                        class="add-lane-toggle"
+                        :class="{ on: selected.includes(entry.id), disabled: !selected.includes(entry.id) && selected.length >= MAX_SELECTED_SERIES }"
+                        :title="selected.includes(entry.id) ? 'Убрать дорожку' : 'Добавить дорожку'"
+                      >
+                        <input
+                          type="checkbox"
+                          class="sr-check"
+                          :data-testid="'deep-series-' + entry.id"
+                          :aria-label="`${DEEP_LABELS.pinToggle}: ${entry.id}`"
+                          :checked="selected.includes(entry.id)"
+                          :disabled="!selected.includes(entry.id) && selected.length >= MAX_SELECTED_SERIES"
+                          @change="toggle(entry.id, ($event.target as HTMLInputElement).checked)"
+                        >
+                        <span aria-hidden="true">{{ selected.includes(entry.id) ? '✓' : '+' }}</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </template>
           </div>
         </div>
       </aside>
+
+      <!-- RIGHT: Workbench / Focus Charts Card (Mockup v4.4) -->
+      <div class="deep-main">
+        <section
+          class="panel deep-workbench-card"
+          aria-labelledby="deep-chart-title"
+        >
+          <div class="deep-card-hd">
+            <div>
+              <h3 id="deep-chart-title">
+                <template v-if="deepMode === 'workbench'">
+                  Свободное сопоставление рядов ({{ activeTrackCount }} из {{ MAX_SELECTED_SERIES + pinnedLoad.length }})
+                </template>
+                <template v-else>
+                  {{ primaryTrack ? primaryTrack.label : DEEP_LABELS.chartAria }}
+                </template>
+              </h3>
+              <span class="v4-sub">
+                {{ hasSnapshot ? DEEP_LABELS.clockNote : DEEP_LABELS.readNote }}
+              </span>
+            </div>
+            <div class="deep-presets">
+              <button
+                type="button"
+                class="v4-btn v4-btn--xs"
+                @click="applyPreset('problem')"
+              >
+                Пакет проблемных
+              </button>
+              <button
+                type="button"
+                class="v4-btn v4-btn--xs"
+                @click="applyPreset('loadOnly')"
+              >
+                Только нагрузка
+              </button>
+              <button
+                type="button"
+                class="v4-btn v4-btn--xs"
+                @click="applyPreset('single')"
+              >
+                Оставить 1 ряд
+              </button>
+            </div>
+          </div>
+
+          <!-- Inline proportional stage strip + compact 1-line period bar -->
+          <div
+            v-if="showPeriodPanel"
+            class="deep-period-strip"
+            aria-labelledby="deep-period-title"
+          >
+            <span
+              id="deep-period-title"
+              class="v4-kicker"
+            >{{ DEEP_LABELS.periodTitle }}</span>
+            <div
+              v-if="stageList.length"
+              class="stages-bar"
+              data-testid="deep-stage-bar"
+              role="group"
+              :aria-label="DEEP_LABELS.stagesTitle"
+            >
+              <button
+                type="button"
+                class="stg-btn stg-btn--fixed"
+                data-testid="deep-stage-all"
+                :aria-pressed="applied === null ? 'true' : 'false'"
+                @click="wholePeriod"
+              >
+                <b>{{ DEEP_LABELS.periodAll }}</b>
+                <span>весь период</span>
+              </button>
+              <button
+                v-for="stage in stageList"
+                :key="stage.id"
+                type="button"
+                class="stg-btn"
+                :class="{ 'stg-btn--steady': stage.steady }"
+                :data-testid="'deep-stage-' + stage.id"
+                :aria-pressed="activeStageId === stage.id ? 'true' : 'false'"
+                @click="selectStage(stage)"
+              >
+                <b>{{ stage.id }}</b>
+                <span>{{ formatOffset(stage.fromMs - originMs) }}–{{ formatOffset(stage.toMs - originMs) }}</span>
+              </button>
+            </div>
+
+            <div class="deep-period-inline">
+              <div class="deep-period-inputs">
+                <label class="deep-period-field">
+                  <span>С, мин</span>
+                  <input
+                    v-model="periodFrom"
+                    class="v4-inp"
+                    data-testid="deep-period-from"
+                    type="number"
+                    min="0"
+                    step="any"
+                    :aria-label="DEEP_LABELS.periodFrom"
+                  >
+                </label>
+                <label class="deep-period-field">
+                  <span>По, мин</span>
+                  <input
+                    v-model="periodTo"
+                    class="v4-inp"
+                    data-testid="deep-period-to"
+                    type="number"
+                    min="0"
+                    step="any"
+                    :aria-label="DEEP_LABELS.periodTo"
+                  >
+                </label>
+                <button
+                  type="button"
+                  class="v4-btn v4-btn--xs"
+                  data-testid="deep-period-apply"
+                  @click="applyPeriod"
+                >
+                  {{ DEEP_LABELS.periodApply }}
+                </button>
+                <button
+                  type="button"
+                  class="v4-btn v4-btn--xs"
+                  data-testid="deep-period-all"
+                  @click="wholePeriod"
+                >
+                  {{ DEEP_LABELS.periodAll }}
+                </button>
+              </div>
+              <div class="deep-period-meta v4-sub v4-num">
+                <span
+                  v-if="applied"
+                  data-testid="deep-period-snapped"
+                >{{ DEEP_LABELS.periodSnapped(offset(axis.fromMs - originMs), offset(axis.toMs - originMs)) }}</span>
+                <span
+                  v-if="hasSnapshot && grid"
+                  data-testid="deep-step-note"
+                >{{ DEEP_LABELS.cellStep(stepMs / 1000) }}</span>
+                <span data-testid="deep-load-note">{{ DEEP_LABELS.loadRollup(rollup) }}</span>
+              </div>
+            </div>
+            <p
+              v-if="invalidPeriod"
+              class="validation-error"
+              role="alert"
+            >
+              {{ DEEP_LABELS.periodInvalid }}
+            </p>
+          </div>
+
+          <DeepCursorChart
+            v-if="((deepMode === 'workbench' && workbenchTracks.length) || (deepMode === 'focus' && (primaryTrack || pinnedTracks.length))) && axis.toMs > axis.fromMs"
+            :primary-track="deepMode === 'focus' ? primaryTrack : null"
+            :tracks="deepMode === 'workbench' ? workbenchTracks : pinnedTracks"
+            :axis="axis"
+            :origin-ms="originMs"
+            :stages="stages"
+            :mode="deepMode"
+            @move-track="moveTrack"
+            @remove-track="removeTrack"
+          />
+          <p
+            v-if="loadOutside"
+            class="v4-sub"
+          >
+            {{ DEEP_LABELS.loadOutsideRun }}
+          </p>
+          <p
+            v-else-if="!load.some((track) => track.points.length) && !loading"
+            class="v4-sub"
+          >
+            {{ DEEP_LABELS.loadEmpty }}
+          </p>
+          <p
+            v-if="truncated !== null"
+            class="v4-sub"
+          >
+            {{ DEEP_LABELS.loadTruncated(truncated) }}
+          </p>
+
+          <!-- Compact window stats strip -->
+          <div
+            v-if="primaryTrack && statTiles.length"
+            class="deep-stats-bar"
+            aria-labelledby="deep-stats-title"
+            data-testid="deep-stats"
+          >
+            <div class="deep-stats-bar__head">
+              <span
+                id="deep-stats-title"
+                class="v4-kicker"
+              >{{ DEEP_LABELS.statsTitle }}: {{ primaryTrack.label }}</span>
+            </div>
+            <dl
+              class="sstrip"
+              data-testid="deep-stat-tiles"
+            >
+              <div
+                v-for="tile in statTiles"
+                :key="tile.key"
+                class="sstrip__tile"
+                data-testid="deep-stat-tile"
+                :data-stat="tile.key"
+                :data-value="tile.raw"
+              >
+                <dt>{{ tile.label }}</dt>
+                <dd class="v4-num">
+                  {{ tile.value }}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.deep-panel,.deep-main { display:grid; gap:16px; min-width:0; }
-.deep-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(240px,320px); gap:16px; min-width:0; }
-.deep-layout > *, .deep-main > * { min-width:0; }
-.deep-header-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
-.deep-header-row h2 { margin:0; }
-.deep-nav-actions,.arm-switcher,.stage-bar,.deep-mode-switcher { display:flex; flex-wrap:wrap; gap:8px; }
-.catalog-facet-controls { display:grid; gap:8px; }
-.catalog-only-bad { display:inline-flex; align-items:center; gap:8px; font-size:13px; }
-.stage-bar { margin-bottom:12px; }
-.stage-btn { min-height:44px; min-width:44px; padding:8px 12px; overflow-wrap:anywhere; }
-.stage-btn[aria-pressed="true"],.metric-select-btn[aria-pressed="true"] { border-color:var(--brand); background:var(--info-bg); color:var(--brand); font-weight:600; }
-.period-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-.period-fields label,.search-label { display:grid; gap:4px; min-width:0; }
-.period-fields input,.search-label input,.search-label select { width:100%; min-width:0; min-height:44px; }
-.period-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-button { min-height:44px; }
-.deep-stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin:0; }
-.deep-stat-tile { display:grid; gap:4px; padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface-inset); min-width:0; overflow-wrap:anywhere; }
-.deep-stat-tile dt { color:var(--text-muted); font-size:13px; }
-.deep-stat-tile dd { margin:0; font-size:1.1rem; font-weight:700; }
-.catalog-group { display:grid; gap:6px; margin-top:12px; min-width:0; }
-.catalog-group h3 { margin:0; font-size:14px; }
-.role-heading { margin:4px 0 2px; font-size:12px; font-weight:600; }
-.catalog-rows { display:grid; gap:4px; }
-.series-list { max-height:420px; overflow:auto; display:grid; gap:6px; }
-.series-row { display:flex; align-items:center; gap:8px; min-height:44px; min-width:0; }
-.series-row input { flex:none; width:20px; height:20px; }
-.metric-select-btn { flex:1; min-width:0; min-height:44px; padding:6px 8px; text-align:left; background:var(--surface-inset); border:1px solid var(--border); border-radius:4px; color:var(--text); overflow-wrap:anywhere; }
-@media (max-width:960px) { .deep-layout { grid-template-columns:minmax(0,1fr); } }
-@media (max-width:375px) { .period-fields { grid-template-columns:minmax(0,1fr); } }
+.deep-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.deep-top-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 14px;
+}
+
+.deep-top-bar__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.deep-top-bar__copy h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 650;
+}
+
+.deep-nav-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.deep-banners {
+  display: grid;
+  gap: 6px;
+}
+
+.deep-layout {
+  display: grid;
+  grid-template-columns: 312px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+.deep-layout > *,
+.deep-main > * {
+  min-width: 0;
+}
+
+.deep-main {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* LEFT Rubricator (Mockup v4.4) */
+.rubricator-panel {
+  position: sticky;
+  top: 66px;
+  max-height: calc(100vh - 84px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.rub-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.rub-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.rub-domain-seg {
+  width: 100%;
+}
+
+.rub-domain-seg button {
+  flex: 1 1 0;
+}
+
+.rub-subbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.rub-svc-select {
+  flex: 1 1 110px;
+  max-width: 100%;
+}
+
+.rub-limit-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--warn);
+}
+
+.rub-scroll {
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 2px;
+  min-height: 200px;
+}
+
+.rub-platform-wrap,
+.rub-service-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rub-group {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--surface-inset);
+  flex: none;
+}
+
+.rub-group__hd {
+  width: 100%;
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-inset);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+}
+
+.rub-group__hd:hover {
+  background: var(--surface-muted);
+}
+
+.rub-group__hd--static {
+  cursor: default;
+}
+
+.rub-group__hd--static:hover {
+  background: var(--surface-inset);
+}
+
+.rub-group__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rub-group__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.rub-items {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.rub-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 24px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.rub-row:last-child {
+  border-bottom: 0;
+}
+
+.rub-row:hover {
+  background: var(--surface-inset);
+}
+
+.rub-row.in-stack {
+  background: color-mix(in srgb, var(--info-bg) 55%, var(--surface));
+}
+
+.rub-row.is-primary {
+  box-shadow: inset 2px 0 0 var(--brand);
+}
+
+.rub-pick {
+  border: 0;
+  padding: 2px 0;
+  min-height: 22px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rub-pick:hover {
+  color: var(--brand);
+}
+
+.rub-dot-crit {
+  color: var(--fail);
+  margin-right: 3px;
+}
+
+.rub-meta-crit {
+  color: var(--fail);
+  font-weight: 650;
+}
+
+.add-lane-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.add-lane-toggle:hover:not(.disabled) {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.add-lane-toggle.on {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--brand-contrast);
+}
+
+.add-lane-toggle.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sr-check {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+/* RIGHT Workbench Card */
+.deep-workbench-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.deep-card-hd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.deep-card-hd h3 {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.deep-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.deep-period-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.deep-period-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.deep-period-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.deep-period-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.deep-period-field input {
+  width: 72px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.deep-period-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 11.5px;
+}
+
+.deep-stats-bar {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.sstrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(108px, 100%), 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.sstrip__tile {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-inset);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sstrip__tile dt {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sstrip__tile dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .deep-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rubricator-panel {
+    position: static;
+    max-height: 420px;
+  }
+}
 </style>

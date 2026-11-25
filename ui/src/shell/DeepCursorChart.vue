@@ -5,7 +5,7 @@ import { formatNumber, formatOffset } from './overview'
 import { cursorReadouts, cursorStops, deepLane, nearestTime, type DeepTrack, type TimeAxis } from './deep'
 import ChartFloatingTooltip, { type FloatingTooltipSection } from './ChartFloatingTooltip.vue'
 import TimeChart from './TimeChart.vue'
-import { plotFraction, type ChartStage } from './timeChart'
+import { plotFraction, type ChartStage, type ChartToken } from './timeChart'
 
 const props = withDefaults(defineProps<{
   tracks: DeepTrack[]
@@ -17,14 +17,22 @@ const props = withDefaults(defineProps<{
 }>(), {
   primaryTrack: null,
   stages: () => [],
-  mode: 'focus',
+  mode: 'workbench',
 })
+
+const emit = defineEmits<{
+  'move-track': [key: string, dir: -1 | 1]
+  'remove-track': [key: string]
+}>()
 
 const cursorMs = ref<number | null>(null)
 const pointerPos = ref({ x: 0, y: 0 })
 const hoverActive = ref(false)
 const pinned = ref(false)
 const hintId = useId()
+
+const LANE_TOKENS: ChartToken[] = ['c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7']
+const TOOLTIP_COLORS = ['#60A5FA', '#FBBF24', '#2DD4BF', '#C084FC', '#818CF8', '#F472B6', '#34D399', '#FF7B72']
 
 const allTracks = computed(() => (props.primaryTrack ? [props.primaryTrack, ...props.tracks] : props.tracks))
 const stops = computed(() => cursorStops(allTracks.value).filter((time) => time >= props.axis.fromMs && time < props.axis.toMs))
@@ -36,13 +44,24 @@ const lanes = computed(() => allTracks.value.map((track, index) => {
   const isPrimary = props.mode === 'focus' && Boolean(props.primaryTrack && index === 0)
   const timeLabels = index === allTracks.value.length - 1
   const stageLabels = index === 0
+  const baseLane = deepLane(track, props.axis)
+  const colorToken: ChartToken = track.key === 'load-errors' || track.key === 'load-error-rate'
+    ? 'fail'
+    : LANE_TOKENS[index % LANE_TOKENS.length]
+  const lane = {
+    ...baseLane,
+    color: colorToken,
+    area: props.mode === 'workbench' || isPrimary,
+  }
   return {
     track,
+    index,
     isPrimary,
-    lane: deepLane(track, props.axis),
+    colorVar: colorToken === 'fail' ? 'var(--c-err, var(--fail))' : `var(--c-${index % 8})`,
+    lane,
     flags: isPrimary
       ? { timeLabels, stageLabels, plotHeight: timeLabels ? 192 : 236, ySplits: 4 }
-      : { timeLabels, stageLabels, plotHeight: props.mode === 'workbench' ? 98 : 88 },
+      : { timeLabels, stageLabels, plotHeight: props.mode === 'workbench' ? 96 : 86, ySplits: 2 },
   }
 }))
 
@@ -55,8 +74,6 @@ const activeStage = computed(() => {
   return st ? st.id : ''
 })
 
-const TOOLTIP_COLORS = ['#60A5FA', '#FBBF24', '#2DD4BF', '#C084FC', '#818CF8', '#F472B6', '#34D399', '#FF7B72']
-
 const tooltipSections = computed<FloatingTooltipSection[]>(() => {
   if (cursorMs.value === null) return []
   const rows = allTracks.value.map((track, idx) => {
@@ -67,7 +84,7 @@ const tooltipSections = computed<FloatingTooltipSection[]>(() => {
       key: track.key,
       label: track.label,
       value: !item || item.gap ? DEEP_LABELS.gap : `${item.text} ${track.unit}`,
-      color: track.key === 'load-errors' ? '#FF7B72' : TOOLTIP_COLORS[idx % TOOLTIP_COLORS.length],
+      color: track.key === 'load-errors' || track.key === 'load-error-rate' ? '#FF7B72' : TOOLTIP_COLORS[idx % TOOLTIP_COLORS.length],
       breach: breached,
     }
   })
@@ -107,6 +124,7 @@ function onPointerLeave() {
 }
 
 function onPlotClick(event: MouseEvent) {
+  if ((event.target as HTMLElement | null)?.closest('button')) return
   if (cursorMs.value === null) return
   if (pinned.value) {
     pinned.value = false
@@ -165,47 +183,92 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
       @click="onPlotClick"
     >
       <template
-        v-for="({ track, isPrimary, lane, flags }, laneIndex) in lanes"
+        v-for="({ track, index, isPrimary, colorVar, lane, flags }) in lanes"
         :key="track.key"
       >
         <p
-          v-if="mode === 'focus' && primaryTrack && tracks.length && laneIndex === 1"
-          class="pinned-heading muted"
+          v-if="mode === 'focus' && primaryTrack && tracks.length && index === 1"
+          class="pinned-heading v4-kicker"
           data-testid="deep-pinned-heading"
         >
           {{ DEEP_LABELS.pinnedTitle }}
         </p>
         <div
-          class="deep-track"
+          class="wb-lane deep-track"
           :class="[track.kind === 'resource' ? 'resource' : track.key, { 'deep-track--primary': isPrimary }]"
           :data-testid="'deep-track-' + track.key"
           :data-primary="isPrimary ? 'true' : 'false'"
         >
-          <p class="deep-head">
-            <span
-              v-if="isPrimary"
-              class="primary-badge"
-              data-testid="deep-primary-badge"
-            >{{ DEEP_LABELS.primaryBadge }}</span>
-            <span class="track-name">{{ track.label }}<template v-if="track.reducer"> ({{ DEEP_LABELS.reducerLabels[track.reducer] }})</template></span>
-            <strong
-              :data-testid="'track-value-' + track.key"
-              :data-value="readout(track.key)?.raw ?? ''"
-            >{{ valueText(track) }}</strong>
-            <span
-              v-if="readout(track.key)?.partial"
-              class="muted"
-            >{{ DEEP_LABELS.partialCell(readout(track.key)!.observed!, readout(track.key)!.total!) }}</span>
-            <span class="muted">{{ DEEP_LABELS.trackMax(formatNumber(track.max)) }} {{ track.unit }}</span>
-            <span
-              v-for="threshold in track.thresholds"
-              :key="threshold.ruleId"
-              class="threshold-text"
-              :class="{ violated: threshold.violated }"
-              :data-testid="'deep-threshold-label-' + threshold.ruleId"
-              :data-violated="threshold.violated"
-            >{{ DEEP_LABELS.thresholdLabel(threshold.operator, formatNumber(threshold.value), track.unit, threshold.violated) }}</span>
-          </p>
+          <div class="wb-lane__hd">
+            <div class="wb-lane__title">
+              <span
+                class="wb-lane__swatch"
+                :style="{ backgroundColor: colorVar }"
+                aria-hidden="true"
+              />
+              <span
+                v-if="isPrimary"
+                class="primary-badge"
+                data-testid="deep-primary-badge"
+              >{{ DEEP_LABELS.primaryBadge }}</span>
+              <strong class="track-name">{{ track.label }}<template v-if="track.reducer"> ({{ DEEP_LABELS.reducerLabels[track.reducer] }})</template></strong>
+              <span class="wb-lane__kind v4-kicker">{{ track.kind === 'resource' ? 'ПЛАТФОРМА' : 'НАГРУЗКА' }}</span>
+              <span
+                v-for="threshold in track.thresholds"
+                :key="threshold.ruleId"
+                class="threshold-text"
+                :class="{ violated: threshold.violated }"
+                :data-testid="'deep-threshold-label-' + threshold.ruleId"
+                :data-violated="threshold.violated"
+              >{{ DEEP_LABELS.thresholdLabel(threshold.operator, formatNumber(threshold.value), track.unit, threshold.violated) }}</span>
+            </div>
+            <div class="wb-lane__right">
+              <span class="v4-sub v4-num">{{ DEEP_LABELS.trackMax(formatNumber(track.max)) }} {{ track.unit }}</span>
+              <strong
+                class="wb-lane__val v4-num"
+                :data-testid="'track-value-' + track.key"
+                :data-value="readout(track.key)?.raw ?? ''"
+              >{{ valueText(track) }}</strong>
+              <span
+                v-if="readout(track.key)?.partial"
+                class="v4-sub"
+              >{{ DEEP_LABELS.partialCell(readout(track.key)!.observed!, readout(track.key)!.total!) }}</span>
+              <div
+                v-if="mode === 'workbench' && lanes.length > 1"
+                class="wb-lane__controls"
+              >
+                <button
+                  type="button"
+                  class="v4-btn v4-btn--xs"
+                  :disabled="index === 0"
+                  aria-label="Поднять дорожку выше"
+                  title="Выше"
+                  @click.stop="emit('move-track', track.key, -1)"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  class="v4-btn v4-btn--xs"
+                  :disabled="index === lanes.length - 1"
+                  aria-label="Опустить дорожку ниже"
+                  title="Ниже"
+                  @click.stop="emit('move-track', track.key, 1)"
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  class="v4-btn v4-btn--xs"
+                  aria-label="Убрать дорожку из стопки"
+                  title="Убрать"
+                  @click.stop="emit('remove-track', track.key)"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          </div>
           <TimeChart
             :lane="lane"
             :frame="frame"
@@ -232,39 +295,42 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
     />
 
     <p
-      class="axis-title"
+      class="axis-title v4-sub"
       data-testid="chart-axis-title"
     >
       {{ DEEP_LABELS.axisLabel }}
     </p>
-    <p
-      data-testid="deep-cursor-time"
-      :data-ms="relativeMs"
-      :data-epoch-ms="cursorMs"
-    >
-      {{ relativeMs === null ? DEEP_LABELS.cursorNone : DEEP_LABELS.cursorTime(formatNumber(relativeMs, 0), offset(relativeMs)) }}
-    </p>
-    <input
-      v-if="stops.length"
-      type="range"
-      class="slider"
-      data-testid="deep-cursor"
-      min="0"
-      :max="stops.length - 1"
-      step="1"
-      :value="stopIndex"
-      :aria-label="DEEP_LABELS.cursorLabel"
-      :aria-describedby="hintId"
-      :aria-valuetext="ariaText"
-      @focus="focusCursor"
-      @input="inputCursor"
-    >
-    <p
-      :id="hintId"
-      class="muted"
-    >
-      {{ DEEP_LABELS.cursorHint }}
-    </p>
+    <div class="deep-scrubber">
+      <p
+        class="v4-sub v4-num"
+        data-testid="deep-cursor-time"
+        :data-ms="relativeMs"
+        :data-epoch-ms="cursorMs"
+      >
+        {{ relativeMs === null ? DEEP_LABELS.cursorNone : DEEP_LABELS.cursorTime(formatNumber(relativeMs, 0), offset(relativeMs)) }}
+      </p>
+      <input
+        v-if="stops.length"
+        type="range"
+        class="slider"
+        data-testid="deep-cursor"
+        min="0"
+        :max="stops.length - 1"
+        step="1"
+        :value="stopIndex"
+        :aria-label="DEEP_LABELS.cursorLabel"
+        :aria-describedby="hintId"
+        :aria-valuetext="ariaText"
+        @focus="focusCursor"
+        @input="inputCursor"
+      >
+      <p
+        :id="hintId"
+        class="v4-sub deep-scrubber__hint"
+      >
+        {{ DEEP_LABELS.cursorHint }}
+      </p>
+    </div>
   </div>
 </template>
 
@@ -281,58 +347,127 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
   cursor: crosshair;
 }
 
-.deep-track {
+.wb-lane {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-inset);
+  padding: 7px 10px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
 }
 
 .deep-track--primary {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  border-color: var(--brand);
+}
+
+.wb-lane__hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+
+.wb-lane__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.wb-lane__swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.wb-lane__kind {
+  font-size: 10px;
+}
+
+.wb-lane__right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wb-lane__val {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.wb-lane__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .primary-badge {
-  padding: 0 6px;
+  padding: 1px 6px;
   border-radius: 4px;
   background: var(--info-bg);
   color: var(--brand);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .pinned-heading {
   margin: 4px 0 0;
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .threshold-text {
+  font-size: 11.5px;
   color: var(--text-muted);
 }
 
 .threshold-text.violated {
   color: var(--fail);
-}
-
-.deep-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  margin: 0 0 4px;
-  overflow-wrap: anywhere;
+  font-weight: 600;
 }
 
 .track-name {
-  font-weight: 600;
+  font-weight: 650;
+  font-size: 12.5px;
 }
 
 .axis-title {
   margin: 0 16px 0 56px;
   text-align: center;
+  font-size: 11px;
+}
+
+.deep-scrubber {
+  display: grid;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.deep-scrubber p {
+  margin: 0;
+  font-size: 11.5px;
+}
+
+.deep-scrubber__hint {
+  color: var(--text-muted);
 }
 
 .slider {
   width: 100%;
-  min-height: 44px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
   margin: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--brand);
 }
 </style>

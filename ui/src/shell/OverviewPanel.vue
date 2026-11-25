@@ -27,7 +27,6 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ navigate: [target: AttentionTarget] }>()
 
-// Карта «сервис x плечо» нужна, только если у выбранного анализа есть метка плеча (resource_arm в списке анализов).
 const armed = computed(() => props.analyses?.some((analysis) => analysis.analysis_id === props.analysisId && !!analysis.resource_arm) ?? false)
 const LIMIT = 6
 const expanded = ref(false)
@@ -73,6 +72,7 @@ function sparklineLane(seriesId: string, color: ChartToken = 'brand'): ChartLane
   return {
     key: `spark:${seriesId}`,
     color,
+    area: true,
     segments: track.segments.flatMap((segment) => {
       const points = segment.flatMap((index) => {
         const point = track.points[index]
@@ -82,14 +82,26 @@ function sparklineLane(seriesId: string, color: ChartToken = 'brand'): ChartLane
     }),
     lo: Math.min(0, track.min),
     hi: track.max > 0 ? track.max : 1,
+    thresholds: track.thresholds.map((t) => ({ id: t.ruleId, value: t.value, text: '', violated: t.violated })),
   }
+}
+
+function incidentSparkline(action: IncidentAction | null, priority: string): ChartLane | null {
+  if (!action || action.kind !== 'navigate' || !action.target.seriesId) return null
+  const color: ChartToken = priority === 'HIGH' ? 'fail' : priority === 'MEDIUM' ? 'warn' : 'brand'
+  return sparklineLane(action.target.seriesId, color)
 }
 
 async function loadSparklines() {
   if (!hasResourceBinding || props.result.run_validity === 'INVALID') return
+  const incidentSeries = [
+    ...incidents.value.overviewItems,
+    ...incidents.value.moreItems,
+  ].flatMap((item) => (item.primaryAction?.kind === 'navigate' && item.primaryAction.target.seriesId ? [item.primaryAction.target.seriesId] : []))
   const wantedIds = [...new Set([
     ...platform.value.map((tile) => tile.seriesId),
     ...(trends.value?.cards.map((card) => card.seriesId) ?? []),
+    ...incidentSeries,
   ])]
   if (!wantedIds.length) return
   try {
@@ -132,7 +144,6 @@ async function loadSparklines() {
   }
 }
 
-// Обзор грузит весь прогон сам: шаг и диапазон вкладки «Таблицы» на него не влияют.
 onMounted(async () => {
   if (props.result.run_validity === 'INVALID') return
   loading.value = true
@@ -181,37 +192,36 @@ const kindLabels: Record<AttentionKind, string> = {
     data-testid="overview-panel"
     lang="ru"
   >
-    <LogErrorsPanel
-      :result="result"
-      :run-id="runId"
-      :analysis-id="analysisId"
-      @open-service="emit('navigate', { tab: 'deep', targetId: 'deep-title' })"
-    />
-
-    <PlatformMap
-      v-if="armed && analyses"
-      :run-id="runId"
-      :analyses="analyses"
-      :analysis-id="analysisId"
-      :result="result"
-      @open-service="emit('navigate', { tab: 'deep', targetId: 'deep-title' })"
-    />
-
+    <!-- 1. HERO LOAD & LATENCY CHART (Mockup v4.4 — right under Verdict!) -->
     <section
-      v-if="stageList.length"
-      id="overview-stages"
-      class="panel"
-      aria-labelledby="overview-stages-title"
-      data-testid="overview-stages"
+      id="overview-load"
+      class="panel overview-hero-card"
+      aria-labelledby="overview-load-title"
     >
-      <h2 id="overview-stages-title">
-        {{ OVERVIEW_LABELS.stageRibbonTitle }}
-      </h2>
-      <p class="muted">
-        {{ OVERVIEW_LABELS.stageRibbonLead }}
-      </p>
+      <div class="overview-section-head">
+        <div>
+          <h2 id="overview-load-title">
+            {{ OVERVIEW_LABELS.loadTitle }}
+          </h2>
+          <p class="v4-sub">
+            {{ OVERVIEW_LABELS.loadLead }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="v4-btn v4-btn--xs"
+          @click="emit('navigate', { tab: 'deep', targetId: 'deep-title' })"
+        >
+          Открыть в Глубоком анализе →
+        </button>
+      </div>
+
+      <!-- Inline proportional Stage Ribbon (Mockup v4.4 .stages-bar) -->
       <div
-        class="overview-stage-ribbon"
+        v-if="stageList.length"
+        id="overview-stages"
+        class="stages-bar"
+        data-testid="overview-stages"
         role="group"
         :aria-label="OVERVIEW_LABELS.stageRibbonTitle"
       >
@@ -219,46 +229,101 @@ const kindLabels: Record<AttentionKind, string> = {
           v-for="stage in stageList"
           :key="stage.id"
           type="button"
-          class="overview-stage-pill"
-          :class="{ 'overview-stage-pill--steady': stage.steady }"
+          class="stg-btn overview-stage-btn"
+          :class="{ 'stg-btn--steady': stage.steady }"
+          :style="{ flex: `${Math.max(1, stage.toMs - stage.fromMs)} 1 0` }"
           data-testid="overview-stage"
           :data-stage="stage.id"
           :data-role="stage.role"
           :aria-label="OVERVIEW_LABELS.stageOpenAria(stage.id, `${formatOffset(stage.fromMs - originMs)} – ${formatOffset(stage.toMs - originMs)}`)"
           @click="emit('navigate', { tab: 'deep', targetId: 'deep-title', stageId: stage.id })"
         >
-          <strong>{{ stage.id }}</strong>
-          <span class="overview-stage-pill__meta">{{ OVERVIEW_LABELS.stageRoleLabels[stage.role] ?? stage.role }} · {{ formatOffset(stage.fromMs - originMs) }}–{{ formatOffset(stage.toMs - originMs) }}</span>
+          <b>{{ stage.id }}</b>
+          <span>{{ formatOffset(stage.fromMs - originMs) }}–{{ formatOffset(stage.toMs - originMs) }}</span>
         </button>
       </div>
+
+      <p
+        v-if="loading"
+        class="v4-sub"
+        data-testid="load-loading"
+      >
+        {{ OVERVIEW_LABELS.loadLoading }}
+      </p>
+      <p
+        v-else-if="loadError"
+        class="notice notice-fail"
+        role="alert"
+        data-testid="load-error"
+      >
+        {{ loadError }}
+      </p>
+      <SharedCursorChart
+        v-else-if="series.points.length"
+        :series="series"
+        :stages="stages"
+        :p95-thresholds="p95Thresholds"
+        :transactions="transactions"
+        :run-id="runId"
+        :analysis-id="analysisId"
+      />
+      <p
+        v-else
+        class="v4-sub"
+        data-testid="load-empty"
+      >
+        {{ OVERVIEW_LABELS.loadEmpty }}
+      </p>
+      <p
+        v-if="runLoad.truncated"
+        class="v4-sub"
+        data-testid="load-partial"
+      >
+        {{ OVERVIEW_LABELS.loadPartial(runLoad.buckets.length, runLoad.rollupSeconds) }}
+      </p>
     </section>
 
+    <!-- 2. INCIDENTS 3-COLUMN GRID (Mockup v4.4) -->
     <section
       v-if="incidents.status !== 'ABSENT'"
       id="overview-incidents"
-      class="panel"
+      class="overview-incidents-section"
       aria-labelledby="overview-incidents-title"
       data-testid="overview-incidents"
     >
-      <h2 id="overview-incidents-title">
-        {{ OVERVIEW_LABELS.incidentsTitle }}
-      </h2>
+      <div class="overview-section-head">
+        <div>
+          <h2 id="overview-incidents-title">
+            {{ OVERVIEW_LABELS.incidentsTitle }}
+          </h2>
+          <p class="v4-sub">
+            {{ OVERVIEW_LABELS.incidentsLead }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="v4-btn v4-btn--xs"
+          @click="emit('navigate', { tab: 'deep', targetId: 'deep-title' })"
+        >
+          Открыть ряды инцидентов в Свободном сравнении →
+        </button>
+      </div>
+
       <p
         v-if="incidents.status === 'NOT_EVALUATED'"
+        class="panel v4-sub"
         data-testid="incidents-not-evaluated"
       >
         {{ OVERVIEW_LABELS.incidentsNotEvaluated(incidents.reasonCode) }}
       </p>
       <p
         v-else-if="!incidents.overviewItems.length && !incidents.moreItems.length && !incidents.omittedCount"
+        class="panel v4-sub"
         data-testid="incidents-empty"
       >
         {{ OVERVIEW_LABELS.incidentsEmpty }}
       </p>
       <template v-else>
-        <p class="muted">
-          {{ OVERVIEW_LABELS.incidentsLead }}
-        </p>
         <ol
           class="overview-incidents"
           data-testid="incidents-list"
@@ -267,25 +332,23 @@ const kindLabels: Record<AttentionKind, string> = {
             v-for="card in incidents.overviewItems"
             :id="`incident-${card.id}`"
             :key="card.id"
-            class="incident-card"
+            class="inc-card"
             tabindex="-1"
             data-testid="incident-card"
             :data-priority="card.priority"
             :data-family="card.family"
           >
-            <div class="incident-card__head">
-              <span class="incident-card__rank">{{ OVERVIEW_LABELS.incidentRank(card.rank) }}</span>
+            <div class="inc-card__top">
               <span
-                class="incident-card__priority"
-                :data-priority="card.priority"
-              >{{ card.priorityLabel }}</span>
-              <span class="incident-card__family">{{ card.familyLabel }}</span>
-              <strong class="incident-card__title">{{ card.title }}</strong>
+                class="v4-pill"
+                :class="card.priority === 'HIGH' ? 'v4-pill--crit' : card.priority === 'MEDIUM' ? 'v4-pill--warn' : 'v4-pill--info'"
+              >{{ card.priorityLabel }} · {{ OVERVIEW_LABELS.incidentRank(card.rank) }}</span>
+              <span class="v4-pill v4-pill--info">{{ card.familyLabel }}</span>
             </div>
-            <p class="incident-card__summary">
-              {{ card.summary }}
-            </p>
-            <p class="incident-card__meta muted">
+            <h3 class="inc-card__title">
+              {{ card.title }}
+            </h3>
+            <p class="inc-card__meta v4-sub v4-num">
               <span>{{ card.scopeLabel }}</span>
               <span>{{ OVERVIEW_LABELS.incidentWindow(card.windowId) }}</span>
               <span>{{ card.intervalText }}</span>
@@ -293,38 +356,49 @@ const kindLabels: Record<AttentionKind, string> = {
               <span v-if="card.refsTruncated">{{ OVERVIEW_LABELS.incidentRefsTruncated }}</span>
             </p>
             <div
-              v-if="card.coincidentWith.length"
-              class="incident-card__coincident"
+              v-if="incidentSparkline(card.primaryAction, card.priority) && sparklineFrame"
+              class="inc-card__spark"
             >
-              <span class="muted">{{ OVERVIEW_LABELS.incidentCoincidentLabel }}</span>
-              <button
-                v-for="link in card.coincidentWith"
-                :key="link.incidentId"
-                type="button"
-                class="incident-chip"
-                data-testid="incident-coincident"
-                :disabled="!link.inStored"
-                @click="jumpToIncident(link.incidentId)"
-              >
-                {{ link.targetTitle ?? link.incidentId.slice(0, 18) }} ({{ link.basisLabel }})
-              </button>
+              <TimeChart
+                :lane="incidentSparkline(card.primaryAction, card.priority)!"
+                :frame="sparklineFrame"
+                :stages="[]"
+                :flags="{ timeLabels: false, stageLabels: false, sparkline: true, plotHeight: 56 }"
+              />
             </div>
-            <div class="incident-card__actions">
+            <p class="inc-card__summary">
+              {{ card.summary }}
+            </p>
+            <div class="inc-card__foot">
+              <div class="inc-card__coinc">
+                <button
+                  v-for="link in card.coincidentWith"
+                  :key="link.incidentId"
+                  type="button"
+                  class="coinc-btn"
+                  data-testid="incident-coincident"
+                  :disabled="!link.inStored"
+                  @click="jumpToIncident(link.incidentId)"
+                >
+                  ⚡ {{ link.targetTitle ?? link.incidentId.slice(0, 18) }} ({{ link.basisLabel }})
+                </button>
+              </div>
               <button
                 v-if="card.primaryAction"
                 type="button"
+                class="v4-btn v4-btn--xs"
                 data-testid="incident-open"
                 :aria-label="`${card.primaryAction.label}: ${card.title}`"
                 @click="runAction(card.primaryAction)"
               >
-                {{ card.primaryAction.label }}
+                {{ card.primaryAction.label }} →
               </button>
             </div>
-            <details class="incident-card__details">
+            <details class="inc-card__details">
               <summary>{{ OVERVIEW_LABELS.incidentNegativeSummary(card.negativeEvidence.length) }}</summary>
               <p
                 v-if="!card.negativeEvidence.length"
-                class="muted"
+                class="v4-sub"
               >
                 {{ OVERVIEW_LABELS.incidentNegativeEmpty }}
               </p>
@@ -339,7 +413,7 @@ const kindLabels: Record<AttentionKind, string> = {
                 </li>
               </ul>
             </details>
-            <details class="incident-card__details">
+            <details class="inc-card__details">
               <summary>{{ OVERVIEW_LABELS.incidentNextSummary(card.nextChecks.length) }}</summary>
               <ul>
                 <li
@@ -350,7 +424,7 @@ const kindLabels: Record<AttentionKind, string> = {
                   <button
                     v-if="next.action"
                     type="button"
-                    class="incident-next-btn"
+                    class="v4-btn v4-btn--xs inc-next-btn"
                     data-testid="incident-next-action"
                     @click="runAction(next.action)"
                   >
@@ -365,7 +439,7 @@ const kindLabels: Record<AttentionKind, string> = {
         <template v-if="incidents.moreItems.length">
           <button
             type="button"
-            class="incidents-more-btn"
+            class="v4-btn incidents-more-btn"
             data-testid="incidents-more"
             :aria-expanded="incidentsExpanded"
             @click="incidentsExpanded = !incidentsExpanded"
@@ -383,45 +457,49 @@ const kindLabels: Record<AttentionKind, string> = {
           </button>
           <ol
             v-if="incidentsExpanded"
-            class="overview-incidents overview-incidents--overflow"
-            data-testid="incidents-overflow-list"
+            class="overview-incidents"
+            data-testid="incidents-more-list"
           >
             <li
               v-for="card in incidents.moreItems"
               :id="`incident-${card.id}`"
               :key="card.id"
-              class="incident-card incident-card--compact"
+              class="inc-card"
               tabindex="-1"
               data-testid="incident-overflow-card"
               :data-priority="card.priority"
               :data-family="card.family"
             >
-              <div class="incident-card__head">
-                <span class="incident-card__rank">{{ OVERVIEW_LABELS.incidentRank(card.rank) }}</span>
+              <div class="inc-card__top">
                 <span
-                  class="incident-card__priority"
-                  :data-priority="card.priority"
-                >{{ card.priorityLabel }}</span>
-                <span class="incident-card__family">{{ card.familyLabel }}</span>
-                <strong class="incident-card__title">{{ card.title }}</strong>
+                  class="v4-pill"
+                  :class="card.priority === 'HIGH' ? 'v4-pill--crit' : card.priority === 'MEDIUM' ? 'v4-pill--warn' : 'v4-pill--info'"
+                >{{ card.priorityLabel }} · {{ OVERVIEW_LABELS.incidentRank(card.rank) }}</span>
+                <span class="v4-pill v4-pill--info">{{ card.familyLabel }}</span>
               </div>
-              <p class="incident-card__summary">
-                {{ card.summary }}
-              </p>
-              <p class="incident-card__meta muted">
+              <h3 class="inc-card__title">
+                {{ card.title }}
+              </h3>
+              <p class="inc-card__meta v4-sub v4-num">
                 <span>{{ card.scopeLabel }}</span>
                 <span>{{ OVERVIEW_LABELS.incidentWindow(card.windowId) }}</span>
                 <span>{{ card.intervalText }}</span>
                 <span>{{ OVERVIEW_LABELS.incidentFindings(card.findingCount) }}</span>
               </p>
-              <div class="incident-card__actions">
+              <p class="inc-card__summary">
+                {{ card.summary }}
+              </p>
+              <div class="inc-card__foot">
+                <div class="inc-card__coinc" />
                 <button
                   v-if="card.primaryAction"
                   type="button"
-                  data-testid="incident-overflow-open"
+                  class="v4-btn v4-btn--xs"
+                  data-testid="incident-open"
+                  :aria-label="`${card.primaryAction.label}: ${card.title}`"
                   @click="runAction(card.primaryAction)"
                 >
-                  {{ card.primaryAction.label }}
+                  {{ card.primaryAction.label }} →
                 </button>
               </div>
             </li>
@@ -429,7 +507,7 @@ const kindLabels: Record<AttentionKind, string> = {
         </template>
         <p
           v-if="incidents.omittedCount > 0"
-          class="muted"
+          class="v4-sub"
           data-testid="incidents-omitted"
         >
           {{ OVERVIEW_LABELS.incidentOmittedNote(incidents.omittedCount) }}
@@ -437,19 +515,181 @@ const kindLabels: Record<AttentionKind, string> = {
       </template>
     </section>
 
+    <!-- 3. ПВС LOG ERRORS & JTL PROTOCOL ERRORS (Mockup v4.4) -->
+    <LogErrorsPanel
+      :result="result"
+      :run-id="runId"
+      :analysis-id="analysisId"
+      @open-service="emit('navigate', { tab: 'deep', targetId: 'deep-title' })"
+    />
+
+    <!-- 4. PLATFORM ARM MATRIX (Mockup v4.4) -->
+    <PlatformMap
+      v-if="armed && analyses"
+      :run-id="runId"
+      :analyses="analyses"
+      :analysis-id="analysisId"
+      :result="result"
+      @open-service="emit('navigate', { tab: 'deep', targetId: 'deep-title' })"
+    />
+
+    <!-- 5. TOP PLATFORM METRICS TILES (Mockup v4.4 .grid4 .tile-btn) -->
+    <section
+      v-if="platform.length"
+      id="overview-platform"
+      class="panel overview-diag-card"
+      aria-labelledby="overview-platform-title"
+      data-testid="overview-platform"
+    >
+      <div class="overview-section-head">
+        <div>
+          <h2 id="overview-platform-title">
+            {{ OVERVIEW_LABELS.platformTitle }}
+          </h2>
+          <p class="v4-sub">
+            {{ OVERVIEW_LABELS.platformLead }}
+          </p>
+        </div>
+      </div>
+      <div class="overview-grid4">
+        <article
+          v-for="tile in platform"
+          :key="tile.seriesId"
+          class="tile-card"
+          data-testid="overview-platform-tile"
+          :data-status="tile.status"
+        >
+          <div class="tile-card__top">
+            <strong class="tile-card__name">{{ tile.seriesId }}</strong>
+            <span
+              class="v4-pill"
+              :class="tile.status === 'FAIL' ? 'v4-pill--crit' : tile.status === 'DIAGNOSTIC' || tile.status === 'NO_VERDICT' ? 'v4-pill--warn' : 'v4-pill--good'"
+            >{{ tile.statusLabel }}</span>
+          </div>
+          <div class="tile-card__val v4-num">
+            <b>{{ tile.peakText }}</b>
+            <span v-if="tile.unit">{{ tile.unit }}</span>
+          </div>
+          <TimeChart
+            v-if="sparklineLane(tile.seriesId, tile.status === 'FAIL' ? 'fail' : tile.status === 'DIAGNOSTIC' ? 'warn' : 'brand') && sparklineFrame"
+            :lane="sparklineLane(tile.seriesId, tile.status === 'FAIL' ? 'fail' : tile.status === 'DIAGNOSTIC' ? 'warn' : 'brand')!"
+            :frame="sparklineFrame"
+            :stages="[]"
+            :flags="{ timeLabels: false, stageLabels: false, sparkline: true, plotHeight: 42 }"
+          />
+          <p class="v4-sub tile-card__meta">
+            {{ tile.entity }} · {{ tile.metric }} · {{ tile.windowId }}
+            <span v-if="tile.missingCells > 0"> · {{ OVERVIEW_LABELS.platformMissing(tile.missingCells) }}</span>
+          </p>
+          <button
+            type="button"
+            class="v4-btn v4-btn--xs"
+            data-testid="overview-platform-open"
+            @click="emit('navigate', { tab: 'deep', targetId: 'deep-title', stageId: tile.windowId, seriesId: tile.seriesId })"
+          >
+            {{ OVERVIEW_LABELS.platformOpenDeep }} →
+          </button>
+        </article>
+      </div>
+    </section>
+
+    <!-- 6. TRENDS IN STEADY WINDOW (Mockup v4.4 .grid3) -->
+    <section
+      v-if="trends"
+      id="overview-trends"
+      class="panel overview-diag-card"
+      aria-labelledby="overview-trends-title"
+      data-testid="overview-trends"
+    >
+      <div class="overview-section-head">
+        <div>
+          <h2 id="overview-trends-title">
+            {{ OVERVIEW_LABELS.trendsTitle }}
+          </h2>
+          <p class="v4-sub">
+            {{ OVERVIEW_LABELS.trendsLead }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="v4-btn v4-btn--xs"
+          data-testid="overview-trends-table-btn"
+          @click="emit('navigate', { tab: 'tables', targetId: 'trend-results' })"
+        >
+          {{ OVERVIEW_LABELS.openTrends }}
+        </button>
+      </div>
+      <p
+        class="v4-sub"
+        data-testid="overview-trends-summary"
+      >
+        {{ OVERVIEW_LABELS.trendsSummaryCounts(trends.total, trends.observed, trends.notMaterial, trends.insufficient, trends.unavailable) }}
+      </p>
+      <p
+        v-if="!trends.cards.length"
+        class="v4-sub"
+      >
+        {{ OVERVIEW_LABELS.trendsEmpty }}
+      </p>
+      <div
+        v-else
+        class="overview-grid3"
+      >
+        <article
+          v-for="card in trends.cards"
+          :key="card.id"
+          class="tile-card"
+          data-testid="overview-trend-card"
+        >
+          <div class="tile-card__top">
+            <strong class="tile-card__name">{{ card.seriesId }}</strong>
+            <span class="v4-pill v4-pill--warn">{{ card.directionLabel }}</span>
+          </div>
+          <p class="v4-sub">
+            <span v-if="card.entity">{{ card.entity }} · </span>{{ card.windowId }}
+          </p>
+          <TimeChart
+            v-if="sparklineLane(card.seriesId, 'c3') && sparklineFrame"
+            :lane="sparklineLane(card.seriesId, 'c3')!"
+            :frame="sparklineFrame"
+            :stages="[]"
+            :flags="{ timeLabels: false, stageLabels: false, sparkline: true, plotHeight: 54 }"
+          />
+          <p class="tile-card__stats v4-sub v4-num">
+            <span>{{ OVERVIEW_LABELS.trendsSlope(card.slope, card.unit) }}</span>
+            <span>{{ OVERVIEW_LABELS.trendsShift(card.shift, card.unit) }}</span>
+            <span>{{ OVERVIEW_LABELS.trendsMedian(card.median, card.unit) }}</span>
+          </p>
+          <button
+            type="button"
+            class="v4-btn v4-btn--xs"
+            data-testid="overview-trend-open"
+            @click="emit('navigate', { tab: 'deep', targetId: 'deep-title', stageId: card.windowId, seriesId: card.seriesId })"
+          >
+            {{ OVERVIEW_LABELS.trendsOpenDeep }} →
+          </button>
+        </article>
+      </div>
+    </section>
+
+    <!-- 7. RESIDUAL ATTENTION -->
     <section
       v-if="showAttentionSection"
       id="overview-attention"
-      class="panel"
+      class="panel overview-diag-card"
       aria-labelledby="overview-attention-title"
     >
       <h2 id="overview-attention-title">
         {{ OVERVIEW_LABELS.attentionTitle }}
       </h2>
-      <p class="muted">
+      <p class="v4-sub">
         {{ attentionLeadText }}
       </p>
-      <p v-if="!items.length">
+      <p
+        v-if="!items.length"
+        class="v4-sub"
+        data-testid="attention-empty"
+      >
         {{ OVERVIEW_LABELS.attentionEmpty }}
       </p>
       <template v-else>
@@ -463,19 +703,26 @@ const kindLabels: Record<AttentionKind, string> = {
             data-testid="attention-item"
             :data-kind="attention.kind"
           >
-            <span class="overview-kind">{{ kindLabels[attention.kind] }}</span>
-            <span
-              v-if="attention.diagnostic"
-              class="overview-badge"
-            >{{ attention.badge ?? OVERVIEW_LABELS.diagnosticBadge }}</span>
-            <strong>{{ attention.title }}</strong>
+            <div class="overview-attention__row">
+              <span
+                class="v4-pill"
+                :class="attention.kind === 'violation' ? 'v4-pill--crit' : attention.kind === 'diagnostic' ? 'v4-pill--info' : 'v4-pill--warn'"
+              >{{ kindLabels[attention.kind] }}</span>
+              <span
+                v-if="attention.badge || attention.diagnostic"
+                class="overview-badge"
+                data-testid="diagnostic-badge"
+              >{{ attention.badge ?? OVERVIEW_LABELS.diagnosticBadge }}</span>
+              <strong>{{ attention.title }}</strong>
+            </div>
             <span
               v-if="attention.detail"
-              class="muted"
+              class="v4-sub"
             >{{ attention.detail }}</span>
             <button
               v-if="attention.target"
               type="button"
+              class="v4-btn v4-btn--xs"
               data-testid="attention-open"
               :aria-label="attention.openLabel + ': ' + attention.title"
               @click="emit('navigate', attention.target)"
@@ -487,6 +734,7 @@ const kindLabels: Record<AttentionKind, string> = {
         <button
           v-if="items.length > LIMIT"
           type="button"
+          class="v4-btn v4-btn--xs"
           data-testid="attention-more"
           :aria-expanded="expanded"
           @click="expanded = !expanded"
@@ -496,13 +744,14 @@ const kindLabels: Record<AttentionKind, string> = {
       </template>
       <p
         v-if="items.some((attention) => attention.diagnostic)"
-        class="muted"
+        class="v4-sub"
         data-testid="diagnostic-note"
       >
         {{ OVERVIEW_LABELS.diagnosticNote }}
       </p>
     </section>
 
+    <!-- 8. CAPACITY BLOCK (when capacity_step mode) -->
     <section
       v-if="capacity"
       id="overview-capacity"
@@ -513,7 +762,7 @@ const kindLabels: Record<AttentionKind, string> = {
       <h2 id="overview-capacity-title">
         {{ OVERVIEW_LABELS.capacityTitle }}
       </h2>
-      <p class="muted">
+      <p class="v4-sub">
         {{ OVERVIEW_LABELS.capacityLead }}
       </p>
       <p
@@ -546,7 +795,7 @@ const kindLabels: Record<AttentionKind, string> = {
         {{ OVERVIEW_LABELS.capacityGuardWarning }}
       </p>
       <h3>{{ OVERVIEW_LABELS.capacityChartTitle }}</h3>
-      <p class="muted">
+      <p class="v4-sub">
         {{ CAPACITY_LABELS.axisLabel }}: {{ capacity.axisText }}. {{ capacity.counts }}
       </p>
       <div
@@ -612,7 +861,7 @@ const kindLabels: Record<AttentionKind, string> = {
         </div>
       </div>
       <div
-        class="table-wrap"
+        class="v4-table-wrap"
         tabindex="0"
         role="region"
         :aria-label="OVERVIEW_LABELS.capacityTableRegion"
@@ -656,7 +905,7 @@ const kindLabels: Record<AttentionKind, string> = {
           </tbody>
         </table>
       </div>
-      <p class="muted">
+      <p class="v4-sub">
         {{ capacity.legend }}
       </p>
       <CapacityKneeChart
@@ -665,7 +914,7 @@ const kindLabels: Record<AttentionKind, string> = {
       />
       <p
         v-if="capacity.smallSample"
-        class="muted"
+        class="v4-sub"
         data-testid="capacity-block-small-sample-note"
         role="note"
       >
@@ -673,6 +922,7 @@ const kindLabels: Record<AttentionKind, string> = {
       </p>
       <button
         type="button"
+        class="v4-btn"
         data-testid="capacity-block-open"
         :aria-label="OVERVIEW_LABELS.capacityOpenAria"
         @click="emit('navigate', { tab: 'tables', targetId: 'capacity-results' })"
@@ -681,216 +931,43 @@ const kindLabels: Record<AttentionKind, string> = {
       </button>
     </section>
 
+    <!-- 9. COMPACT WHOLE-RUN SUMMARY STRIP -->
     <section
       v-if="tiles.length"
       id="overview-metrics"
-      class="panel"
+      class="panel overview-metrics-card"
       aria-labelledby="overview-metrics-title"
     >
-      <h2 id="overview-metrics-title">
-        {{ OVERVIEW_LABELS.metricsTitle }}
-      </h2>
-      <p
-        v-if="staged"
-        class="muted"
-        data-testid="metrics-whole-run-note"
-      >
-        {{ OVERVIEW_LABELS.metricsWholeRunNote }}
-      </p>
-      <p
-        v-if="result.analysis_mode === 'capacity_step'"
-        class="muted"
-        data-testid="metrics-capacity-note"
-      >
-        {{ OVERVIEW_LABELS.metricsCapacityNote }}
-      </p>
+      <div class="overview-section-head">
+        <h2 id="overview-metrics-title">
+          {{ OVERVIEW_LABELS.metricsTitle }}
+        </h2>
+        <span
+          v-if="staged"
+          class="v4-sub"
+          data-testid="metrics-whole-run-note"
+        >{{ OVERVIEW_LABELS.metricsWholeRunNote }}</span>
+        <span
+          v-if="result.analysis_mode === 'capacity_step'"
+          class="v4-sub"
+          data-testid="metrics-capacity-note"
+        >{{ OVERVIEW_LABELS.metricsCapacityNote }}</span>
+      </div>
       <dl class="overview-metrics">
         <div
           v-for="tile in tiles"
           :key="tile.key"
+          class="overview-metrics__tile"
           data-testid="metric-tile"
           :data-metric="tile.key"
           :data-value="tile.raw"
         >
           <dt>{{ tile.label }}</dt>
-          <dd>{{ tile.value }}</dd>
+          <dd class="v4-num">
+            {{ tile.value }}
+          </dd>
         </div>
       </dl>
-    </section>
-
-    <section
-      v-if="trends"
-      id="overview-trends"
-      class="panel"
-      aria-labelledby="overview-trends-title"
-      data-testid="overview-trends"
-    >
-      <div class="overview-section-head">
-        <h2 id="overview-trends-title">
-          {{ OVERVIEW_LABELS.trendsTitle }}
-        </h2>
-        <button
-          type="button"
-          data-testid="overview-trends-table-btn"
-          @click="emit('navigate', { tab: 'tables', targetId: 'trend-results' })"
-        >
-          {{ OVERVIEW_LABELS.openTrends }}
-        </button>
-      </div>
-      <p class="muted">
-        {{ OVERVIEW_LABELS.trendsLead }}
-      </p>
-      <p data-testid="overview-trends-summary">
-        {{ OVERVIEW_LABELS.trendsSummaryCounts(trends.total, trends.observed, trends.notMaterial, trends.insufficient, trends.unavailable) }}
-      </p>
-      <p
-        v-if="!trends.cards.length"
-        class="muted"
-      >
-        {{ OVERVIEW_LABELS.trendsEmpty }}
-      </p>
-      <div
-        v-else
-        class="overview-card-grid"
-      >
-        <article
-          v-for="card in trends.cards"
-          :key="card.id"
-          class="overview-mini-card"
-          data-testid="overview-trend-card"
-        >
-          <div class="overview-mini-card__head">
-            <strong>{{ card.seriesId }}</strong>
-            <span class="overview-badge">{{ card.directionLabel }}</span>
-          </div>
-          <p class="muted">
-            <span v-if="card.entity">{{ card.entity }} · </span>{{ card.windowId }}
-          </p>
-          <p class="overview-mini-card__stats">
-            <span>{{ OVERVIEW_LABELS.trendsSlope(card.slope, card.unit) }}</span>
-            <span>{{ OVERVIEW_LABELS.trendsShift(card.shift, card.unit) }}</span>
-            <span>{{ OVERVIEW_LABELS.trendsMedian(card.median, card.unit) }}</span>
-          </p>
-          <TimeChart
-            v-if="sparklineLane(card.seriesId, 'warn') && sparklineFrame"
-            :lane="sparklineLane(card.seriesId, 'warn')!"
-            :frame="sparklineFrame"
-            :stages="[]"
-            :flags="{ timeLabels: false, stageLabels: false, sparkline: true }"
-          />
-          <button
-            type="button"
-            data-testid="overview-trend-open"
-            @click="emit('navigate', { tab: 'deep', targetId: 'deep-title', stageId: card.windowId, seriesId: card.seriesId })"
-          >
-            {{ OVERVIEW_LABELS.trendsOpenDeep }}
-          </button>
-        </article>
-      </div>
-    </section>
-
-    <section
-      v-if="platform.length"
-      id="overview-platform"
-      class="panel"
-      aria-labelledby="overview-platform-title"
-      data-testid="overview-platform"
-    >
-      <h2 id="overview-platform-title">
-        {{ OVERVIEW_LABELS.platformTitle }}
-      </h2>
-      <p class="muted">
-        {{ OVERVIEW_LABELS.platformLead }}
-      </p>
-      <div class="overview-card-grid">
-        <article
-          v-for="tile in platform"
-          :key="tile.seriesId"
-          class="overview-mini-card"
-          data-testid="overview-platform-tile"
-          :data-status="tile.status"
-        >
-          <div class="overview-mini-card__head">
-            <strong>{{ tile.seriesId }}</strong>
-            <span
-              class="status-text"
-              :data-status="tile.status === 'DIAGNOSTIC' ? 'WARN' : tile.status"
-            >{{ tile.statusLabel }}</span>
-          </div>
-          <p class="muted">
-            {{ tile.entity }} · {{ tile.metric }} · {{ tile.windowId }}
-          </p>
-          <p class="overview-mini-card__stats">
-            <span>{{ OVERVIEW_LABELS.platformPeak(tile.peakText, tile.unit) }}</span>
-            <span v-if="tile.missingCells > 0">{{ OVERVIEW_LABELS.platformMissing(tile.missingCells) }}</span>
-          </p>
-          <TimeChart
-            v-if="sparklineLane(tile.seriesId, tile.status === 'FAIL' ? 'fail' : tile.status === 'DIAGNOSTIC' ? 'warn' : 'brand') && sparklineFrame"
-            :lane="sparklineLane(tile.seriesId, tile.status === 'FAIL' ? 'fail' : tile.status === 'DIAGNOSTIC' ? 'warn' : 'brand')!"
-            :frame="sparklineFrame"
-            :stages="[]"
-            :flags="{ timeLabels: false, stageLabels: false, sparkline: true }"
-          />
-          <button
-            type="button"
-            data-testid="overview-platform-open"
-            @click="emit('navigate', { tab: 'deep', targetId: 'deep-title', stageId: tile.windowId, seriesId: tile.seriesId })"
-          >
-            {{ OVERVIEW_LABELS.platformOpenDeep }}
-          </button>
-        </article>
-      </div>
-    </section>
-
-    <section
-      id="overview-load"
-      class="panel"
-      aria-labelledby="overview-load-title"
-    >
-      <h2 id="overview-load-title">
-        {{ OVERVIEW_LABELS.loadTitle }}
-      </h2>
-      <p class="muted">
-        {{ OVERVIEW_LABELS.loadLead }}
-      </p>
-      <p class="muted">
-        {{ OVERVIEW_LABELS.loadReadNote }}
-      </p>
-      <p
-        v-if="loading"
-        data-testid="load-loading"
-      >
-        {{ OVERVIEW_LABELS.loadLoading }}
-      </p>
-      <p
-        v-else-if="loadError"
-        role="alert"
-        data-testid="load-error"
-      >
-        {{ loadError }}
-      </p>
-      <SharedCursorChart
-        v-else-if="series.points.length"
-        :series="series"
-        :stages="stages"
-        :p95-thresholds="p95Thresholds"
-        :transactions="transactions"
-        :run-id="runId"
-        :analysis-id="analysisId"
-      />
-      <p
-        v-else
-        data-testid="load-empty"
-      >
-        {{ OVERVIEW_LABELS.loadEmpty }}
-      </p>
-      <p
-        v-if="runLoad.truncated"
-        class="muted"
-        data-testid="load-partial"
-      >
-        {{ OVERVIEW_LABELS.loadPartial(runLoad.buckets.length, runLoad.rollupSeconds) }}
-      </p>
     </section>
   </div>
 </template>
@@ -899,7 +976,7 @@ const kindLabels: Record<AttentionKind, string> = {
 .overview-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 24px;
+  gap: 18px;
   min-width: 0;
 }
 
@@ -907,48 +984,33 @@ const kindLabels: Record<AttentionKind, string> = {
   min-width: 0;
 }
 
+.overview-hero-card,
+.overview-diag-card,
+.overview-metrics-card {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
 .overview-section-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 8px 12px;
 }
 
-.overview-section-head button {
-  min-width: 44px;
-  min-height: 44px;
+.overview-section-head h2 {
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 650;
 }
 
-.overview-stage-ribbon {
+/* Incidents Grid (Mockup v4.4 .grid3 + .inc-card) */
+.overview-incidents-section {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.overview-stage-pill {
-  display: grid;
-  gap: 2px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 8px 12px;
-  text-align: left;
-  border: 1px solid var(--border);
-  border-radius: var(--shell-radius, 8px);
-  background: var(--surface-inset);
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
-.overview-stage-pill--steady {
-  border-color: var(--brand);
-  background: var(--info-bg);
-}
-
-.overview-stage-pill__meta {
-  font-size: 12px;
-  color: var(--text-muted);
+  flex-direction: column;
+  gap: 11px;
 }
 
 .overview-incidents {
@@ -956,197 +1018,203 @@ const kindLabels: Record<AttentionKind, string> = {
   grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
   gap: 14px;
   list-style: none;
-  margin: 12px 0 0;
+  margin: 0;
   padding: 0;
+  align-items: stretch;
 }
 
-.incident-card {
-  display: grid;
+.inc-card {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--border-strong);
-  border-radius: var(--shell-radius, 8px);
-  padding: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
   background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border-strong);
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.incident-card[data-priority="HIGH"] {
-  border-left-color: var(--fail);
-}
+.inc-card[data-priority="HIGH"] { border-top-color: var(--fail-solid); }
+.inc-card[data-priority="MEDIUM"] { border-top-color: var(--warn-solid); }
+.inc-card[data-priority="LOW"] { border-top-color: var(--brand); }
 
-.incident-card[data-priority="MEDIUM"] {
-  border-left-color: var(--warn);
-}
-
-.incident-card[data-priority="LOW"] {
-  border-left-color: var(--brand);
-}
-
-.incident-card__head {
+.inc-card__top {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px 10px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
-.incident-card__rank {
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-weight: 700;
-}
-
-.incident-card__priority,
-.incident-card__family {
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.incident-card__priority[data-priority="HIGH"] {
-  color: var(--fail);
-  background: var(--fail-bg);
-}
-
-.incident-card__priority[data-priority="MEDIUM"] {
-  color: var(--warn);
-  background: var(--warn-bg);
-}
-
-.incident-card__priority[data-priority="LOW"] {
-  color: var(--brand);
-  background: var(--info-bg);
-}
-
-.incident-card__family {
-  color: var(--text-muted);
-  background: var(--surface-muted);
-}
-
-.incident-card__summary {
+.inc-card__title {
   margin: 0;
+  font-size: 14.5px;
+  line-height: 1.3;
+  font-weight: 650;
 }
 
-.incident-card__meta {
+.inc-card__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
+  gap: 2px 10px;
   margin: 0;
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
-.incident-card__coincident {
+.inc-card__spark {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-inset);
+  padding: 4px;
+}
+
+.inc-card__summary {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.inc-card__foot {
+  margin-top: auto;
+  padding-top: 4px;
   display: flex;
-  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px 8px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.incident-card__actions {
+.inc-card__coinc {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 5px;
 }
 
-.incident-card button,
-.incidents-more-btn {
-  justify-self: start;
-  min-width: 44px;
-  min-height: 44px;
-}
-
-.incident-chip {
-  min-height: 44px;
+.coinc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
   max-width: 100%;
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  font-size: 11.5px;
+  color: var(--brand);
+  font-weight: 500;
   text-align: left;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
-.incident-card__details {
+.inc-card__details {
   border-top: 1px solid var(--border);
-  padding-top: 8px;
+  padding-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
-.incident-card__details summary {
+.inc-card__details summary {
+  cursor: pointer;
+  font-weight: 500;
+  min-height: 24px;
   display: flex;
   align-items: center;
-  min-height: 44px;
-  cursor: pointer;
-  font-weight: 600;
 }
 
-.incident-card__details ul {
+.inc-card__details ul {
   display: grid;
-  gap: 6px;
-  margin: 8px 0 0;
-  padding-left: 20px;
+  gap: 5px;
+  margin: 6px 0 0;
+  padding-left: 18px;
 }
 
-.incident-next-btn {
-  margin-top: 4px;
-  display: inline-flex;
-  align-items: center;
+.inc-next-btn {
+  margin-left: 6px;
 }
 
 .incidents-more-btn {
-  margin-top: 12px;
+  align-self: flex-start;
 }
 
-.overview-card-grid {
+/* Platform & Trends Grids (Mockup v4.4 .grid4 / .grid3) */
+.overview-grid4 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: 12px;
-  margin-top: 12px;
 }
 
-.overview-mini-card {
+.overview-grid3 {
   display: grid;
-  gap: 8px;
-  padding: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 12px;
+}
+
+.tile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 13px;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  border-radius: var(--shell-radius, 8px);
   background: var(--surface-inset);
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.overview-mini-card[data-status="FAIL"] {
-  border-left: 3px solid var(--fail);
-}
+.tile-card[data-status="FAIL"] { border-left: 3px solid var(--fail-solid); }
+.tile-card[data-status="NO_VERDICT"],
+.tile-card[data-status="DIAGNOSTIC"] { border-left: 3px solid var(--warn-solid); }
+.tile-card[data-status="PASS"] { border-left: 3px solid var(--pass-solid); }
 
-.overview-mini-card[data-status="NO_VERDICT"],
-.overview-mini-card[data-status="DIAGNOSTIC"] {
-  border-left: 3px solid var(--warn);
-}
-
-.overview-mini-card[data-status="PASS"] {
-  border-left: 3px solid var(--pass);
-}
-
-.overview-mini-card__head {
+.tile-card__top {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
-.overview-mini-card__stats {
-  display: grid;
-  gap: 2px;
-  margin: 0;
+.tile-card__name {
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.tile-card__val {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.tile-card__val b {
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.tile-card__val span {
   font-size: 12px;
+  color: var(--text-muted);
 }
 
-.overview-mini-card button {
-  justify-self: start;
-  min-width: 44px;
-  min-height: 44px;
+.tile-card__meta,
+.tile-card__stats {
+  margin: 0;
+  font-size: 11.5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
 }
 
+.tile-card button {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+/* Residual Attention */
 .overview-attention {
   display: grid;
   gap: 8px;
@@ -1156,143 +1224,92 @@ const kindLabels: Record<AttentionKind, string> = {
 }
 
 .overview-attention li {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 4px;
   border: 1px solid var(--border);
-  border-radius: var(--shell-radius, 8px);
-  padding: 12px;
-}
-
-.overview-attention li[data-kind="violation"] {
-  border-left-color: var(--fail);
-}
-
-.overview-attention li[data-kind="no_verdict"],
-.overview-attention li[data-kind="policy"],
-.overview-attention li[data-kind="coverage"] {
-  border-left-color: var(--warn);
-}
-
-.overview-attention li[data-kind="diagnostic"] {
-  border-left-color: var(--brand);
-}
-
-.overview-kind {
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.overview-badge {
-  justify-self: start;
-  border-radius: 999px;
-  background: var(--info-bg);
-  color: var(--brand);
-  padding: 2px 8px;
-}
-
-.overview-attention button,
-[data-testid="attention-more"] {
-  min-width: 44px;
-  min-height: 44px;
-}
-
-.overview-capacity__verdict {
-  margin: 8px 0;
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-.overview-capacity {
-  min-width: 0;
-}
-
-.overview-capacity table {
-  min-width: 24rem;
-}
-
-.overview-capacity__chart {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.overview-capacity__label {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 12px;
-  margin: 0;
-}
-
-.overview-capacity__row svg {
-  display: block;
-  width: 100%;
-  height: 24px;
+  border-left-width: 3px;
+  border-radius: 8px;
+  padding: 10px 12px;
   background: var(--surface-inset);
 }
 
-.overview-capacity__rect--pass {
-  fill: var(--pass);
+.overview-attention li[data-kind="violation"] { border-left-color: var(--fail-solid); }
+.overview-attention li[data-kind="no_verdict"],
+.overview-attention li[data-kind="policy"],
+.overview-attention li[data-kind="coverage"] { border-left-color: var(--warn-solid); }
+.overview-attention li[data-kind="diagnostic"] { border-left-color: var(--brand); }
+
+.overview-attention__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
-.overview-capacity__rect--fail {
-  fill: var(--fail);
-}
-
-.overview-capacity__rect--unverified {
-  fill: none;
-  stroke: var(--text-muted);
-  stroke-width: 2;
-  stroke-dasharray: 4 3;
-}
-
-.overview-capacity__achieved {
-  stroke: var(--text);
-  stroke-width: 3;
-}
-
-.overview-capacity__bound {
-  stroke: var(--brand);
-  stroke-width: 2;
-}
-
-.overview-capacity__bound--lower {
-  stroke-dasharray: 6 3;
-}
-
-.overview-capacity__bound--upper {
-  stroke-dasharray: 2 3;
-}
-
-.overview-capacity__mark {
-  margin-inline-start: 0.5em;
-  font-style: italic;
-}
-
-[data-testid="capacity-block-open"] {
-  justify-self: start;
-  min-width: 44px;
+.overview-attention li button {
+  align-self: flex-start;
   min-height: 44px;
+  min-width: 44px;
 }
 
+.overview-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  background: var(--info-bg);
+  color: var(--brand);
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Capacity */
+.overview-capacity { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.overview-capacity__verdict { margin: 0; font-size: 1.2rem; font-weight: 700; }
+.overview-capacity__chart { display: grid; gap: 8px; }
+.overview-capacity__label { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 0; font-size: 12.5px; }
+.overview-capacity__row svg { display: block; width: 100%; height: 22px; background: var(--surface-inset); border-radius: 4px; }
+.overview-capacity__rect--pass { fill: var(--pass); }
+.overview-capacity__rect--fail { fill: var(--fail); }
+.overview-capacity__rect--unverified { fill: none; stroke: var(--text-muted); stroke-width: 2; stroke-dasharray: 4 3; }
+.overview-capacity__achieved { stroke: var(--text); stroke-width: 3; }
+.overview-capacity__bound { stroke: var(--brand); stroke-width: 2; }
+.overview-capacity__bound--lower { stroke-dasharray: 6 3; }
+.overview-capacity__bound--upper { stroke-dasharray: 2 3; }
+.overview-capacity__mark { margin-inline-start: 0.5em; font-style: italic; }
+[data-testid="capacity-block-open"] { align-self: flex-start; }
+
+/* Whole-run compact strip */
 .overview-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
+  gap: 8px;
   margin: 0;
 }
 
-.overview-metrics div {
-  display: grid;
-  gap: 4px;
+.overview-metrics__tile {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-inset);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.overview-metrics dt {
+.overview-metrics__tile dt {
+  font-size: 11px;
   color: var(--text-muted);
 }
 
-.overview-metrics dd {
+.overview-metrics__tile dd {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 15px;
   font-weight: 700;
 }
 </style>

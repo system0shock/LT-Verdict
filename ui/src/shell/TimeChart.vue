@@ -185,7 +185,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   overflow: hidden;
   border-radius: 6px;
-  background: var(--surface-inset);
+  background: transparent;
 }
 
 .time-chart__host {

@@ -15,5 +15,8 @@ export default defineConfig({
   },
   use: {
     baseURL,
+    launchOptions: {
+      args: ['--no-proxy-server'],
+    },
   },
 })

@@ -170,6 +170,11 @@ const filteredJtl = computed(() => {
 
 const visibleJtl = computed(() => (expanded.value ? filteredJtl.value : filteredJtl.value.slice(0, 5)))
 
+function pvsShare(count: number): number {
+  if (totalPvsErrors.value <= 0) return 0
+  return Math.min(100, (count / totalPvsErrors.value) * 100)
+}
+
 onMounted(() => {
   if (!hasPvs.value) activeTab.value = 'jtl'
 })
@@ -193,26 +198,26 @@ onUnmounted(() => controller.abort())
           </h2>
           <span
             v-if="hasPvs"
-            class="log-pill log-pill--crit mono"
+            class="v4-pill v4-pill--crit v4-num"
             data-testid="pvs-errors-total"
           >
             {{ formatNumber(totalPvsErrors, 0) }} в логах ПВС · {{ formatNumber(totalPvsRate, 1) }}/мин
           </span>
           <span
             v-if="hasJtl"
-            class="log-pill log-pill--warn mono"
+            class="v4-pill v4-pill--warn v4-num"
             data-testid="jtl-errors-total"
           >
-            {{ formatNumber(totalJtlErrors, 0) }} ошибок генератора
+            {{ formatNumber(totalJtlErrors, 0) }} ошибок JTL
           </span>
           <span
             v-if="pvsCoverage"
-            class="log-pill log-pill--info"
+            class="v4-pill v4-pill--good"
           >
             OpenSearch: {{ pvsCoverage }}
           </span>
         </div>
-        <p class="muted">
+        <p class="v4-sub">
           Сгруппированные исключения прикладных и внешних сервисов из логов OpenSearch и коды ответов генератора (справочный контекст, вердикт ядра не меняют).
         </p>
       </div>
@@ -221,14 +226,14 @@ onUnmounted(() => controller.abort())
         <input
           v-model="query"
           type="search"
-          class="log-errors-panel__search"
+          class="v4-inp log-errors-panel__search"
           data-testid="log-errors-search"
           placeholder="Фильтр по сервису ПВС / ошибке…"
           aria-label="Фильтр ошибок ПВС и протокола"
         >
         <div
           v-if="hasPvs && hasJtl"
-          class="log-errors-panel__tabs"
+          class="v4-seg"
           role="tablist"
           aria-label="Источник ошибок"
         >
@@ -256,7 +261,7 @@ onUnmounted(() => controller.abort())
 
     <div
       v-if="activeTab === 'pvs' && hasPvs"
-      class="table-wrap"
+      class="v4-table-wrap"
       tabindex="0"
       role="region"
       aria-label="Ошибки ПВС из логов OpenSearch"
@@ -291,20 +296,30 @@ onUnmounted(() => controller.abort())
             data-testid="pvs-log-error-row"
           >
             <td><strong>{{ row.service }}</strong></td>
-            <td class="mono log-errors-panel__type">
+            <td class="v4-num log-errors-panel__type">
               {{ row.errorType }}
             </td>
-            <td class="mono">
+            <td class="v4-num">
               <strong>{{ formatNumber(row.count, 0) }}</strong>
               <span
                 v-if="totalPvsErrors > 0"
-                class="muted"
-              > ({{ formatNumber((row.count / totalPvsErrors) * 100, 1) }}%)</span>
+                class="v4-sub"
+              > ({{ formatNumber(pvsShare(row.count), 1) }}%)</span>
+              <div
+                v-if="totalPvsErrors > 0"
+                class="share-bar"
+                aria-hidden="true"
+              >
+                <div
+                  class="share-bar__fill"
+                  :style="{ width: `${pvsShare(row.count)}%` }"
+                />
+              </div>
             </td>
-            <td class="mono muted">
+            <td class="v4-num v4-sub">
               {{ formatEpochWindow(row.firstEpochMs, row.lastEpochMs) }}
             </td>
-            <td class="mono log-errors-panel__msg">
+            <td class="v4-num log-errors-panel__msg">
               {{ row.message }}{{ row.truncated ? '…' : '' }}
             </td>
             <td>
@@ -314,11 +329,11 @@ onUnmounted(() => controller.abort())
                   :href="row.sourceUrl"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="log-action-link"
+                  class="v4-btn v4-btn--xs"
                 >Лог ↗</a>
                 <button
                   type="button"
-                  class="log-action-btn"
+                  class="v4-btn v4-btn--xs"
                   @click="emit('open-service', row.service)"
                 >
                   На график →
@@ -329,7 +344,7 @@ onUnmounted(() => controller.abort())
           <tr v-if="!visiblePvs.length">
             <td
               colspan="6"
-              class="muted"
+              class="v4-sub"
             >
               По фильтру «{{ query }}» групп ошибок не найдено.
             </td>
@@ -348,20 +363,20 @@ onUnmounted(() => controller.abort())
       >
         <button
           type="button"
-          class="log-action-btn"
-          data-testid="load-jtl-error-groups"
+          class="v4-btn"
+          data-testid="log-errors-load-jtl"
           :disabled="jtlLoading"
           @click="loadJtlErrorGroups"
         >
-          {{ jtlLoading ? 'Загрузка разбивки ошибок…' : `Загрузить разбивку кодов ответа (${formatNumber(totalJtlErrors, 0)} ошибок)` }}
+          {{ jtlLoading ? 'Загрузка разбивки кодов ответов…' : `Загрузить разбивку ${formatNumber(totalJtlErrors, 0)} ошибок генератора (JTL)` }}
         </button>
       </div>
       <div
         v-else
-        class="table-wrap"
+        class="v4-table-wrap"
         tabindex="0"
         role="region"
-        aria-label="Ошибки ответов генератора"
+        aria-label="Ошибки генератора JTL по кодам ответа"
       >
         <table data-testid="jtl-error-groups-table">
           <thead>
@@ -376,45 +391,39 @@ onUnmounted(() => controller.abort())
                 Ошибок (доля)
               </th>
               <th scope="col">
-                Окно
-              </th>
-              <th scope="col">
-                Сообщение генератора
+                Сообщение генератора (error-groups.v1)
               </th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="item in visibleJtl"
-              :key="item.id"
+              v-for="(item, idx) in visibleJtl"
+              :key="`${item.scope.label}:${item.response_code}:${idx}`"
               data-testid="jtl-error-group-row"
             >
               <td>
-                <span class="log-pill log-pill--crit mono">{{ item.response_code ?? '—' }}</span>
+                <span class="v4-pill v4-pill--crit v4-num">{{ item.response_code || 'ERR' }}</span>
               </td>
-              <td class="mono">
+              <td class="v4-num">
                 <strong>{{ item.scope.label }}</strong>
               </td>
-              <td class="mono">
+              <td class="v4-num">
                 <strong>{{ formatNumber(item.count, 0) }}</strong>
                 <span
                   v-if="totalJtlErrors > 0"
-                  class="muted"
+                  class="v4-sub"
                 > ({{ formatNumber((item.count / totalJtlErrors) * 100, 1) }}%)</span>
               </td>
-              <td class="mono muted">
-                {{ formatEpochWindow(item.from_epoch_ms, item.to_epoch_ms) }}
-              </td>
-              <td class="mono log-errors-panel__msg">
-                {{ item.message ?? '—' }}
+              <td class="v4-num log-errors-panel__msg">
+                {{ item.message || '—' }}
               </td>
             </tr>
             <tr v-if="!visibleJtl.length">
               <td
-                colspan="5"
-                class="muted"
+                colspan="4"
+                class="v4-sub"
               >
-                {{ query ? `По фильтру «${query}» групп ошибок не найдено.` : 'Разбивка кодов ответа недоступна для этого анализа.' }}
+                Групп ошибок генератора не найдено.
               </td>
             </tr>
           </tbody>
@@ -426,16 +435,16 @@ onUnmounted(() => controller.abort())
       v-if="(activeTab === 'pvs' ? filteredPvs.length : filteredJtl.length) > 5"
       class="log-errors-panel__foot"
     >
-      <span class="muted">
+      <span class="v4-sub">
         Показано {{ activeTab === 'pvs' ? visiblePvs.length : visibleJtl.length }} из {{ activeTab === 'pvs' ? filteredPvs.length : filteredJtl.length }} групп
       </span>
       <button
         type="button"
-        class="log-action-btn"
+        class="v4-btn v4-btn--xs"
         data-testid="log-errors-expand"
         @click="expanded = !expanded"
       >
-        {{ expanded ? 'Свернуть до топ-5' : `Показать все ${activeTab === 'pvs' ? filteredPvs.length : filteredJtl.length}` }}
+        {{ expanded ? 'Свернуть до топ-5 ▴' : `Показать все ${activeTab === 'pvs' ? filteredPvs.length : filteredJtl.length} ▾` }}
       </button>
     </div>
   </section>
@@ -443,9 +452,17 @@ onUnmounted(() => controller.abort())
 
 <style scoped>
 .log-errors-panel {
-  display: grid;
-  gap: 12px;
-  border-left: 3px solid var(--fail);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  min-width: 0;
+  max-width: 100%;
+  border-left: 3px solid var(--fail-solid);
+}
+
+.log-errors-panel__jtl-wrap {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .log-errors-panel__head {
@@ -460,6 +477,11 @@ onUnmounted(() => controller.abort())
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.log-errors-panel__title-block h2 {
+  font-size: 17px;
+  line-height: 1.2;
 }
 
 .log-errors-panel__badges {
@@ -477,56 +499,7 @@ onUnmounted(() => controller.abort())
 }
 
 .log-errors-panel__search {
-  min-width: 0;
-  width: min(260px, 100%);
-}
-
-.log-errors-panel__tabs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  max-width: 100%;
-  gap: 4px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface-inset);
-}
-
-.log-errors-panel__tabs button {
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-muted);
-}
-
-.log-errors-panel__tabs button[aria-selected="true"] {
-  background: var(--surface);
-  color: var(--text);
-  font-weight: 600;
-}
-
-.log-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 650;
-}
-
-.log-pill--crit {
-  background: var(--fail-bg);
-  color: var(--fail);
-}
-
-.log-pill--warn {
-  background: var(--warn-bg);
-  color: var(--warn);
-}
-
-.log-pill--info {
-  background: var(--surface-muted);
-  color: var(--text-muted);
+  width: min(230px, 100%);
 }
 
 .log-errors-panel__type {
@@ -535,33 +508,42 @@ onUnmounted(() => controller.abort())
 }
 
 .log-errors-panel__msg {
-  max-width: 420px;
+  max-width: 400px;
   white-space: normal;
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
+}
+
+.share-bar {
+  height: 3px;
+  background: var(--surface-muted);
+  border-radius: 2px;
+  margin-top: 3px;
+  overflow: hidden;
+  max-width: 110px;
+}
+
+.share-bar__fill {
+  height: 100%;
+  background: var(--fail-solid);
 }
 
 .log-errors-panel__actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
-.log-action-link {
-  white-space: nowrap;
-  font-size: 12px;
-}
-
-.log-action-btn {
-  white-space: nowrap;
-  font-size: 12px;
+.log-errors-panel__actions a {
+  text-decoration: none;
 }
 
 .log-errors-panel__foot {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 </style>

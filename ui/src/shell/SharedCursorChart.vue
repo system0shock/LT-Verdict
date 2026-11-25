@@ -48,7 +48,6 @@ const pointerPos = ref({ x: 0, y: 0 })
 const hoverActive = ref(false)
 const pinned = ref(false)
 
-// Режим «Общий RPS» ↔ «По транзакциям» (масштабируемый табличный рубрикатор до 8 кривых)
 const rpsMode = ref<'total' | 'tx'>('total')
 const txStacked = ref(true)
 const txShowRest = ref(true)
@@ -63,10 +62,10 @@ const txLoading = ref(false)
 const txError = ref('')
 let txAbort: AbortController | null = null
 
-const tracks: Array<{ key: TrackKey; label: string; color: string }> = [
-  { key: 'rps', label: OVERVIEW_LABELS.trackRps, color: '#60A5FA' },
-  { key: 'errors', label: OVERVIEW_LABELS.trackErrors, color: '#FF7B72' },
-  { key: 'p95', label: OVERVIEW_LABELS.trackP95, color: '#FBBF24' },
+const tracks: Array<{ key: TrackKey; label: string; color: string; colorVar: string }> = [
+  { key: 'rps', label: OVERVIEW_LABELS.trackRps, color: '#60A5FA', colorVar: 'var(--c-0)' },
+  { key: 'errors', label: OVERVIEW_LABELS.trackErrors, color: '#FF7B72', colorVar: 'var(--c-err)' },
+  { key: 'p95', label: OVERVIEW_LABELS.trackP95, color: '#FBBF24', colorVar: 'var(--c-1)' },
 ]
 
 watch(() => props.series, () => {
@@ -81,8 +80,7 @@ watch(() => props.transactions, (list) => {
     rpsMode.value = 'total'
     return
   }
-  const initial = list.slice(0, Math.min(5, MAX_CHART_TX)).map((item) => item.label)
-  selectedTx.value = initial
+  selectedTx.value = list.slice(0, Math.min(5, MAX_CHART_TX)).map((item) => item.label)
 }, { immediate: true })
 
 async function fetchSelectedTxBuckets() {
@@ -121,6 +119,14 @@ watch(() => [rpsMode.value, selectedTx.value.join('\u0000'), props.series.rollup
 
 const canUseTxMode = computed(() => props.transactions.length > 0 && Boolean(props.runId) && Boolean(props.analysisId))
 
+const selectedTxMeta = computed(() =>
+  selectedTx.value.slice(0, MAX_CHART_TX).map((label, idx) => ({
+    label,
+    colorVar: `var(--c-${idx % 8})`,
+    item: props.transactions.find((t) => t.label === label) ?? null,
+  })),
+)
+
 const filteredTxCatalog = computed(() => {
   const q = txQuery.value.trim().toLowerCase()
   return props.transactions
@@ -143,6 +149,11 @@ function toggleTx(label: string) {
     selectedTx.value = [...selectedTx.value, label]
   }
   rpsMode.value = 'tx'
+}
+
+function removeTx(label: string) {
+  if (selectedTx.value.length <= 1) return
+  selectedTx.value = selectedTx.value.filter((item) => item !== label)
 }
 
 function applyTxPreset(preset: 'bad' | 'topRps' | 'topP95') {
@@ -261,7 +272,7 @@ const lanes = computed(() => {
       flags: {
         timeLabels: track.key === 'p95',
         stageLabels: track.key === 'rps',
-        plotHeight: track.key === 'errors' ? 74 : 124,
+        plotHeight: track.key === 'errors' ? 68 : 132,
       },
     }
   })
@@ -273,18 +284,20 @@ const tooltipStage = computed(() => {
   return st ? st.id : ''
 })
 
+const TX_HEX = ['#60A5FA', '#FBBF24', '#2DD4BF', '#C084FC', '#818CF8', '#F472B6', '#34D399', '#A78BFA']
+
 const tooltipSections = computed<FloatingTooltipSection[]>(() => {
   if (cursorMs.value === null || !readout.value) return []
   const sections: FloatingTooltipSection[] = []
   for (const track of lanes.value) {
     if (track.lane.series?.length) {
-      const rows = track.lane.series.map((s) => {
+      const rows = track.lane.series.map((s, idx) => {
         const val = valueAtTime(s.segments, cursorMs.value!, props.series.rollupSeconds * 500)
         return {
           key: `${track.key}:${s.key}`,
           label: s.label ?? s.key,
           value: val === null ? '—' : `${formatNumber(val, track.key === 'rps' ? 1 : 0)}${s.unit ? ` ${s.unit}` : ''}`,
-          color: s.color === 'rest' ? '#94A3B8' : '#60A5FA',
+          color: s.color === 'rest' ? '#94A3B8' : TX_HEX[idx % TX_HEX.length],
         }
       })
       sections.push({ title: track.label, rows })
@@ -360,13 +373,14 @@ onBeforeUnmount(() => {
     role="group"
     :aria-label="OVERVIEW_LABELS.chartAria"
   >
+    <!-- Toolbar (Mockup v4.4) -->
     <div
       v-if="canUseTxMode"
       class="shared-chart__toolbar"
       data-testid="overview-tx-toolbar"
     >
       <div
-        class="shared-chart__seg"
+        class="v4-seg"
         role="group"
         aria-label="Режим отображения интенсивности"
       >
@@ -390,7 +404,7 @@ onBeforeUnmount(() => {
 
       <template v-if="rpsMode === 'tx'">
         <div
-          class="shared-chart__seg"
+          class="v4-seg"
           role="group"
           aria-label="Способ наложения RPS"
         >
@@ -410,7 +424,7 @@ onBeforeUnmount(() => {
           </button>
         </div>
         <div
-          class="shared-chart__seg"
+          class="v4-seg"
           role="group"
           aria-label="Перцентиль отклика"
         >
@@ -424,9 +438,41 @@ onBeforeUnmount(() => {
             {{ pct }}
           </button>
         </div>
+      </template>
+    </div>
+
+    <!-- Active transactions compact bar (Mockup v4.4 .active-tx-bar) -->
+    <div
+      v-if="canUseTxMode"
+      class="active-tx-bar"
+    >
+      <div class="active-tx-bar__pills">
+        <span class="v4-kicker">Выборка ({{ selectedTxMeta.length }} из {{ transactions.length }}):</span>
+        <span
+          v-for="pill in selectedTxMeta"
+          :key="pill.label"
+          class="sel-pill"
+        >
+          <i
+            class="sel-pill__sw"
+            :style="{ backgroundColor: pill.colorVar }"
+          />
+          <span class="v4-num">{{ pill.label }}</span>
+          <b
+            v-if="pill.item && pill.item.status === 'FAIL'"
+            class="sel-pill__fail"
+          >FAIL</b>
+          <button
+            v-if="selectedTxMeta.length > 1"
+            type="button"
+            title="Убрать с графика"
+            aria-label="Убрать транзакцию"
+            @click="removeTx(pill.label)"
+          >×</button>
+        </span>
         <label
-          v-if="txStacked && transactions.length > selectedTx.length"
-          class="shared-chart__check"
+          v-if="rpsMode === 'tx' && txStacked && transactions.length > selectedTx.length"
+          class="v4-check"
         >
           <input
             v-model="txShowRest"
@@ -434,99 +480,125 @@ onBeforeUnmount(() => {
           >
           + остальные {{ transactions.length - selectedTx.length }} фоном
         </label>
-        <button
-          type="button"
-          data-testid="overview-tx-drawer-toggle"
-          @click="txDrawerOpen = !txDrawerOpen"
-        >
-          Выбрать из {{ transactions.length }} транзакций {{ txDrawerOpen ? '▴' : '▾' }}
-        </button>
-      </template>
+      </div>
+      <button
+        type="button"
+        class="v4-btn v4-btn--xs"
+        :class="{ 'v4-btn--primary': txDrawerOpen }"
+        data-testid="overview-tx-drawer-toggle"
+        @click="txDrawerOpen = !txDrawerOpen"
+      >
+        Выбрать из {{ transactions.length }} транзакций {{ txDrawerOpen ? '▴' : '▾' }}
+      </button>
     </div>
 
+    <!-- Scalable Transaction Table Drawer (Mockup v4.4 .tx-drawer) -->
     <div
       v-if="canUseTxMode && txDrawerOpen"
-      class="shared-chart__tx-drawer"
+      class="tx-drawer"
       data-testid="overview-tx-drawer"
       role="region"
       aria-label="Рубрикатор транзакций"
     >
-      <div class="shared-chart__tx-drawer-bar">
-        <input
-          v-model="txQuery"
-          type="search"
-          data-testid="overview-tx-search"
-          placeholder="Поиск среди транзакций…"
-          aria-label="Поиск транзакций"
-        >
-        <div class="shared-chart__seg">
+      <div class="tx-drawer__bar">
+        <div class="tx-drawer__group">
+          <input
+            v-model="txQuery"
+            type="search"
+            class="v4-inp tx-drawer__search"
+            data-testid="overview-tx-search"
+            placeholder="Поиск среди транзакций…"
+            aria-label="Поиск транзакций"
+          >
+          <div class="v4-seg">
+            <button
+              type="button"
+              :aria-pressed="txFilter === 'all'"
+              @click="txFilter = 'all'"
+            >
+              Все ({{ transactions.length }})
+            </button>
+            <button
+              type="button"
+              :aria-pressed="txFilter === 'bad'"
+              @click="txFilter = 'bad'"
+            >
+              Отклонения ({{ transactions.filter((t) => t.status !== 'PASS').length }})
+            </button>
+            <button
+              type="button"
+              :aria-pressed="txFilter === 'selected'"
+              @click="txFilter = 'selected'"
+            >
+              Выбранные ({{ selectedTx.length }})
+            </button>
+          </div>
+          <div class="v4-seg">
+            <button
+              type="button"
+              :aria-pressed="txSort === 'rps'"
+              @click="txSort = 'rps'"
+            >
+              RPS ↓
+            </button>
+            <button
+              type="button"
+              :aria-pressed="txSort === 'p95'"
+              @click="txSort = 'p95'"
+            >
+              p95 ↓
+            </button>
+            <button
+              type="button"
+              :aria-pressed="txSort === 'err'"
+              @click="txSort = 'err'"
+            >
+              Ошибки ↓
+            </button>
+          </div>
+        </div>
+        <div class="tx-drawer__group">
+          <span class="v4-sub">До {{ MAX_CHART_TX }} кривых</span>
           <button
             type="button"
-            :aria-pressed="txFilter === 'all'"
-            @click="txFilter = 'all'"
+            class="v4-btn v4-btn--xs"
+            @click="applyTxPreset('bad')"
           >
-            Все ({{ transactions.length }})
+            Проблемные
           </button>
           <button
             type="button"
-            :aria-pressed="txFilter === 'bad'"
-            @click="txFilter = 'bad'"
+            class="v4-btn v4-btn--xs"
+            @click="applyTxPreset('topRps')"
           >
-            Отклонения ({{ transactions.filter((t) => t.status !== 'PASS').length }})
+            Топ-5 RPS
           </button>
           <button
             type="button"
-            :aria-pressed="txFilter === 'selected'"
-            @click="txFilter = 'selected'"
+            class="v4-btn v4-btn--xs"
+            @click="applyTxPreset('topP95')"
           >
-            Выбранные ({{ selectedTx.length }})
+            Топ-5 p95
+          </button>
+          <button
+            type="button"
+            class="v4-btn v4-btn--xs v4-btn--primary"
+            @click="txDrawerOpen = false"
+          >
+            Готово
           </button>
         </div>
-        <div class="shared-chart__seg">
-          <button
-            type="button"
-            :aria-pressed="txSort === 'rps'"
-            @click="txSort = 'rps'"
-          >
-            RPS ↓
-          </button>
-          <button
-            type="button"
-            :aria-pressed="txSort === 'p95'"
-            @click="txSort = 'p95'"
-          >
-            p95 ↓
-          </button>
-          <button
-            type="button"
-            :aria-pressed="txSort === 'err'"
-            @click="txSort = 'err'"
-          >
-            Ошибки ↓
-          </button>
-        </div>
-        <button
-          type="button"
-          @click="applyTxPreset('bad')"
-        >
-          Пресет: проблемные
-        </button>
-        <button
-          type="button"
-          @click="applyTxPreset('topRps')"
-        >
-          Пресет: топ-5 RPS
-        </button>
       </div>
-      <div class="table-wrap shared-chart__tx-table-wrap">
+
+      <div class="v4-table-wrap tx-drawer__table">
         <table>
           <thead>
             <tr>
               <th scope="col">
-                Выбор (до {{ MAX_CHART_TX }})
+                Выбор
               </th>
               <th scope="col">
-                Транзакция
+                Транзакция ({{ filteredTxCatalog.length }} из {{ transactions.length }})
               </th>
               <th scope="col">
                 RPS
@@ -546,29 +618,37 @@ onBeforeUnmount(() => {
             <tr
               v-for="tx in filteredTxCatalog"
               :key="tx.label"
+              :class="{ 'is-selected': selectedTx.includes(tx.label) }"
             >
               <td>
-                <input
-                  type="checkbox"
-                  :checked="selectedTx.includes(tx.label)"
-                  :disabled="!selectedTx.includes(tx.label) && selectedTx.length >= MAX_CHART_TX"
-                  :aria-label="`Показать ${tx.label} на графике`"
-                  @change="toggleTx(tx.label)"
-                >
+                <label class="v4-check">
+                  <input
+                    type="checkbox"
+                    :checked="selectedTx.includes(tx.label)"
+                    :disabled="!selectedTx.includes(tx.label) && selectedTx.length >= MAX_CHART_TX"
+                    :aria-label="`Выбрать транзакцию ${tx.label}`"
+                    @change="toggleTx(tx.label)"
+                  >
+                </label>
               </td>
-              <td class="mono">
-                {{ tx.label }}
+              <td class="v4-num">
+                <strong>{{ tx.label }}</strong>
               </td>
-              <td class="mono">
+              <td class="v4-num">
                 {{ formatNumber(tx.avgRps, 1) }}
               </td>
-              <td class="mono">
+              <td class="v4-num">
                 {{ formatNumber(tx.p95Ms, 0) }}
               </td>
-              <td class="mono">
+              <td class="v4-num">
                 {{ formatNumber(tx.errorRatePct, 2) }}%
               </td>
-              <td>{{ tx.status }}</td>
+              <td>
+                <span
+                  class="v4-pill"
+                  :class="tx.status === 'FAIL' ? 'v4-pill--crit' : tx.status === 'WARN' ? 'v4-pill--warn' : 'v4-pill--good'"
+                >{{ tx.status }}</span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -577,19 +657,20 @@ onBeforeUnmount(() => {
 
     <p
       v-if="txLoading"
-      class="muted"
+      class="v4-sub"
       role="status"
     >
-      Загрузка рядов выбранных транзакций…
+      Загрузка рядов транзакций…
     </p>
     <p
       v-if="txError"
-      class="notice notice-warn"
-      role="status"
+      class="notice notice-fail"
+      role="alert"
     >
       {{ txError }}
     </p>
 
+    <!-- Synchronized Chart Panes (Mockup v4.4) -->
     <div
       class="shared-chart__plot"
       data-testid="chart-plot"
@@ -606,12 +687,21 @@ onBeforeUnmount(() => {
         :data-testid="`track-${track.key}`"
       >
         <p class="shared-chart__head">
-          <span>{{ track.label }}</span>
-          <strong
-            :data-testid="`track-value-${track.key}`"
-            :data-value="readout ? readout.raw[track.key] : ''"
-          >{{ readout ? readout[track.key] : '-' }}<template v-if="track.key === 'p95' && readout"> {{ OVERVIEW_LABELS.unitMs }}</template></strong>
-          <span class="muted">{{ OVERVIEW_LABELS.trackMax(formatNumber(series.max[track.key])) }}</span>
+          <span class="shared-chart__head-left">
+            <i
+              class="shared-chart__swatch"
+              :style="{ backgroundColor: track.colorVar }"
+            />
+            <span>{{ track.label }}</span>
+          </span>
+          <span class="shared-chart__head-right">
+            <span class="v4-sub v4-num">{{ OVERVIEW_LABELS.trackMax(formatNumber(series.max[track.key])) }}</span>
+            <strong
+              class="v4-num"
+              :data-testid="`track-value-${track.key}`"
+              :data-value="readout ? readout.raw[track.key] : ''"
+            >{{ readout ? readout[track.key] : '-' }}<template v-if="track.key === 'p95' && readout"> {{ OVERVIEW_LABELS.unitMs }}</template></strong>
+          </span>
         </p>
         <TimeChart
           :lane="track.lane"
@@ -638,120 +728,180 @@ onBeforeUnmount(() => {
     />
 
     <p
-      class="shared-chart__axis-title"
+      class="shared-chart__axis-title v4-sub"
       data-testid="chart-axis-title"
     >
       {{ OVERVIEW_LABELS.axisLabel }}
     </p>
-    <p data-testid="cursor-time">
-      {{ readout ? OVERVIEW_LABELS.cursorTime(readout.time) : OVERVIEW_LABELS.cursorNone }}
-    </p>
-    <input
-      type="range"
-      data-testid="chart-cursor"
-      class="shared-chart__slider"
-      :aria-label="OVERVIEW_LABELS.cursorLabel"
-      aria-describedby="chart-cursor-hint"
-      min="0"
-      :max="series.points.length - 1"
-      step="1"
-      :value="cursor ?? 0"
-      :aria-valuetext="readout ? readout.text : OVERVIEW_LABELS.cursorNone"
-      @focus="focusCursor"
-      @input="inputCursor"
-    >
-    <p
-      id="chart-cursor-hint"
-      class="muted"
-    >
-      {{ OVERVIEW_LABELS.cursorHint }}
-    </p>
-    <p
-      class="muted"
-      data-testid="load-summary"
-    >
-      {{ OVERVIEW_LABELS.loadSummary(series.points.length, series.rollupSeconds) }}
-    </p>
-    <p
-      v-if="series.rollupSeconds > 1"
-      class="muted"
-      data-testid="load-step"
-    >
-      {{ OVERVIEW_LABELS.loadStep(series.rollupSeconds) }}
-    </p>
-    <p
-      v-if="series.missingIntervals > 0"
-      class="muted"
-      data-testid="load-gaps"
-    >
-      {{ OVERVIEW_LABELS.loadGaps(series.missingIntervals) }}
-    </p>
+    <div class="shared-chart__footer">
+      <div class="shared-chart__meta-row">
+        <p
+          class="v4-sub v4-num"
+          data-testid="cursor-time"
+        >
+          {{ readout ? OVERVIEW_LABELS.cursorTime(readout.time) : OVERVIEW_LABELS.cursorNone }}
+        </p>
+        <div class="shared-chart__notes v4-sub">
+          <span data-testid="load-summary">{{ OVERVIEW_LABELS.loadSummary(series.points.length, series.rollupSeconds) }}</span>
+          <template v-if="series.rollupSeconds > 1">
+            <span aria-hidden="true">·</span>
+            <span data-testid="load-step">{{ OVERVIEW_LABELS.loadStep(series.rollupSeconds) }}</span>
+          </template>
+          <template v-if="series.missingIntervals > 0">
+            <span aria-hidden="true">·</span>
+            <span data-testid="load-gaps">{{ OVERVIEW_LABELS.loadGaps(series.missingIntervals) }}</span>
+          </template>
+        </div>
+      </div>
+      <input
+        type="range"
+        data-testid="chart-cursor"
+        class="shared-chart__slider"
+        :aria-label="OVERVIEW_LABELS.cursorLabel"
+        aria-describedby="chart-cursor-hint"
+        min="0"
+        :max="series.points.length - 1"
+        step="1"
+        :value="cursor ?? 0"
+        :aria-valuetext="readout ? readout.text : OVERVIEW_LABELS.cursorNone"
+        @focus="focusCursor"
+        @input="inputCursor"
+      >
+      <p
+        id="chart-cursor-hint"
+        class="v4-sub shared-chart__hint"
+      >
+        {{ OVERVIEW_LABELS.cursorHint }}
+      </p>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .shared-chart {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.shared-chart > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .shared-chart__toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: 6px;
+}
+
+.active-tx-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-}
-
-.shared-chart__seg {
-  display: inline-flex;
   flex-wrap: wrap;
-  max-width: 100%;
-  gap: 3px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 7px 10px;
+  border-radius: 7px;
   background: var(--surface-inset);
+  border: 1px solid var(--border);
 }
 
-.shared-chart__seg button {
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-muted);
+.active-tx-bar__pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
-.shared-chart__seg button[aria-pressed="true"] {
-  background: var(--surface);
-  color: var(--text);
-  font-weight: 600;
-}
-
-.shared-chart__check {
+.sel-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  max-width: 100%;
+  overflow: hidden;
+  height: 24px;
+  padding: 0 7px 0 8px;
+  border-radius: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 12px;
 }
 
-.shared-chart__tx-drawer {
-  display: grid;
+.sel-pill > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sel-pill__sw {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.sel-pill__fail {
+  color: var(--fail);
+  font-size: 10px;
+}
+
+.sel-pill button {
+  border: 0;
+  min-height: 18px;
+  min-width: 18px;
+  padding: 0 2px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.sel-pill button:hover {
+  color: var(--fail);
+}
+
+.tx-drawer {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--brand);
   border-radius: 8px;
   background: var(--surface);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
 }
 
-.shared-chart__tx-drawer-bar {
+.tx-drawer__bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
-.shared-chart__tx-table-wrap {
-  max-height: 260px;
+.tx-drawer__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.tx-drawer__search {
+  width: min(240px, 100%);
+}
+
+.tx-drawer__table {
+  max-height: 240px;
   overflow-y: auto;
+}
+
+.tx-drawer__table tr.is-selected td {
+  background: color-mix(in srgb, var(--info-bg) 55%, var(--surface));
 }
 
 .shared-chart__plot {
@@ -762,24 +912,81 @@ onBeforeUnmount(() => {
 }
 
 .shared-chart__track {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-inset);
+  padding: 7px 10px 4px;
   min-width: 0;
 }
 
 .shared-chart__head {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 4px 12px;
-  margin: 0 0 4px;
+  margin: 0 0 2px;
+  font-size: 12.5px;
+}
+
+.shared-chart__head-left,
+.shared-chart__head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shared-chart__swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
 }
 
 .shared-chart__axis-title {
   margin: 0 16px 0 56px;
   text-align: center;
+  font-size: 11px;
+}
+
+.shared-chart__footer {
+  display: grid;
+  gap: 4px;
+}
+
+.shared-chart__meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.shared-chart__meta-row p {
+  margin: 0;
+  font-size: 11.5px;
+}
+
+.shared-chart__notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  font-size: 11.5px;
 }
 
 .shared-chart__slider {
   width: 100%;
+  height: 44px;
   min-height: 44px;
+  padding: 10px 0;
   margin: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--brand);
+}
+
+.shared-chart__hint {
+  margin: 0;
+  font-size: 11px;
 }
 </style>

@@ -372,18 +372,26 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
 .compare-chart__modes {
   display: inline-flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  max-width: 100%;
+  gap: 2px;
   padding: 2px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 7px;
   background: var(--surface-inset);
 }
 
 .compare-chart__modes button {
+  height: 25px;
+  min-height: 25px;
+  min-width: 0;
+  padding: 0 9px;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .compare-chart__modes button[aria-selected="true"] {
@@ -402,24 +410,35 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
 .compare-chart__track {
   min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-inset);
+  padding: 7px 10px 4px;
 }
 
 .compare-chart__head {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 12px;
-  margin: 0 0 4px;
+  margin: 0 0 3px;
+  font-size: 12.5px;
   min-width: 0;
 }
 
 .compare-chart__axis-title {
   margin: 0 16px 0 56px;
   text-align: center;
+  font-size: 11px;
 }
 
 .compare-chart__slider {
   width: 100%;
-  min-height: 44px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
   margin: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--brand);
 }
 </style>

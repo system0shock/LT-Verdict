@@ -35,11 +35,14 @@ Gatling (`simulation.log`, текстовый и бинарный). «Прове
   анализа по окну, области и времени — до 7 карточек во вкладке «Обзор» и раздел
   «Инциденты» в HTML-отчёте ([руководство по инцидентам](docs/user/incidents.md),
   [ADR 0029](docs/adr/0029-incident-v0.md));
-- совет ИИ: отдельный артефакт, вердикт не меняет. Боевой путь по решению владельца
-  direct-runner ([ADR 0027](docs/adr/0027-advisory-ai-direct-local-runner.md)); он
-  включается только `LT_VERDICT_AI_RUNNER_MODE=local`, без переменной код по-прежнему
-  идёт путём Docker и relay (харнесс для экспериментов). С настоящим GigaCode на Linux
-  direct-runner не проверялся. Отгружается промпт v1, измеренный v2 не включён.
+- совет ИИ: отдельный артефакт, вердикт не меняет. Добавлен локальный stdio
+  MCP-прокси `ltv mcp` (`AiAdviceStore` с provenance `self-reported`, skill
+  `skills/lt-verdict-mcp-analysis/SKILL.md`; встроенный
+  `ModelStudioAdvisoryRunner` заморожен). Прежний direct-runner
+  ([ADR 0027](docs/adr/0027-advisory-ai-direct-local-runner.md),
+  `LT_VERDICT_AI_RUNNER_MODE=local`) и харнесс Docker/relay с настоящим
+  GigaCode на Linux не проверялись; отгружается промпт v1, измеренный v2 не
+  включён.
 
 Где задаются ресурсные пороги:
 
@@ -59,9 +62,12 @@ Gatling (`simulation.log`, текстовый и бинарный). «Прове
 
 Чего нет:
 
-- статистической обоснованности выводов: сравнение двух прогонов использует
-  фиксированные 5 % (на автокоррелированном нуле 36,8 % ложных `CANDIDATE`);
-  статистическая приёмка корреляций v1 не пройдена;
+- статистической обоснованности выводов в полном объёме: в `W4.2` для
+  сравнения двух прогонов добавлена внутриоконная блочная модель шума по
+  1-секундным бакетам (ложный шум снижен с `36,8 %` / `5,4 %` до
+  `T02 2,5%–3,0% <= 5%`, `T03 0,2%–0,4%`) и симметричный `±5%` допуск
+  RPS для `stage_binding`; однако статистическая приёмка корреляций v1
+  не пройдена;
 - автоопределения окна устойчивого состояния: без объявленных стадий или окон ресурсов
   вердикт считается по всему прогону, включая разгон; границы стадий задаёт человек
   (в CLI — `ltv stages detect` и `--like`, в Web UI — кнопка «Предложить стадии»
@@ -145,23 +151,31 @@ health-check; ловушка и коды ошибок описаны в
 ## Статус
 
 Принят local-first baseline v0.6. Slice 0 завершён и отмечен тегом `stage-0`,
-выпущен релиз `v0.1.0`.
-Slice 1 реализован как candidate и готов к review; milestone gate остаётся
-pending до зелёных runtime/performance jobs. После него в `main` влиты русская
-оболочка интерфейса, история релизов с baseline по
-паре «серия, плечо», платформенные правила политики, контракт `pod-view.v1` и
-тепловая карта подов на вкладке «Глубокий анализ», а ИИ-разбор запрашивается без
-согласия на отправку.
+выпущены релизы `v0.1.0` и `v0.2.0`; на `main` завершены Волны 1–3
+операционного плана (подготовка `v0.3.0`, без `M3.3 / W4.0`).
+Slice 1 и последующие локальные срезы влиты в `main`: русская оболочка
+интерфейса (прежний `?shell=old` удалён), история релизов с baseline по
+паре «серия, плечо» и сохранением `jenkins_build` / `commit`, платформенные
+правила политики, контракт `pod-view.v1`, тепловая карта подов на вкладке
+«Глубокий анализ», синтез инцидентов `incident.v1` в «Обзоре» и HTML-отчёте,
+локальный stdio MCP-прокси `ltv mcp` (`self-reported` provenance,
+`ModelStudioAdvisoryRunner` заморожен), `ltv doctor`, `ltv quickstart` и
+стартовые профили OpenShift/JVM/PostgreSQL.
 
 Первая часть Slices 8–9 добавляет открытие сохранённых analyses, графики
-нагрузки и JSON/HTML export через UI и CLI. Полный MVP остаётся в разработке.
+нагрузки и JSON/HTML export через UI и CLI. Живая стендовая приёмка и часть
+внешних проверок остаются открытыми ([чеклист живой приёмки
+v0.3.0](docs/v0.3.0-live-acceptance-checklist.md)).
 
 Resource snapshot добавляет статистики аппаратных метрик и совместные оконные
 бизнес-/ресурсные SLA. По явному плану доступны эпизоды median/MAD,
 Spearman/partial rank correlation и сравнение окон двух прогонов.
-Capacity доступен по явным ступеням и SLA с generator guards; рядом с ним
-выдаётся диагностика колена по p95 ступеней (не откалибровано, не влияет на
-вердикт, ADR 0026), откалиброванный `capacity_knee` не реализован. По явному `trend-plan.v1` доступен L0-детектор роста
+Capacity доступен по явным ступеням и SLA с generator guards (включая
+`LOWER_BOUND` по PASS-префиксу и двухоконное правило ресурсных SLA на целевой
+ступени); рядом с ним выдаётся откалиброванная диагностика колена
+`piecewise-hinge-ln-p95.v2` (допуск плато, `calibrated: true`, не влияет на
+границу ёмкости и вердикт, ADR 0026 Accepted). По явному `trend-plan.v1`
+доступен L0-детектор роста
 ресурсных метрик в пределах SLA: это наблюдение с объявленной величиной, а не
 статистический вывод и не диагноз. Статистическая неопределённость raw-оценок
 пока не оценивается (`NOT_ESTIMATED`). Исключение — выбор главных корреляционных
@@ -177,7 +191,11 @@ development-замер H3 (3,2–3,3 % на независимых AR(1)); пр�
 (`java.util.Random`) в них не участвовал и отдельно не калибровался, независимой
 приёмки нет
 ([контракт](docs/contracts/diagnostics/v1/correlation-headline-selection.md)).
-Шум сравнения двух прогонов (T02 36.8%, T03 5.4%) остаётся.
+Для сравнения двух прогонов в `W4.2` (`M3.1`) добавлена внутриоконная блочная
+модель шума по 1-секундным бакетам: на benchmark (`1000..1999`) и независимом
+OOS-holdout (`5000..5999`) ложный шум снижен с прежних `T02 36.8%, T03 5.4%` до
+`T02 2.5%–3.0% (<= 5%)` и `T03 0.2%–0.4%` при `>= 90%` обнаружения сдвигов, а
+`stage_binding` получил симметричный `±5%` допуск по RPS (`max/min <= 1.05`).
 
 Источники реализованы: PromQL/VictoriaMetrics/Grafana proxy, InfluxQL,
 OpenSearch и PostgreSQL pre/post. Поддерживаются несколько источников,
@@ -201,21 +219,21 @@ Temurin и на урезанном runtime без инструментов JDK).
 
 1. Скачайте `ltv-<версия>.zip` и `ltv-<версия>.zip.sha256` со страницы GitHub Release
    (репозиторий приватный, нужен доступ), например
-   `gh release download v0.1.0 -R system0shock/LT-Verdict`.
-2. Проверьте сумму: `sha256sum -c ltv-0.1.0.zip.sha256` (Linux) или
-   `(Get-FileHash ltv-0.1.0.zip).Hash` в PowerShell и сравните с содержимым `.sha256`.
+   `gh release download v0.3.0 -R system0shock/LT-Verdict`.
+2. Проверьте сумму: `sha256sum -c ltv-0.3.0.zip.sha256` (Linux) или
+   `(Get-FileHash ltv-0.3.0.zip).Hash` в PowerShell и сравните с содержимым `.sha256`.
 3. Распакуйте архив в любой каталог, например `C:\ltv` или `~/ltv`.
 4. Проверьте установку, прогоните 1-командный quickstart и откройте отчёт или UI:
 
 ```powershell
-.\ltv-0.1.0\bin\ltv.bat --version
-.\ltv-0.1.0\bin\ltv.bat quickstart --out-dir .\quickstart-out --data-dir .\quickstart-data
-.\ltv-0.1.0\bin\ltv.bat ui --data-dir .\quickstart-data
+.\ltv-0.3.0\bin\ltv.bat --version
+.\ltv-0.3.0\bin\ltv.bat quickstart --out-dir .\quickstart-out --data-dir .\quickstart-data
+.\ltv-0.3.0\bin\ltv.bat ui --data-dir .\quickstart-data
 ```
 
-В Linux те же команды: `./ltv-0.1.0/bin/ltv --version`,
-`./ltv-0.1.0/bin/ltv quickstart --out-dir ./quickstart-out --data-dir ./quickstart-data` и
-`./ltv-0.1.0/bin/ltv ui --data-dir ./quickstart-data`.
+В Linux те же команды: `./ltv-0.3.0/bin/ltv --version`,
+`./ltv-0.3.0/bin/ltv quickstart --out-dir ./quickstart-out --data-dir ./quickstart-data` и
+`./ltv-0.3.0/bin/ltv ui --data-dir ./quickstart-data`.
 Стартовый набор `examples/quickstart/`, стартовые профили источников в `docs/contracts/sources/v1/`
 и документация в `docs/user/` уже входят в архив.
 
@@ -250,6 +268,7 @@ Linux использует `./gradlew installDist` и
 - [История релизов и выбор baseline](docs/user/release-history.md)
 - [Opt-in подготовка OpenSearch correlation](docs/user/opensearch-correlation-preparation.md)
 - [Checklist отдельной приёмки MVP](docs/mvp-acceptance-checklist.md)
+- [Чеклист живой приёмки v0.3.0 на внешнем стенде](docs/v0.3.0-live-acceptance-checklist.md)
 - [ADR 0007 — opt-in онлайн-источники](docs/adr/0007-opt-in-online-sources.md)
 - [ADR 0008 — PostgreSQL pre/post capture](docs/adr/0008-postgresql-pre-post-capture.md)
 - [Архитектура локального runtime Slice 1](docs/architecture/slice-1-local-runtime.md)

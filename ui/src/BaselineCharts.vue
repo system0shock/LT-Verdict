@@ -42,6 +42,9 @@ async function loadResourceOverlay(
   refA: { run_id: string; analysis_id: string },
   refB: { run_id: string; analysis_id: string },
 ): Promise<CompareResourceLane[]> {
+  const hasResourceBinding = props.result?.evidence.some((item) => item.type === 'resource_binding') ?? false
+  const hasResourceWindowMetric = props.comparison.window_comparison?.metrics.some((item) => Boolean(item.resource_series_id)) ?? false
+  if (!hasResourceBinding || !hasResourceWindowMetric) return []
   try {
     const [catA, catB] = await Promise.all([
       getResourceSeriesCatalog(refA.run_id, refA.analysis_id),

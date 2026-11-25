@@ -72,7 +72,7 @@ export interface ChartColors {
 export interface LaneFlags { timeLabels: boolean; stageLabels: boolean; plotHeight?: number; ySplits?: number; sparkline?: boolean }
 
 export const PLOT_INSET = { left: 56, right: 16 } as const
-const PLOT_HEIGHT = 96
+const PLOT_HEIGHT = 78
 const STAGE_LABEL_MIN_SHARE = 0.1
 const TIME_STEPS_MS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10_800, 21_600, 43_200].map((seconds) => seconds * 1000)
 

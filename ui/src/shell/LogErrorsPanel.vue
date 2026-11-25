@@ -16,12 +16,24 @@ const emit = defineEmits<{
 }>()
 
 const errorGroups = ref<ErrorGroupsResponse | null>(null)
+const jtlLoading = ref(false)
+const jtlLoaded = ref(false)
 const activeTab = ref<'pvs' | 'jtl'>('pvs')
 const query = ref('')
 const expanded = ref(false)
 const controller = new AbortController()
 
 const originMs = computed(() => runStartMs(props.result))
+
+const overallErrorCount = computed(() => {
+  const overall = props.result.evidence.find(
+    (item): item is Extract<AnalysisResult['evidence'][number], { type: 'metric_summary' }> =>
+      item.type === 'metric_summary'
+      && item.scope.kind === 'overall'
+      && (item.window_id === undefined || item.window_id === null),
+  )
+  return overall?.error_count ?? 0
+})
 
 const openSearchContexts = computed<OpenSearchEvidence[]>(() =>
   props.result.evidence
@@ -104,12 +116,33 @@ const pvsCoverage = computed(() => openSearchContexts.value[0]?.coverage.status 
 
 const jtlGroups = computed<ErrorGroupItem[]>(() => errorGroups.value?.groups ?? [])
 const totalJtlErrors = computed(() =>
-  errorGroups.value?.total_error_count ?? jtlGroups.value.reduce((sum, item) => sum + item.count, 0),
+  errorGroups.value?.total_error_count ?? (jtlGroups.value.length ? jtlGroups.value.reduce((sum, item) => sum + item.count, 0) : overallErrorCount.value),
 )
 
 const hasPvs = computed(() => openSearchContexts.value.length > 0 && (pvsRows.value.length > 0 || totalPvsErrors.value > 0))
-const hasJtl = computed(() => jtlGroups.value.length > 0)
+const hasJtl = computed(() => overallErrorCount.value > 0 || jtlGroups.value.length > 0)
 const showPanel = computed(() => hasPvs.value || hasJtl.value)
+
+async function loadJtlErrorGroups() {
+  if (jtlLoaded.value || jtlLoading.value || props.result.run_validity === 'INVALID') return
+  jtlLoading.value = true
+  try {
+    const response = await getErrorGroups(props.runId, props.analysisId, controller.signal)
+    if (!controller.signal.aborted) {
+      errorGroups.value = response
+      jtlLoaded.value = true
+    }
+  } catch {
+    if (!controller.signal.aborted) jtlLoaded.value = true
+  } finally {
+    if (!controller.signal.aborted) jtlLoading.value = false
+  }
+}
+
+function selectJtlTab() {
+  activeTab.value = 'jtl'
+  void loadJtlErrorGroups()
+}
 
 const filteredPvs = computed(() => {
   const q = query.value.trim().toLowerCase()
@@ -137,18 +170,8 @@ const filteredJtl = computed(() => {
 
 const visibleJtl = computed(() => (expanded.value ? filteredJtl.value : filteredJtl.value.slice(0, 5)))
 
-onMounted(async () => {
+onMounted(() => {
   if (!hasPvs.value) activeTab.value = 'jtl'
-  if (props.result.run_validity === 'INVALID') return
-  try {
-    const response = await getErrorGroups(props.runId, props.analysisId, controller.signal)
-    if (!controller.signal.aborted) {
-      errorGroups.value = response
-      if (!hasPvs.value && response.groups.length > 0) activeTab.value = 'jtl'
-    }
-  } catch {
-    // Non-fatal: Overview stays usable when error-groups artifact is absent.
-  }
 })
 
 onUnmounted(() => controller.abort())
@@ -223,9 +246,9 @@ onUnmounted(() => controller.abort())
             role="tab"
             :aria-selected="activeTab === 'jtl'"
             data-testid="log-errors-tab-jtl"
-            @click="activeTab = 'jtl'"
+            @click="selectJtlTab"
           >
-            Ответы генератора · JTL ({{ jtlGroups.length }})
+            Ответы генератора · JTL{{ jtlLoaded ? ` (${jtlGroups.length})` : '' }}
           </button>
         </div>
       </div>
@@ -317,67 +340,86 @@ onUnmounted(() => controller.abort())
 
     <div
       v-else-if="hasJtl"
-      class="table-wrap"
-      tabindex="0"
-      role="region"
-      aria-label="Ошибки ответов генератора"
+      class="log-errors-panel__jtl-wrap"
     >
-      <table data-testid="jtl-error-groups-table">
-        <thead>
-          <tr>
-            <th scope="col">
-              Код ответа
-            </th>
-            <th scope="col">
-              Транзакция
-            </th>
-            <th scope="col">
-              Ошибок (доля)
-            </th>
-            <th scope="col">
-              Окно
-            </th>
-            <th scope="col">
-              Сообщение генератора
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="item in visibleJtl"
-            :key="item.id"
-            data-testid="jtl-error-group-row"
-          >
-            <td>
-              <span class="log-pill log-pill--crit mono">{{ item.response_code ?? '—' }}</span>
-            </td>
-            <td class="mono">
-              <strong>{{ item.scope.label }}</strong>
-            </td>
-            <td class="mono">
-              <strong>{{ formatNumber(item.count, 0) }}</strong>
-              <span
-                v-if="totalJtlErrors > 0"
-                class="muted"
-              > ({{ formatNumber((item.count / totalJtlErrors) * 100, 1) }}%)</span>
-            </td>
-            <td class="mono muted">
-              {{ formatEpochWindow(item.from_epoch_ms, item.to_epoch_ms) }}
-            </td>
-            <td class="mono log-errors-panel__msg">
-              {{ item.message ?? '—' }}
-            </td>
-          </tr>
-          <tr v-if="!visibleJtl.length">
-            <td
-              colspan="5"
-              class="muted"
+      <div
+        v-if="!jtlLoaded"
+        class="log-errors-panel__jtl-load"
+      >
+        <button
+          type="button"
+          class="log-action-btn"
+          data-testid="load-jtl-error-groups"
+          :disabled="jtlLoading"
+          @click="loadJtlErrorGroups"
+        >
+          {{ jtlLoading ? 'Загрузка разбивки ошибок…' : `Загрузить разбивку кодов ответа (${formatNumber(totalJtlErrors, 0)} ошибок)` }}
+        </button>
+      </div>
+      <div
+        v-else
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        aria-label="Ошибки ответов генератора"
+      >
+        <table data-testid="jtl-error-groups-table">
+          <thead>
+            <tr>
+              <th scope="col">
+                Код ответа
+              </th>
+              <th scope="col">
+                Транзакция
+              </th>
+              <th scope="col">
+                Ошибок (доля)
+              </th>
+              <th scope="col">
+                Окно
+              </th>
+              <th scope="col">
+                Сообщение генератора
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="item in visibleJtl"
+              :key="item.id"
+              data-testid="jtl-error-group-row"
             >
-              По фильтру «{{ query }}» групп ошибок не найдено.
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              <td>
+                <span class="log-pill log-pill--crit mono">{{ item.response_code ?? '—' }}</span>
+              </td>
+              <td class="mono">
+                <strong>{{ item.scope.label }}</strong>
+              </td>
+              <td class="mono">
+                <strong>{{ formatNumber(item.count, 0) }}</strong>
+                <span
+                  v-if="totalJtlErrors > 0"
+                  class="muted"
+                > ({{ formatNumber((item.count / totalJtlErrors) * 100, 1) }}%)</span>
+              </td>
+              <td class="mono muted">
+                {{ formatEpochWindow(item.from_epoch_ms, item.to_epoch_ms) }}
+              </td>
+              <td class="mono log-errors-panel__msg">
+                {{ item.message ?? '—' }}
+              </td>
+            </tr>
+            <tr v-if="!visibleJtl.length">
+              <td
+                colspan="5"
+                class="muted"
+              >
+                {{ query ? `По фильтру «${query}» групп ошибок не найдено.` : 'Разбивка кодов ответа недоступна для этого анализа.' }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div
@@ -435,11 +477,14 @@ onUnmounted(() => controller.abort())
 }
 
 .log-errors-panel__search {
-  min-width: 220px;
+  min-width: 0;
+  width: min(260px, 100%);
 }
 
 .log-errors-panel__tabs {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: 4px;
   padding: 2px;
   border: 1px solid var(--border);

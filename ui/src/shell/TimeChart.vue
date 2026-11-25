@@ -242,6 +242,7 @@ onBeforeUnmount(() => {
 .time-chart__value {
   top: 2px;
   border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-inset) 75%, transparent);
 }
 
 .time-chart__value--sr-only {

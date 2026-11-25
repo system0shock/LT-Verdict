@@ -704,6 +704,8 @@ onBeforeUnmount(() => {
 
 .shared-chart__seg {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: 3px;
   padding: 2px;
   border: 1px solid var(--border);

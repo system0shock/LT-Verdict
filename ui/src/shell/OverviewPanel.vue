@@ -953,7 +953,7 @@ const kindLabels: Record<AttentionKind, string> = {
 
 .overview-incidents {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
   gap: 14px;
   list-style: none;
   margin: 12px 0 0;
@@ -1097,7 +1097,7 @@ const kindLabels: Record<AttentionKind, string> = {
 
 .overview-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: 12px;
   margin-top: 12px;
 }

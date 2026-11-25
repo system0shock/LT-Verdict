@@ -67,6 +67,40 @@
   --c-rest: #64748B;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .shell {
+    --canvas: #0F171F;
+    --surface: #17222D;
+    --surface-muted: #22303D;
+    --surface-inset: #1C2935;
+    --text: #E6ECF2;
+    --text-muted: #93A3B5;
+    --border: #2A3846;
+    --control-border: #8496A8;
+    --border-strong: #637587;
+    --brand: #6FA8F0;
+    --brand-contrast: #0F171F;
+    --focus: #8CC7FF;
+    --pass: #6FCB9F;
+    --pass-bg: #12301F;
+    --warn: #F2C265;
+    --warn-bg: #33290F;
+    --fail: #FF8F86;
+    --fail-bg: #3A1D1B;
+    --info: #6FA8F0;
+    --info-bg: #1B2C42;
+    --c-0: #6FA8F0;
+    --c-1: #FBBF24;
+    --c-2: #4FD1C5;
+    --c-3: #B794F4;
+    --c-4: #60A5FA;
+    --c-5: #F472B6;
+    --c-6: #34D399;
+    --c-7: #818CF8;
+    --c-rest: #64748B;
+  }
+}
+
 .shell .panel,
 .shell .metric-card,
 .shell .job-status {

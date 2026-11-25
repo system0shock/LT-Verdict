@@ -409,12 +409,25 @@ export function thresholdKpis(result: AnalysisResult, limit = 6): VerdictKpi[] {
     }),
     ...resource.map((check): VerdictKpi => {
       const sign = check.operator === 'gt' ? '≤' : '≥'
+      const summary = result.evidence.find(
+        (item): item is Extract<AnalysisResult['evidence'][number], { type: 'resource_summary' }> =>
+          item.type === 'resource_summary'
+          && item.series_id === check.series_id
+          && (item.window_id === check.window_id || !check.window_id),
+      )
+      const stats = summary?.statistics
+      const statVal = stats
+        ? (check.operator === 'gt' ? (stats.max ?? stats.q95 ?? stats.mean) : (stats.min ?? stats.mean))
+        : null
+      const numericObserved = statVal !== null && statVal !== undefined && Number.isFinite(Number(statVal))
+        ? `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(Number(statVal))}${check.unit ? ` ${check.unit}` : ''}`
+        : null
       return {
         key: `r:${check.id}`,
         ruleId: check.rule_id,
         label: `${check.rule_id} (${check.series_id})`,
         status: check.status,
-        observed: check.status === 'FAIL' ? 'нарушено' : check.status === 'PASS' ? 'в норме' : 'нет данных',
+        observed: numericObserved ?? (check.status === 'FAIL' ? 'нарушено' : check.status === 'PASS' ? 'в норме' : 'нет данных'),
         threshold: `${sign} ${check.threshold}${check.unit ? ` ${check.unit}` : ''}`,
       }
     }),

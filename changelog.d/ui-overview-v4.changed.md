@@ -1,0 +1,5 @@
+- Upgraded Overview page (`OverviewPanel`, `SharedCursorChart`, `VerdictCard`, `PlatformMap`, `LogErrorsPanel`):
+  - Displayed numeric observed resource values in `VerdictCard` KPI tiles and neutral card framing with semantic left border.
+  - Added scalable per-transaction mode (`Общий RPS` / `По транзакциям`, stacked RPS with background remainder, `p50/p95/p99` switcher, searchable/sortable table rubricator up to 8 curves) and opaque Grafana-style floating tooltip on Overview charts.
+  - Added dedicated ПВС / OpenSearch & JTL `error-groups.v1` log errors panel (`LogErrorsPanel`) directly on Overview.
+  - Formatted trend slopes in readable hourly units (`п.п./ч` / `ед./ч`), arranged Incident cards in a responsive multi-column grid, and added search/navigation in `PlatformMap`.

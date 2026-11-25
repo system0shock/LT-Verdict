@@ -14,10 +14,13 @@ const props = defineProps<{
   result: AnalysisResult
 }>()
 
+const emit = defineEmits<{ 'open-service': [service: string] }>()
+
 const loaded = ref<Record<string, AnalysisResult>>({})
 const failures = ref<Record<string, string>>({})
 const loading = ref(false)
 const onlyProblems = ref(false)
+const search = ref('')
 const picks = computed(() => armAnalyses(props.analyses, props.analysisId))
 const results = computed<ArmResult[]>(() => picks.value.map((pick) => ({
   arm: pick.arm,
@@ -25,7 +28,11 @@ const results = computed<ArmResult[]>(() => picks.value.map((pick) => ({
 })))
 const map = computed(() => buildServiceArmMap(results.value))
 const problems = computed(() => new Set(problemServices(map.value)))
-const rows = computed(() => onlyProblems.value ? map.value.services.filter((service) => problems.value.has(service)) : map.value.services)
+const rows = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  const base = onlyProblems.value ? map.value.services.filter((service) => problems.value.has(service)) : map.value.services
+  return q ? base.filter((service) => service.toLowerCase().includes(q)) : base
+})
 const duplicates = computed(() => picks.value.filter((pick) => pick.analysesOfArm > 1))
 const controller = new AbortController()
 
@@ -87,14 +94,23 @@ const cellOf = (service: string, arm: string) => map.value.cells.find((cell) => 
       <p data-testid="platform-map-summary">
         {{ problems.size ? LABELS.summary(problems.size, map.services.length) : LABELS.noProblems }}
       </p>
-      <label class="platform-map__filter">
+      <div class="platform-map__controls">
         <input
-          v-model="onlyProblems"
-          type="checkbox"
-          data-testid="platform-map-only-problems"
+          v-model="search"
+          type="search"
+          data-testid="platform-map-search"
+          placeholder="Поиск сервиса…"
+          aria-label="Поиск сервиса в матрице плеч"
         >
-        {{ LABELS.onlyProblems }}
-      </label>
+        <label class="platform-map__filter">
+          <input
+            v-model="onlyProblems"
+            type="checkbox"
+            data-testid="platform-map-only-problems"
+          >
+          {{ LABELS.onlyProblems }}
+        </label>
+      </div>
       <div
         class="table-wrap"
         tabindex="0"
@@ -125,7 +141,13 @@ const cellOf = (service: string, arm: string) => map.value.cells.find((cell) => 
               :data-service="service"
             >
               <th scope="row">
-                {{ service }}
+                <button
+                  type="button"
+                  class="platform-map__service-btn"
+                  @click="emit('open-service', service)"
+                >
+                  {{ service }}
+                </button>
               </th>
               <td
                 v-for="arm in map.arms"

@@ -8,12 +8,13 @@ import {
 import { OVERVIEW_LABELS } from './labels'
 import { CAPACITY_LABELS } from './labels.tables'
 import CapacityKneeChart from './CapacityKneeChart.vue'
+import LogErrorsPanel from './LogErrorsPanel.vue'
 import PlatformMap from './PlatformMap.vue'
 import SharedCursorChart from './SharedCursorChart.vue'
 import TimeChart from './TimeChart.vue'
 import {
   attentionItems, capacityBlock, formatNumber, formatOffset, incidentView, keyMetrics, loadP95Thresholds, loadSeries,
-  platformTiles, trendOverview, type AttentionKind, type AttentionTarget, type IncidentAction,
+  platformTiles, transactionCatalog, trendOverview, type AttentionKind, type AttentionTarget, type IncidentAction,
 } from './overview'
 import { stageBands, type ChartFrame, type ChartLane, type ChartToken } from './timeChart'
 import type { AnalysisResult, AnalysisSummary, ResourceSeriesCatalog, ResourceSeriesEntry } from '../types'
@@ -57,6 +58,7 @@ const capacity = computed(() => props.result.analysis_mode === 'capacity_step' ?
 const tiles = computed(() => keyMetrics(props.result))
 const trends = computed(() => trendOverview(props.result))
 const platform = computed(() => platformTiles(props.result, 8))
+const transactions = computed(() => transactionCatalog(props.result))
 const p95Thresholds = computed(() => loadP95Thresholds(props.result))
 
 const runLoad = ref<RunLoad>({ buckets: [], rollupSeconds: 60, truncated: false })
@@ -179,12 +181,20 @@ const kindLabels: Record<AttentionKind, string> = {
     data-testid="overview-panel"
     lang="ru"
   >
+    <LogErrorsPanel
+      :result="result"
+      :run-id="runId"
+      :analysis-id="analysisId"
+      @open-service="emit('navigate', { tab: 'deep', targetId: 'deep-title' })"
+    />
+
     <PlatformMap
       v-if="armed && analyses"
       :run-id="runId"
       :analyses="analyses"
       :analysis-id="analysisId"
       :result="result"
+      @open-service="emit('navigate', { tab: 'deep', targetId: 'deep-title' })"
     />
 
     <section
@@ -864,6 +874,9 @@ const kindLabels: Record<AttentionKind, string> = {
         :series="series"
         :stages="stages"
         :p95-thresholds="p95Thresholds"
+        :transactions="transactions"
+        :run-id="runId"
+        :analysis-id="analysisId"
       />
       <p
         v-else
@@ -940,7 +953,8 @@ const kindLabels: Record<AttentionKind, string> = {
 
 .overview-incidents {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
   list-style: none;
   margin: 12px 0 0;
   padding: 0;

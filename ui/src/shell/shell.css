@@ -119,6 +119,54 @@
   width: 100%;
 }
 
+.shell .verdict-strip[data-verdict="PASS"],
+.shell .verdict-strip[data-verdict="FAIL"],
+.shell .verdict-strip[data-verdict="NO_VERDICT"],
+.shell .verdict-strip[data-verdict="NO_POLICY"] {
+  background: var(--surface);
+  border-left-width: 4px;
+}
+
+.shell .platform-map__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 8px 0;
+}
+
+.shell .platform-map__service-btn {
+  border: 0;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--brand);
+  font-weight: 600;
+  text-align: left;
+}
+
+.shell .history-metric-switcher {
+  display: inline-flex;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-inset);
+  width: fit-content;
+}
+
+.shell .history-metric-switcher button {
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.shell .history-metric-switcher button[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+}
+
 .shell .shell-panel > *,
 .shell .tables-subpanel > * {
   min-width: 0;

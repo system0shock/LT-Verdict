@@ -32,6 +32,9 @@ const grid = ref<SnapshotGrid | null>(null)
 const selected = ref<string[]>([])
 const pinnedLoad = ref<string[]>(['load-rps', 'load-p95'])
 const primaryKey = ref<string>('load-rps')
+const deepMode = ref<'focus' | 'workbench'>('focus')
+const catalogGrouping = ref<'role' | 'service'>('role')
+const onlyDeviations = ref(false)
 const filter = ref('')
 const serviceFilter = ref('')
 const periodFrom = ref('')
@@ -56,6 +59,33 @@ const loadKeySet = new Set(LOAD_CATALOG_ITEMS.map((item) => item.key))
 const stageList = computed(() => stageButtons(props.result, catalogWindows.value, originMs))
 const stages = computed(() => deepStages(props.result, catalogWindows.value, originMs))
 const groupedCatalog = computed(() => groupMetricCatalog(catalog.value, filter.value, serviceFilter.value))
+const violatedSeriesIds = computed(() => {
+  const ids = new Set<string>()
+  for (const item of props.result.evidence) {
+    if (item.type === 'resource_policy_check' && item.status === 'FAIL') ids.add(item.series_id)
+    if (item.type === 'trend_check' && item.status === 'TREND_OBSERVED') ids.add(item.series_id)
+  }
+  return ids
+})
+const filteredPlatformByRole = computed(() => {
+  const filterList = (list: ResourceSeriesEntry[]) => (
+    onlyDeviations.value ? list.filter((entry) => violatedSeriesIds.value.has(entry.id)) : list
+  )
+  return {
+    system: filterList(groupedCatalog.value.platformByRole.system),
+    generator: filterList(groupedCatalog.value.platformByRole.generator),
+  }
+})
+const filteredPlatformByService = computed(() => {
+  const map = new Map<string, ResourceSeriesEntry[]>()
+  for (const entry of [...filteredPlatformByRole.value.system, ...filteredPlatformByRole.value.generator]) {
+    const svc = entry.entity || 'Без сервиса'
+    const bucket = map.get(svc) ?? []
+    bucket.push(entry)
+    map.set(svc, bucket)
+  }
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+})
 const arms = computed(() => armAnalyses(props.analyses, props.analysisId))
 const hasPodView = computed(() => podViewGroups(props.analyses, props.analysisId).length > 0)
 const showPeriodPanel = computed(() => (hasSnapshot.value ? Boolean(grid.value) : stageList.value.length > 0 || load.value.length > 0))
@@ -366,6 +396,30 @@ onUnmounted(() => { revision += 1; controller?.abort() })
         </h2>
         <div class="deep-nav-actions">
           <div
+            class="deep-mode-switcher"
+            role="group"
+            aria-label="Режим глубокого анализа"
+          >
+            <button
+              type="button"
+              class="stage-btn"
+              data-testid="deep-mode-workbench"
+              :aria-pressed="deepMode === 'workbench' ? 'true' : 'false'"
+              @click="deepMode = 'workbench'"
+            >
+              Свободное сравнение (стопка)
+            </button>
+            <button
+              type="button"
+              class="stage-btn"
+              data-testid="deep-mode-focus"
+              :aria-pressed="deepMode === 'focus' ? 'true' : 'false'"
+              @click="deepMode = 'focus'"
+            >
+              Фокус на одном ряде
+            </button>
+          </div>
+          <div
             v-if="arms.length > 1"
             class="arm-switcher"
             data-testid="deep-arm-switcher"
@@ -538,6 +592,7 @@ onUnmounted(() => { revision += 1; controller?.abort() })
             :axis="axis"
             :origin-ms="originMs"
             :stages="stages"
+            :mode="deepMode"
           />
           <p v-if="loadOutside">
             {{ DEEP_LABELS.loadOutsideRun }}
@@ -645,6 +700,43 @@ onUnmounted(() => { revision += 1; controller?.abort() })
           data-testid="deep-group-platform"
         >
           <h3>{{ DEEP_LABELS.groupLabels.platform }}</h3>
+          <div class="catalog-facet-controls">
+            <div
+              class="deep-mode-switcher"
+              role="group"
+              aria-label="Группировка каталога платформы"
+            >
+              <button
+                type="button"
+                class="stage-btn"
+                data-testid="deep-group-by-role"
+                :aria-pressed="catalogGrouping === 'role' ? 'true' : 'false'"
+                @click="catalogGrouping = 'role'"
+              >
+                По ролям
+              </button>
+              <button
+                type="button"
+                class="stage-btn"
+                data-testid="deep-group-by-service"
+                :aria-pressed="catalogGrouping === 'service' ? 'true' : 'false'"
+                @click="catalogGrouping = 'service'"
+              >
+                По сервисам
+              </button>
+            </div>
+            <label
+              v-if="violatedSeriesIds.size > 0"
+              class="catalog-only-bad"
+            >
+              <input
+                v-model="onlyDeviations"
+                type="checkbox"
+                data-testid="deep-only-deviations"
+              >
+              Только с отклонениями ({{ violatedSeriesIds.size }})
+            </label>
+          </div>
           <p data-testid="deep-selected-count">
             {{ DEEP_LABELS.seriesCount(selected.length, MAX_SELECTED_SERIES) }}
           </p>
@@ -657,16 +749,19 @@ onUnmounted(() => { revision += 1; controller?.abort() })
           <p v-if="!catalog.length">
             {{ DEEP_LABELS.seriesEmpty }}
           </p>
-          <p v-else-if="!groupedCatalog.platformByRole.system.length && !groupedCatalog.platformByRole.generator.length">
+          <p v-else-if="!filteredPlatformByRole.system.length && !filteredPlatformByRole.generator.length">
             {{ DEEP_LABELS.seriesNone }}
           </p>
-          <div class="series-list">
+          <div
+            v-if="catalogGrouping === 'role'"
+            class="series-list"
+          >
             <template
               v-for="roleKey in (['system', 'generator'] as const)"
               :key="roleKey"
             >
               <div
-                v-if="groupedCatalog.platformByRole[roleKey].length"
+                v-if="filteredPlatformByRole[roleKey].length"
                 class="role-subgroup"
                 :data-testid="'deep-role-' + roleKey"
               >
@@ -674,7 +769,7 @@ onUnmounted(() => { revision += 1; controller?.abort() })
                   {{ DEEP_LABELS.roleLabels[roleKey] }}
                 </p>
                 <div
-                  v-for="entry in groupedCatalog.platformByRole[roleKey]"
+                  v-for="entry in filteredPlatformByRole[roleKey]"
                   :key="entry.id"
                   class="series-row"
                 >
@@ -705,6 +800,45 @@ onUnmounted(() => { revision += 1; controller?.abort() })
               </div>
             </template>
           </div>
+          <div
+            v-else
+            class="series-list"
+            data-testid="deep-service-groups"
+          >
+            <div
+              v-for="[svcName, entries] in filteredPlatformByService"
+              :key="svcName"
+              class="role-subgroup"
+            >
+              <p class="role-heading muted">
+                {{ svcName }} ({{ entries.length }})
+              </p>
+              <div
+                v-for="entry in entries"
+                :key="entry.id"
+                class="series-row"
+              >
+                <input
+                  type="checkbox"
+                  :data-testid="'deep-series-' + entry.id"
+                  :aria-label="`${DEEP_LABELS.pinToggle}: ${entry.id}`"
+                  :checked="selected.includes(entry.id)"
+                  :disabled="!selected.includes(entry.id) && selected.length >= MAX_SELECTED_SERIES"
+                  @change="toggle(entry.id, ($event.target as HTMLInputElement).checked)"
+                >
+                <button
+                  type="button"
+                  class="metric-select-btn"
+                  :data-testid="'deep-metric-select-' + entry.id"
+                  :aria-pressed="primaryKey === entry.id ? 'true' : 'false'"
+                  @click="selectPrimaryMetric(entry.id)"
+                >
+                  <strong>{{ entry.metric }}</strong>
+                  <span class="muted"> ({{ entry.unit }})</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
     </div>
@@ -717,7 +851,9 @@ onUnmounted(() => { revision += 1; controller?.abort() })
 .deep-layout > *, .deep-main > * { min-width:0; }
 .deep-header-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
 .deep-header-row h2 { margin:0; }
-.deep-nav-actions,.arm-switcher,.stage-bar { display:flex; flex-wrap:wrap; gap:8px; }
+.deep-nav-actions,.arm-switcher,.stage-bar,.deep-mode-switcher { display:flex; flex-wrap:wrap; gap:8px; }
+.catalog-facet-controls { display:grid; gap:8px; }
+.catalog-only-bad { display:inline-flex; align-items:center; gap:8px; font-size:13px; }
 .stage-bar { margin-bottom:12px; }
 .stage-btn { min-height:44px; min-width:44px; padding:8px 12px; overflow-wrap:anywhere; }
 .stage-btn[aria-pressed="true"],.metric-select-btn[aria-pressed="true"] { border-color:var(--brand); background:var(--info-bg); color:var(--brand); font-weight:600; }

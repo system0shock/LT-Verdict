@@ -1,0 +1,1 @@
+- Upgraded Deep Analysis (`DeepAnalysisPanel`, `DeepCursorChart`) with dual workspace mode (`Свободное сравнение (стопка)` and `Фокус на одном ряде`), faceted rubricator grouping (`По метрикам` / `По сервисам` + `Только с отклонениями` filter), and opaque Grafana-style floating tooltip across all synchronized lanes.

@@ -124,6 +124,32 @@ test('the advice shows its model and prompt version from provenance and not a ha
   ])
 })
 
+test('self-reported MCP advice renders the self-reported origin label without prompt version', async ({ page }) => {
+  await openAdvice(page, {
+    advice: {
+      advisory: true,
+      run_id: runId,
+      analysis_id: analysisA,
+      provenance: {
+        invocation_id: '5f0b5f0e-8f0e-4b0e-9a3a-0d1a2b3c4d5e',
+        provenance_kind: 'self-reported',
+        runner_id: 'claude-code',
+        runner_version: '1.0.0',
+        model_id: 'claude-sonnet-4-5',
+        duration_ms: 420,
+      },
+      output: { summary: 'Сводка MCP', hypotheses: [], recommendations: [], caveats: ['Требуется проверка'] },
+    },
+  })
+  const origin = page.getByTestId('advice-provenance')
+  await expect(origin.locator('dt')).toHaveText([
+    ADVICE_LABELS.origin, ADVICE_LABELS.model, ADVICE_LABELS.duration, ADVICE_LABELS.runner, ADVICE_LABELS.invocation,
+  ])
+  await expect(origin).toContainText(ADVICE_LABELS.selfReportedOrigin)
+  await expect(origin).toContainText('claude-sonnet-4-5')
+  await expect(origin).toContainText('claude-code 1.0.0')
+})
+
 test('the old interface shows the same provenance because the panel is shared', async ({ page }) => {
   await openAdvice(page, { advice: advice(analysisA, 'm-old-shell', 'advisory-system.v2', 'Сводка совета', { provider_requests: 2 }) }, 'old')
   const origin = page.getByTestId('advice-provenance')

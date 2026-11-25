@@ -4,6 +4,8 @@
 export const ADVICE_LABELS = {
   intro: 'Совет создаёт языковая модель по данным этого анализа. Рекомендации могут содержать ошибки; гипотезы требуют проверки. Вердикт SLA не меняется.',
   provenanceTitle: 'Происхождение совета',
+  origin: 'Происхождение',
+  selfReportedOrigin: 'самоотчётный (MCP)',
   model: 'Модель',
   promptVersion: 'Версия prompt',
   requests: 'Запросов к модели',

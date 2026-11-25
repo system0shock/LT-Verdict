@@ -976,6 +976,7 @@ export interface AdviceDocument {
   // Необязательные поля: схема ai-advice.v1 расширяется аддитивно (ADR 0021, Д4).
   provenance?: {
     invocation_id?: string
+    provenance_kind?: 'runner' | 'self-reported'
     runner_id?: string
     runner_version?: string
     model_id?: string

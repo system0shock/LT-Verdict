@@ -16,10 +16,13 @@
     "provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["invocation_id", "runner_id", "runner_version", "runner_artifact_sha256", "model_id", "prompt_version", "prompt_sha256", "duration_ms", "exit_code", "validation"],
       "properties": {
         "invocation_id": { "type": "string", "format": "uuid" },
-        "runner_id": { "const": "gigacode-qwen-code" },
+        "provenance_kind": { "enum": ["runner", "self-reported"] },
+        "runner_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        },
         "runner_version": {
           "type": "string",
           "pattern": "^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$",
@@ -64,27 +67,54 @@
       },
       "allOf": [
         {
-          "if": { "required": ["endpoint_host"], "properties": { "endpoint_host": { "const": "cli-builtin" } } },
-          "then": { "not": { "required": ["provider_requests"] } },
-          "else": {
+          "if": { "required": ["provenance_kind"], "properties": { "provenance_kind": { "const": "self-reported" } } },
+          "then": {
+            "required": ["invocation_id", "provenance_kind", "runner_id", "model_id", "validation"],
             "properties": {
-              "runner_version": { "const": "0.21.1" },
-              "runner_artifact_sha256": { "const": "1db9709bf1753611ca2fec234cf5adf517376efeb1540fcf9e309da010f9ed38" }
-            }
-          }
-        },
-        {
-          "if": { "properties": { "prompt_version": { "const": "advisory-system.v2" } }, "required": ["prompt_version"] },
-          "then": { "required": ["provider_requests"] }
-        },
-        {
-          "if": { "required": ["endpoint_host"] },
-          "else": {
-            "properties": {
-              "model_id": { "const": "deepseek-v4-flash-0731" },
-              "prompt_version": { "const": "advisory-system.v1" }
+              "runner_id": { "not": { "const": "gigacode-qwen-code" } }
             },
-            "description": "Advice saved before endpoint_host existed: only the built-in ModelStudio endpoint and its model were possible."
+            "not": {
+              "anyOf": [
+                { "required": ["runner_artifact_sha256"] },
+                { "required": ["prompt_sha256"] },
+                { "required": ["provider_requests"] },
+                { "required": ["endpoint_host"] },
+                { "required": ["exit_code"] },
+                { "required": ["prompt_version"] }
+              ]
+            }
+          },
+          "else": {
+            "required": ["invocation_id", "runner_id", "runner_version", "runner_artifact_sha256", "model_id", "prompt_version", "prompt_sha256", "duration_ms", "exit_code", "validation"],
+            "properties": {
+              "runner_id": { "const": "gigacode-qwen-code" }
+            },
+            "allOf": [
+              {
+                "if": { "required": ["endpoint_host"], "properties": { "endpoint_host": { "const": "cli-builtin" } } },
+                "then": { "not": { "required": ["provider_requests"] } },
+                "else": {
+                  "properties": {
+                    "runner_version": { "const": "0.21.1" },
+                    "runner_artifact_sha256": { "const": "1db9709bf1753611ca2fec234cf5adf517376efeb1540fcf9e309da010f9ed38" }
+                  }
+                }
+              },
+              {
+                "if": { "properties": { "prompt_version": { "const": "advisory-system.v2" } }, "required": ["prompt_version"] },
+                "then": { "required": ["provider_requests"] }
+              },
+              {
+                "if": { "required": ["endpoint_host"] },
+                "else": {
+                  "properties": {
+                    "model_id": { "const": "deepseek-v4-flash-0731" },
+                    "prompt_version": { "const": "advisory-system.v1" }
+                  },
+                  "description": "Advice saved before endpoint_host existed: only the built-in ModelStudio endpoint and its model were possible."
+                }
+              }
+            ]
           }
         }
       ]

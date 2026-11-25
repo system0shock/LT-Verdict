@@ -7,6 +7,22 @@ import io.ltverdict.ingest.TIMESTAMP_UNIT_SUSPECT_RANGE
 import io.ltverdict.metrics.MetricsConfig
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.text.Normalizer
+
+internal const val MAX_PROVENANCE_TEXT_BYTES = 128
+
+internal fun normalizeProvenanceText(
+    raw: String?,
+    fieldName: String,
+): String? {
+    if (raw == null) return null
+    val normalized = Normalizer.normalize(raw, Normalizer.Form.NFC).trim()
+    if (normalized.isEmpty()) return null
+    require(normalized.none(Char::isISOControl) && normalized.encodeToByteArray().size <= MAX_PROVENANCE_TEXT_BYTES) {
+        "INVALID_PROVENANCE:$fieldName"
+    }
+    return normalized
+}
 
 @Serializable
 internal enum class AnalysisMode(
@@ -37,7 +53,11 @@ internal fun analysisIdentity(
     trend: TrendPlanValidation.Valid? = null,
     podView: PodViewValidation.Valid? = null,
     stages: LoadStagesValidation.Valid? = null,
+    jenkinsBuild: String? = null,
+    commit: String? = null,
 ): ByteArray {
+    val normalizedJenkinsBuild = normalizeProvenanceText(jenkinsBuild, "jenkins_build")
+    val normalizedCommit = normalizeProvenanceText(commit, "commit")
     val modules = mutableListOf("normalization", "metrics", "policy-evaluation")
     if (resources != null) modules += listOf("resource-statistics", "window-policy-evaluation")
     if (diagnostics != null) modules += "load-resource-diagnostics"
@@ -90,6 +110,8 @@ internal fun analysisIdentity(
             // ADR 0029, R3: unconditional top-level binding; stays out of modules, input_versions, outputs and limits, which are
             // part of the comparability key.
             incidentMethod = INCIDENT_METHOD,
+            jenkinsBuild = normalizedJenkinsBuild,
+            commit = normalizedCommit,
             engine = ComponentRef(config.engineId, config.engineVersion),
             parsers =
                 listOf(ComponentRef(input.sourceType.parserId(), if (input.sourceType == SourceType.JMETER_CSV) "2" else "1")),

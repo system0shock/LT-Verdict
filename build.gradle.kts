@@ -175,6 +175,7 @@ distributions {
                 into("docs/contracts/advice/v1")
             }
             from("skills/lt-verdict-onboard-test") { into("skills/lt-verdict-onboard-test") }
+            from("skills/lt-verdict-mcp-analysis") { into("skills/lt-verdict-mcp-analysis") }
             from(
                 files("docs/user/test-onboarding.md", "docs/user/advisory-ai.md", "docs/user/jenkins-and-reports.md"),
             ) { into("docs/user") }

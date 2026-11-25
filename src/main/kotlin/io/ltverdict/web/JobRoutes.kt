@@ -27,6 +27,7 @@ import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.TrendPlanValidation
+import io.ltverdict.core.normalizeProvenanceText
 import io.ltverdict.core.validateCapacityBinding
 import io.ltverdict.core.validateCapacityPlan
 import io.ltverdict.core.validateDiagnosticBinding
@@ -210,6 +211,8 @@ private class JobParts {
     var trend: TrendPlanValidation.Valid? = null
     var podView: PodViewValidation.Valid? = null
     var stages: LoadStagesValidation.Valid? = null
+    var jenkinsBuild: String? = null
+    var commit: String? = null
     var sourceRequest: WindowedSourceRequest? = null
     val sourceContexts = mutableListOf<ByteArray>()
     val postgresFiles = mutableMapOf<String, ByteArray>()
@@ -220,6 +223,8 @@ private class JobParts {
     var trendSeen = false
     var podViewSeen = false
     var stagesSeen = false
+    var jenkinsBuildSeen = false
+    var commitSeen = false
     var invalidParts = false
 }
 
@@ -264,6 +269,24 @@ private suspend fun readJobParts(call: ApplicationCall): JobParts {
                             malformed("run_id is invalid")
                         }
                         job.runId = part.value
+                    }
+                    part is PartData.FormItem && part.name == "jenkins_build" && !job.jenkinsBuildSeen && !job.invalidParts -> {
+                        job.jenkinsBuildSeen = true
+                        job.jenkinsBuild =
+                            try {
+                                normalizeProvenanceText(part.value, "jenkins_build")
+                            } catch (_: IllegalArgumentException) {
+                                malformed("jenkins_build is invalid")
+                            }
+                    }
+                    part is PartData.FormItem && part.name == "commit" && !job.commitSeen && !job.invalidParts -> {
+                        job.commitSeen = true
+                        job.commit =
+                            try {
+                                normalizeProvenanceText(part.value, "commit")
+                            } catch (_: IllegalArgumentException) {
+                                malformed("commit is invalid")
+                            }
                     }
 
                     part is PartData.FileItem && part.name == "policy" && !job.policySeen && !job.invalidParts -> {
@@ -584,6 +607,8 @@ private suspend fun bindJob(
         sourceRequest = sourceRequest,
         sourceAcquisition = acquisition,
         postgres = postgres,
+        jenkinsBuild = job.jenkinsBuild,
+        commit = job.commit,
     )
 }
 
@@ -656,8 +681,8 @@ private const val MAX_JOB_REQUEST_BYTES =
         MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_TREND_PLAN_BYTES + MAX_POD_VIEW_BYTES +
         MAX_MULTIPART_OVERHEAD_BYTES
 
-// 24 before pod_view; one more part for pod_view (ADR 0020, section 4).
-private const val MAX_JOB_PARTS = 25
+// 25 before release provenance; two more parts for jenkins_build and commit.
+private const val MAX_JOB_PARTS = 27
 
 private val POSTGRES_PART_LIMITS =
     mapOf(

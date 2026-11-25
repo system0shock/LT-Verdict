@@ -15,6 +15,7 @@ import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.TrendPlanValidation
 import io.ltverdict.core.canonicalJson
+import io.ltverdict.core.normalizeProvenanceText
 import io.ltverdict.core.validateCapacityBinding
 import io.ltverdict.core.validateCapacityPlan
 import io.ltverdict.core.validateDiagnosticBinding
@@ -92,6 +93,7 @@ internal fun runCli(
             "report" -> report(args.drop(1), stdout)
             "summary" -> report(args.drop(1) + listOf("--format", "summary"), stdout)
             "ui" -> ui(args.drop(1))
+            "mcp" -> mcpCommand(args.drop(1), stdout, stderr, stdin)
             "source" ->
                 if (args.getOrNull(1) in setOf("validate", "probe", "hash")) {
                     sourceProbeCommand(args.drop(1), stdout)
@@ -165,6 +167,10 @@ private fun analyze(
     var policySeen = false
     var dataDirSeen = false
     var significantDigitsSeen = false
+    var jenkinsBuild: String? = null
+    var commit: String? = null
+    var jenkinsBuildSeen = false
+    var commitSeen = false
     var index = 1
     while (index < args.size) {
         when (args[index]) {
@@ -239,10 +245,33 @@ private fun analyze(
                 if (pgProfileHtmlPath != null || index + 1 >= args.size) usage()
                 pgProfileHtmlPath = path(args[index + 1])
             }
+            "--jenkins-build" -> {
+                if (jenkinsBuildSeen || index + 1 >= args.size) usage()
+                jenkinsBuildSeen = true
+                jenkinsBuild = args[index + 1]
+            }
+            "--commit" -> {
+                if (commitSeen || index + 1 >= args.size) usage()
+                commitSeen = true
+                commit = args[index + 1]
+            }
             else -> usage()
         }
         index += 2
     }
+
+    val normalizedJenkinsBuild =
+        try {
+            normalizeProvenanceText(jenkinsBuild, "jenkins_build")
+        } catch (failure: IllegalArgumentException) {
+            throw CliFailure(EXIT_INVALID_INPUT, failure.cliMessage())
+        }
+    val normalizedCommit =
+        try {
+            normalizeProvenanceText(commit, "commit")
+        } catch (failure: IllegalArgumentException) {
+            throw CliFailure(EXIT_INVALID_INPUT, failure.cliMessage())
+        }
 
     requireRegularFile(input, EXIT_INVALID_INPUT, "INVALID_INPUT")
     outDir?.let { requireOutDir(it, input) }
@@ -389,6 +418,8 @@ private fun analyze(
                         sourceRequest = sourceRequest,
                         sourceAcquisition = context,
                         postgres = postgres,
+                        jenkinsBuild = normalizedJenkinsBuild,
+                        commit = normalizedCommit,
                     ),
                     source,
                 ).also { outcome ->
@@ -971,12 +1002,14 @@ private fun usageText(): String =
     (
         "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>] " +
             "[--connections <profiles.json>] [--jenkins-config <jenkins.json>] | " +
+            "ltv mcp (--url http://127.0.0.1:<port> | [--data-dir <path>] [--connections <profiles.json>]) | " +
             "ltv analyze <input> [--policy <policy.json>|-] [--stages <load-stages.json>] " +
             "[--out-dir <dir> [--baseline <analysis-result.json>]] " +
             "[--resources <snapshot.json>] [--capacity <plan.json>] " +
             "[--trend <plan.json>] [--pod-view <pod-view.json>] [--correlation <plan.json>] [--source-context <context.json>] " +
             "[--postgres-pre <pre.json>] [--postgres-post <post.json>] [--pg-profile-html <report.html>] " +
-            "[--connections <profiles.json> --source <source.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] | " +
+            "[--connections <profiles.json> --source <source.json>] [--histogram-significant-digits <3..5>] " +
+            "[--jenkins-build <id>] [--commit <ref>] [--data-dir <path>] | " +
             "ltv source pre|post --connections <profiles.json> --profile <id> [--pre <pre.json>] [--pg-profile-html <output.html>] | " +
             "ltv source validate --connections <profiles.json> [--profile <id>] [--format text|json] | " +
             "ltv source probe --connections <profiles.json> --profile <id> --query-id <id> [--window-ms <n>] [--step-ms <n>] " +

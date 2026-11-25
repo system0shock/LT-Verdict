@@ -113,6 +113,8 @@ internal data class AnalysisIdentityDocument(
     @SerialName("load_stages_sha256") val loadStagesSha256: String? = null,
     @SerialName("load_stages_version") val loadStagesVersion: String? = null,
     @SerialName("incident_method") val incidentMethod: String? = null,
+    @SerialName("jenkins_build") val jenkinsBuild: String? = null,
+    val commit: String? = null,
     val engine: ComponentRef,
     val parsers: List<ComponentRef>,
     val modules: List<ComponentRef>,

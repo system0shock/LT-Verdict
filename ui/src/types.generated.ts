@@ -51,6 +51,8 @@ export interface AnalysisIdentityDocument {
   load_stages_sha256?: string
   load_stages_version?: string
   incident_method?: string
+  jenkins_build?: string
+  commit?: string
   engine: ComponentRef
   parsers: Array<ComponentRef>
   modules: Array<ComponentRef>

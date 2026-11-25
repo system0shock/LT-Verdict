@@ -42,6 +42,7 @@ async function openCompare(page: Page, opts: Options = {}) {
     else if (path === '/api/jenkins' || path === '/api/grafana' || path === '/api/sources') body = { profiles: [] }
     else if (path.endsWith('/advice')) body = { advice: null, job: null }
     else if (path === '/api/runs') body = { runs: [run], next_after: null }
+    else if (method === 'GET' && path === '/api/releases') body = { releases: [], next_after: null, series_summary: [], corrupt_count: 0, corrupt_names: [] }
     else if (path === '/api/baseline' && method === 'GET') body = { baseline: null, baselines: slots }
     else if (path === '/api/baseline' && method === 'POST') {
       const posted = route.request().postDataJSON() as { series: string }
@@ -180,7 +181,7 @@ test('saved analytics ask for the series of the active baseline', async ({ page 
   const requests = await openCompare(page)
   await slotRadio(page, 'B').check()
   await expect(page.getByTestId('baseline-selection')).toContainText(references.B.analysis_id)
-  await page.locator('#shell-tab-overview').click()
+  await page.locator('#shell-tab-history').click()
   await page.getByRole('button', { name: ANALYTICS_LABELS.refresh, exact: true }).click()
   await expect.poll(() => requests.filter((entry) => entry.path.endsWith('/analytics')).map((entry) => new URLSearchParams(entry.search).get('series'))).toEqual(['B'])
   await expect(page.getByRole('link', { name: ANALYTICS_LABELS.exportJson })).toHaveAttribute('href', /[?&]series=B(&|$)/)
@@ -218,7 +219,7 @@ test('saved analytics keep the chosen series when it has no baseline', async ({ 
   const requests = await openCompare(page)
   await seriesField(page).fill('C')
   await expect(page.getByTestId('baseline-selection')).toHaveCount(0)
-  await page.locator('#shell-tab-overview').click()
+  await page.locator('#shell-tab-history').click()
   await page.getByRole('button', { name: ANALYTICS_LABELS.refresh, exact: true }).click()
   await expect.poll(() => requests.filter((entry) => entry.path.endsWith('/analytics')).map((entry) => new URLSearchParams(entry.search).get('series'))).toEqual(['C'])
 })

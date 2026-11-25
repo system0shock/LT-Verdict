@@ -104,6 +104,15 @@ test.describe.serial('M1.3 demo-8h real server verification (Slices 4, 6, 7)', (
     await page.goto('/?shell=new')
     await page.locator(`[data-testid="run-list"] li[title="${currentRunId}"] button`).click()
     await expect(page.getByTestId('overview-panel')).toBeVisible()
+    await expect(page.getByTestId('verdict-kpis')).toBeVisible()
+    const incidentCount = await page.getByTestId('incident-card').count()
+    expect(incidentCount).toBeGreaterThan(0)
+    expect(incidentCount).toBeLessThanOrEqual(7)
+    await expect(page.getByTestId('overview-platform')).toBeVisible()
+    expect(await page.getByTestId('overview-platform-tile').count()).toBeGreaterThan(0)
+    expect(await page.getByTestId('overview-platform-tile').count()).toBeLessThanOrEqual(8)
+    await expect(page.getByTestId('overview-trends')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Saved-run analytics' })).toHaveCount(0)
 
     // Compare ECharts
     await page.locator('#shell-tab-compare').click()
@@ -142,6 +151,15 @@ test.describe.serial('M1.3 demo-8h real server verification (Slices 4, 6, 7)', (
     await page.goto('/?shell=new')
     await page.locator(`[data-testid="run-list"] li[title="${currentRunId}"] button`).click()
     await expect(page.getByTestId('overview-panel')).toBeVisible()
+    await expect(page.getByTestId('verdict-kpis')).toBeVisible()
+    const incidentCount = await page.getByTestId('incident-card').count()
+    expect(incidentCount).toBeGreaterThan(0)
+    expect(incidentCount).toBeLessThanOrEqual(7)
+    await expect(page.getByTestId('overview-platform')).toBeVisible()
+    expect(await page.getByTestId('overview-platform-tile').count()).toBeGreaterThan(0)
+    expect(await page.getByTestId('overview-platform-tile').count()).toBeLessThanOrEqual(8)
+    await expect(page.getByTestId('overview-trends')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Saved-run analytics' })).toHaveCount(0)
     await page.locator('#shell-tab-tables').click()
 
     const subtabs = page.getByTestId('tables-subtabs')
@@ -189,11 +207,16 @@ test.describe.serial('M1.3 demo-8h real server verification (Slices 4, 6, 7)', (
         await page.locator(`[data-testid="run-list"] li[title="${currentRunId}"] button`).click()
         await expect(page.getByTestId('overview-panel')).toBeVisible()
 
+        // Overview
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+        let axe = await new AxeBuilder({ page }).analyze()
+        expect(axe.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious').map((v) => v.id)).toEqual([])
+
         // Tables
         await page.locator('#shell-tab-tables').click()
         await expect(page.getByTestId('tables-subtabs')).toBeVisible()
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
-        let axe = await new AxeBuilder({ page }).analyze()
+        axe = await new AxeBuilder({ page }).analyze()
         expect(axe.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious').map((v) => v.id)).toEqual([])
 
         // Compare

@@ -31,6 +31,10 @@ Gatling (`simulation.log`, текстовый и бинарный). «Прове
   прогонов, тепловая карта подов;
 - отчёты: JSON, HTML, AsciiDoc, Confluence-ready XHTML и SVG-график;
 - локальный Web UI (русская оболочка, `?shell=new`) и CLI на одном ядре;
+- детерминированные инциденты v0 (`incident.v1`): перегруппировка находок одного
+  анализа по окну, области и времени — до 7 карточек во вкладке «Обзор» и раздел
+  «Инциденты» в HTML-отчёте ([руководство по инцидентам](docs/user/incidents.md),
+  [ADR 0029](docs/adr/0029-incident-v0.md));
 - совет ИИ: отдельный артефакт, вердикт не меняет. Боевой путь по решению владельца
   direct-runner ([ADR 0027](docs/adr/0027-advisory-ai-direct-local-runner.md)); он
   включается только `LT_VERDICT_AI_RUNNER_MODE=local`, без переменной код по-прежнему
@@ -55,8 +59,6 @@ Gatling (`simulation.log`, текстовый и бинарный). «Прове
 
 Чего нет:
 
-- синтеза инцидентов («3–7 инцидентов вместо графиков»): «Обзор» показывает плоский
-  список; детерминированный инцидент v0 запланирован;
 - статистической обоснованности выводов: сравнение двух прогонов использует
   фиксированные 5 % (на автокоррелированном нуле 36,8 % ложных `CANDIDATE`);
   статистическая приёмка корреляций v1 не пройдена;
@@ -218,6 +220,7 @@ Linux использует `./gradlew installDist` и
 - [Milestone report Stage 0 / Slice 0](docs/milestones/stage-0.md)
 - [Milestone report Stage 1 / Slice 1](docs/milestones/stage-1.md)
 - [Руководство локального анализа Slice 1](docs/user/slice-1-local-analysis.md)
+- [Инциденты v0: группировка находок в Обзоре и отчёте](docs/user/incidents.md)
 - [Онлайн-источники и offline replay](docs/user/online-sources.md)
 - [Advisory AI: prerequisites и настройка ModelStudio](docs/user/advisory-ai.md)
 - [Jenkins, Grafana и Confluence-ready output](docs/user/jenkins-and-reports.md)

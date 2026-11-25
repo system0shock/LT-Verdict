@@ -143,12 +143,71 @@ export const CORRELATION_LABELS = {
 
 // Срез U1: вкладка «Обзор». Функции получают уже отформатированные строки и числа-счётчики.
 export const OVERVIEW_LABELS = {
-  // Требует внимания
+  // Требует внимания и инциденты (W3.7 + UI Срезы 3, 5)
   attentionTitle: 'Требует внимания',
   attentionLead: 'Сначала нарушения правил, затем причины, по которым нет вердикта, неполные данные и диагностика. Список собран из готового результата анализа, ничего не пересчитывается.',
+  attentionResidualLead: 'Причины отсутствия вердикта, ограничения данных, ёмкость и корреляции. Нарушения правил и тренды из синтеза показаны в карточках инцидентов выше.',
   attentionEmpty: 'Нечего отметить: в результате нет нарушений правил, причин отсутствия вердикта, предупреждений о неполных данных и найденных трендов.',
   attentionMore: (hidden: number) => `Показать ещё ${hidden}`,
   attentionLess: 'Свернуть список',
+  incidentsTitle: 'Инциденты',
+  incidentsLead: 'Детерминированная группировка находок по окну, области и времени. Инциденты показывают совпадения и не меняют вердикт.',
+  incidentsEmpty: 'Инцидентов не найдено; пустой список не означает PASS.',
+  incidentsNotEvaluated: (code: string | null) =>
+    code === 'RUN_NOT_VALID'
+      ? 'Синтез инцидентов не выполнялся: прогон непригоден (RUN_NOT_VALID).'
+      : `Синтез инцидентов не выполнялся${code ? ` (${code})` : ''}.`,
+  incidentPriority: { HIGH: 'Высокий', MEDIUM: 'Средний', LOW: 'Низкий' } as Record<string, string>,
+  incidentFamily: { TRANSACTION: 'транзакционный', RESOURCE: 'ресурсный' } as Record<string, string>,
+  incidentRank: (rank: number) => `#${rank}`,
+  incidentScopeOverall: 'весь прогон',
+  incidentWindow: (windowId: string | null) => (windowId ? `Окно: ${windowId}` : 'Окно: —'),
+  incidentIntervalUnknown: 'время нарушения не определено',
+  incidentIntervalBasis: { WINDOW: 'окно', FINDINGS: 'находки', UNKNOWN: 'не определено' } as Record<string, string>,
+  incidentFindings: (count: number) => `Находок: ${count}`,
+  incidentRefsTruncated: 'часть идентификаторов не показана (лимит списка)',
+  incidentNegativeSummary: (count: number) => `Отрицательные свидетельства (${count})`,
+  incidentNegativeEmpty: 'Отрицательных свидетельств нет.',
+  incidentNegativeOutcome: { NOT_CONFIRMED: 'не подтверждено', NOT_EVALUATED: 'не проверялось' } as Record<string, string>,
+  incidentNextSummary: (count: number) => `Следующие проверки (${count})`,
+  incidentCoincidentLabel: 'Совпадения:',
+  incidentCoincidentBasis: { SAME_WINDOW: 'одно окно', INTERVAL_OVERLAP: 'пересечение интервалов' } as Record<string, string>,
+  incidentMore: (hidden: number, resourceCount: number, transactionCount: number, omittedCount: number) => {
+    const parts: string[] = []
+    if (resourceCount > 0) parts.push(`ресурсных ${resourceCount}`)
+    if (transactionCount > 0) parts.push(`транзакционных ${transactionCount}`)
+    const breakdown = parts.length ? `: ${parts.join(', ')}` : ''
+    const omitted = omittedCount > 0 ? ` и ещё ${omittedCount} не сохранено` : ''
+    return `ещё ${hidden}${breakdown}${omitted}`
+  },
+  incidentLess: 'Свернуть скрытые инциденты',
+  incidentOmittedNote: (omittedCount: number) => `Сверх лимита 64 не сохранено: ${omittedCount}.`,
+  incidentOpenCompare: 'Открыть сравнение',
+  incidentOpenSignal: 'К совпадению',
+
+  // Стадии, тренды, платформа и пороги (Срезы 3, 5)
+  stageRibbonTitle: 'Стадии теста',
+  stageRibbonLead: 'Нажмите на стадию, чтобы открыть её в глубоком анализе.',
+  stageRoleLabels: { steady: 'целевая', excluded: 'исключена' } as Record<string, string>,
+  stageOpenAria: (id: string, offsetRange: string) => `Открыть стадию ${id} (${offsetRange}) в глубоком анализе`,
+
+  trendsTitle: 'Тренды в устойчивом окне',
+  trendsLead: 'Сводка проверок трендов по ресурсам. Наблюдаемый тренд показывает направление и сдвиг половин окна, но не доказывает отказ.',
+  trendsSummaryCounts: (total: number, observed: number, notMaterial: number, insufficient: number, unavailable: number) =>
+    `Проверок: ${total}. Наблюдается: ${observed}. Не существенно: ${notMaterial}. Мало данных: ${insufficient}. Недоступно: ${unavailable}.`,
+  trendsEmpty: 'Существенных трендов в устойчивом окне не обнаружено.',
+  trendsSlope: (slope: string, unit: string | null) => `Наклон: ${slope}${unit ? ` ${unit}` : ''}/с`,
+  trendsShift: (shift: string, unit: string | null) => `Сдвиг половин окна: ${shift}${unit ? ` ${unit}` : ''}`,
+  trendsMedian: (median: string, unit: string | null) => `Медиана: ${median}${unit ? ` ${unit}` : ''}`,
+  trendsOpenDeep: 'Открыть ряд в глубоком анализе',
+
+  platformTitle: 'Платформа',
+  platformLead: 'До 8 рядов ресурсов и JVM из снимка (сначала нарушения SLA и диагностики). Нажмите на плитку, чтобы открыть ряд в глубоком анализе.',
+  platformStatus: { FAIL: 'Нарушение', NO_VERDICT: 'Нет вердикта', DIAGNOSTIC: 'Диагностика', PASS: 'В норме' } as Record<string, string>,
+  platformPeak: (value: string, unit: string) => `Пик: ${value}${unit ? ` ${unit}` : ''}`,
+  platformMissing: (missing: number) => `Пропусков ячеек: ${missing}`,
+  platformOpenDeep: 'Открыть в глубоком анализе',
+  loadThresholdMark: (value: string, unit: string) => `порог ${value} ${unit}`,
   kindViolation: 'Нарушение',
   kindNoVerdict: 'Нет вердикта',
   kindPolicy: 'Политика',
@@ -422,6 +481,10 @@ export const SETUP_LABELS = {
   stagesRefusals: {
     NO_PLATEAU: 'Плато стабильной нагрузки не найдено.',
     TOO_SHORT: 'Прогон слишком короткий для выделения стадий.',
+    RUN_TOO_SHORT: 'Прогон слишком короткий для выделения стадий.',
+    NO_REQUEST_SAMPLES: 'В файле нагрузки не найдены запросы для выделения стадий.',
+    RUN_TOO_LONG: 'Прогон слишком длинный для автоматического предложения стадий.',
+    IDLE_GAP_INSIDE_RUN: 'Внутри прогона обнаружен длительный простой; стадии не выделены.',
     TOO_FEW_SAMPLES: 'Слишком мало выборок для выделения стадий.',
     LEAD_IN_TOO_LONG: 'Слишком длинный начальный простой перед нагрузкой.',
     TOO_MANY_STAGES: 'Слишком много стадий (лимит load-stages.v1 — не более 16).',
@@ -445,6 +508,7 @@ export const SETUP_LABELS = {
     DEGRADED_GAP_KEPT: 'Зазор между ступенями деградировал и оставлен отдельным окном.',
     DEGRADED_STEP_KEPT: 'Нижняя ступень деградировала и оставлена отдельным окном.',
     DEGRADED_RISE_EXCLUDED: 'Рост после steady деградировал, но остался исключённым.',
+    DEGRADED_INPUT: 'Часть строк файла нагрузки не удалось разобрать; стадии предложены по валидным данным.',
   } as Record<string, string>,
   stagesStretchKinds: {
     TAIL: 'хвост после последней ступени',

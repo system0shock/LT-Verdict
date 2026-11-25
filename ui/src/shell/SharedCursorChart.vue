@@ -3,9 +3,12 @@ import { computed, ref, watch } from 'vue'
 import { OVERVIEW_LABELS } from './labels'
 import { cursorSummary, formatNumber, loadFrame, loadLane, nearestIndex, type LoadSeries, type TrackKey } from './overview'
 import TimeChart from './TimeChart.vue'
-import { plotFraction, type ChartStage } from './timeChart'
+import { plotFraction, type ChartStage, type ChartThreshold } from './timeChart'
 
-const props = withDefaults(defineProps<{ series: LoadSeries; stages?: ChartStage[] }>(), { stages: () => [] })
+const props = withDefaults(defineProps<{ series: LoadSeries; stages?: ChartStage[]; p95Thresholds?: ChartThreshold[] }>(), {
+  stages: () => [],
+  p95Thresholds: () => [],
+})
 const cursor = ref<number | null>(null)
 const tracks: Array<{ key: TrackKey; label: string }> = [
   { key: 'rps', label: OVERVIEW_LABELS.trackRps },
@@ -19,7 +22,7 @@ const readout = computed(() => cursor.value === null ? null : cursorSummary(prop
 const frame = computed(() => loadFrame(props.series))
 const lanes = computed(() => tracks.map((track) => ({
   ...track,
-  lane: loadLane(props.series, track.key),
+  lane: loadLane(props.series, track.key, track.key === 'p95' ? props.p95Thresholds : []),
   flags: { timeLabels: track.key === 'p95', stageLabels: track.key === 'rps' },
 })))
 const cursorMs = computed(() => cursor.value === null ? null : props.series.points[cursor.value]?.startMs ?? null)

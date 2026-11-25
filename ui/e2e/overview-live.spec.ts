@@ -30,6 +30,10 @@ test('overview numbers equal the old interface on a real server', async ({ page 
   }
   const first = await readAt('Home')
   const last = await readAt('End')
+  const incidents = await page.getByTestId('incident-card').evaluateAll((nodes) => nodes.map((node) => ({
+    priority: node.getAttribute('data-priority'),
+    family: node.getAttribute('data-family'),
+  })))
   const attention = await page.getByTestId('attention-item').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-kind')))
 
   await page.goto('/?shell=old')
@@ -49,5 +53,7 @@ test('overview numbers equal the old interface on a real server', async ({ page 
   const lastRow = await cells(rows.last())
   expect([Number(first[0]), Number(first[1]), Number(first[2])]).toEqual([firstRow[1], firstRow[2], firstRow[3]])
   expect([Number(last[0]), Number(last[1]), Number(last[2])]).toEqual([lastRow[1], lastRow[2], lastRow[3]])
-  expect(attention).toContain('violation')
+  expect(incidents.length).toBeGreaterThan(0)
+  expect(incidents[0].priority).toBe('HIGH')
+  expect(attention).not.toContain('violation')
 })

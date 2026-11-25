@@ -19,7 +19,7 @@ export interface ChartLane {
   thresholds?: ChartThreshold[]
 }
 export interface ChartColors { brand: string; warn: string; fail: string; text: string; muted: string; border: string; fontFamily: string }
-export interface LaneFlags { timeLabels: boolean; stageLabels: boolean; plotHeight?: number; ySplits?: number }
+export interface LaneFlags { timeLabels: boolean; stageLabels: boolean; plotHeight?: number; ySplits?: number; sparkline?: boolean }
 
 export const PLOT_INSET = { left: 56, right: 16 } as const
 const PLOT_HEIGHT = 78
@@ -27,6 +27,9 @@ const STAGE_LABEL_MIN_SHARE = 0.1
 const TIME_STEPS_MS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10_800, 21_600, 43_200].map((seconds) => seconds * 1000)
 
 export function laneGrid(flags: LaneFlags) {
+  if (flags.sparkline) {
+    return { left: 2, right: 2, top: 4, bottom: 4, height: flags.plotHeight ?? 44 }
+  }
   const top = flags.stageLabels ? 18 : 6
   const bottom = flags.timeLabels ? 50 : 6
   const plotHeight = flags.plotHeight ?? PLOT_HEIGHT
@@ -140,10 +143,10 @@ function thresholdLine(threshold: ChartThreshold, axisMax: number, colors: Chart
 
 export function laneOption(lane: ChartLane, frame: ChartFrame, stages: ChartStage[], flags: LaneFlags, colors: ChartColors): EChartsCoreOption {
   const grid = laneGrid(flags)
-  const ticks = timeTicks(frame)
+  const ticks = flags.sparkline ? [] : timeTicks(frame)
   const axis = valueAxis(lane.lo, lane.hi, lane.integer, flags.ySplits ?? 2)
   const text = { color: colors.muted, fontSize: 12, fontFamily: colors.fontFamily }
-  const areas = stageAreas(stages, frame, flags, colors)
+  const areas = flags.sparkline ? [] : stageAreas(stages, frame, flags, colors)
   return {
     animation: false,
     grid: { left: grid.left, right: grid.right, top: grid.top, bottom: grid.bottom },
@@ -151,9 +154,10 @@ export function laneOption(lane: ChartLane, frame: ChartFrame, stages: ChartStag
       type: 'value',
       min: frame.fromMs,
       max: frame.toMs,
-      axisLabel: { show: flags.timeLabels, customValues: ticks, alignMaxLabel: 'right', formatter: (value: number) => signedOffset(value - frame.originMs), ...text },
-      axisTick: { show: flags.timeLabels, customValues: ticks },
-      axisLine: { lineStyle: { color: colors.border } },
+      show: !flags.sparkline,
+      axisLabel: { show: !flags.sparkline && flags.timeLabels, customValues: ticks, alignMaxLabel: 'right', formatter: (value: number) => signedOffset(value - frame.originMs), ...text },
+      axisTick: { show: !flags.sparkline && flags.timeLabels, customValues: ticks },
+      axisLine: { show: !flags.sparkline, lineStyle: { color: colors.border } },
       splitLine: { show: false },
     },
     yAxis: {
@@ -161,10 +165,11 @@ export function laneOption(lane: ChartLane, frame: ChartFrame, stages: ChartStag
       min: axis.min,
       max: axis.max,
       interval: axis.interval,
-      axisLabel: { formatter: (value: number) => formatNumber(value, Math.max(2, stepDigits(axis.interval))), ...text },
+      show: !flags.sparkline,
+      axisLabel: { show: !flags.sparkline, formatter: (value: number) => formatNumber(value, Math.max(2, stepDigits(axis.interval))), ...text },
       axisLine: { show: false },
       axisTick: { show: false },
-      splitLine: { lineStyle: { color: colors.border } },
+      splitLine: { show: !flags.sparkline, lineStyle: { color: colors.border } },
     },
     series: [
       {
@@ -173,12 +178,12 @@ export function laneOption(lane: ChartLane, frame: ChartFrame, stages: ChartStag
         symbol: 'none',
         showSymbol: true,
         showAllSymbol: true,
-        symbolSize: 6,
+        symbolSize: flags.sparkline ? 4 : 6,
         connectNulls: false,
-        lineStyle: { width: 2, color: colors[lane.color] },
+        lineStyle: { width: flags.sparkline ? 1.75 : 2, color: colors[lane.color] },
         itemStyle: { color: colors[lane.color] },
         data: lineData(lane.segments),
-        ...(lane.thresholds?.length ? { markLine: { silent: true, symbol: 'none', data: lane.thresholds.map((threshold) => thresholdLine(threshold, axis.max, colors)) } } : {}),
+        ...(lane.thresholds?.length && !flags.sparkline ? { markLine: { silent: true, symbol: 'none', data: lane.thresholds.map((threshold) => thresholdLine(threshold, axis.max, colors)) } } : {}),
         ...(areas.length ? { markArea: { silent: true, data: areas } } : {}),
       },
       ...(lane.baseline?.length

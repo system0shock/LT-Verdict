@@ -733,6 +733,94 @@ export interface CapacitySummary {
   knee_reason: string
 }
 
+export type IncidentScope =
+  | { kind: 'overall' }
+  | {
+    kind: 'transaction'
+    label: string
+    group_path?: string[]
+    sample_kind?: 'JMETER_SAMPLER' | 'JMETER_CONTAINER' | 'GATLING_REQUEST' | 'GATLING_GROUP'
+  }
+  | { kind: 'entity'; entity: string }
+
+export interface IncidentNegativeEvidence {
+  check:
+    | 'OTHER_POLICY_CHECKS_PASSED'
+    | 'RESOURCE_RULES_WITHIN_LIMITS'
+    | 'GENERATOR_RESOURCES_WITHIN_LIMITS'
+    | 'NO_ANOMALY_EPISODES'
+    | 'NO_MATERIAL_TREND'
+    | 'POLICY_NOT_EVALUATED'
+    | 'RESOURCE_DATA_NOT_PROVIDED'
+    | 'CHECKS_NOT_EVALUATED'
+  outcome: 'NOT_CONFIRMED' | 'NOT_EVALUATED'
+  reason_code?: string
+  text: string
+  evidence_ids: string[]
+}
+
+export interface IncidentNextCheck {
+  check:
+    | 'COMPARE_WITH_BASELINE'
+    | 'OPEN_RESOURCE_SERIES'
+    | 'OPEN_SAME_WINDOW_SIGNALS'
+    | 'PROVIDE_RESOURCE_SNAPSHOT'
+    | 'COMPLETE_NOT_EVALUATED_CHECKS'
+  text: string
+  evidence_ids: string[]
+}
+
+export interface IncidentCoincidentLink {
+  incident_id: string
+  basis: 'SAME_WINDOW' | 'INTERVAL_OVERLAP'
+}
+
+export interface Incident {
+  id: string
+  rank: number
+  in_overview: boolean
+  priority: 'HIGH' | 'MEDIUM' | 'LOW'
+  priority_key: {
+    tier: number
+    finding_count: number
+    first_epoch_ms: number | null
+  }
+  title: string
+  summary: string
+  scope: IncidentScope
+  window_id: string | null
+  interval_basis: 'FINDINGS' | 'WINDOW' | 'UNKNOWN'
+  interval: { from_epoch_ms: number; to_epoch_ms: number } | null
+  grouping: {
+    rule: 'incident-grouping.v1'
+    key: {
+      family: 'TRANSACTION' | 'RESOURCE'
+      window_id: string | null
+      scope: IncidentScope
+      cluster_from_epoch_ms: number | null
+    }
+  }
+  finding_count: number
+  finding_types: string[]
+  finding_ids: string[]
+  evidence_ids: string[]
+  refs_truncated: boolean
+  negative_evidence: IncidentNegativeEvidence[]
+  next_checks: IncidentNextCheck[]
+  coincident_with: IncidentCoincidentLink[]
+}
+
+export interface Incidents {
+  schema_version: 'incident.v1'
+  method: 'incident-synthesis.v1'
+  status: 'EVALUATED' | 'NOT_EVALUATED'
+  reason_code?: 'RUN_NOT_VALID' | string
+  overview_limit: number
+  total_count: number
+  omitted_count: number
+  items: Incident[]
+}
+
 export interface AnalysisResult {
   schema_version: 'analysis-result.v1'
   run_id: string
@@ -743,7 +831,7 @@ export interface AnalysisResult {
   findings: Array<Record<string, unknown>>
   evidence: AnalysisEvidence[]
   capacity_summary?: CapacitySummary
-  incidents?: Record<string, unknown>
+  incidents?: Incidents
 }
 
 export interface Bucket {

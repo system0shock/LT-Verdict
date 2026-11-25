@@ -43,7 +43,7 @@ async function fixtureApi(page: Page, state: string) {
   })
 }
 
-test('a finished analysis shows no English status, download links or saved-analytics panel on the overview', async ({ page }) => {
+test('a finished analysis shows Russian status, hides the old tail on overview, and renders Russian exports and analytics on history', async ({ page }) => {
   await fixtureApi(page, 'COMPLETE')
   await page.goto('/?shell=new')
   await expect(page.locator('#verdict')).toBeVisible()
@@ -54,6 +54,11 @@ test('a finished analysis shows no English status, download links or saved-analy
   await expect(status).not.toContainText(/COMPLETE|bytes/)
   await expect(status).toContainText(JOB_LABELS.states.COMPLETE)
   await expect(status).toContainText(JOB_LABELS.bytes('1,234', '1,234'))
+  await expect(page.locator(`[aria-label="${DOWNLOAD_LABELS.group}"]`)).toBeHidden()
+  await expect(page.getByRole('heading', { name: ANALYTICS_LABELS.title })).toBeHidden()
+  await expect(page.getByRole('heading', { name: 'Grafana evidence' })).toHaveCount(0)
+
+  await page.locator('#shell-tab-history').click()
   await expect(page.getByRole('link', { name: /^Download / })).toHaveCount(0)
   await expect(page.locator(`[aria-label="${DOWNLOAD_LABELS.group}"]`)).toHaveAttribute('lang', 'ru')
   await expect(page.getByRole('link', { name: DOWNLOAD_LABELS.format('json'), exact: true })).toHaveAttribute('href', /format=json$/)

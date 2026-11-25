@@ -89,13 +89,15 @@
   white-space: nowrap;
 }
 
-.shell .shell-panel {
+.shell .shell-panel,
+.shell .tables-subpanel {
   display: grid;
   gap: 24px;
   min-width: 0;
 }
 
-.shell .shell-panel > * {
+.shell .shell-panel > *,
+.shell .tables-subpanel > * {
   min-width: 0;
 }
 

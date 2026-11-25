@@ -17,21 +17,20 @@ const result = {
   analysis_coverage: { status: 'COMPLETE', reasons: [] }, findings: [], evidence: [overall],
 }
 
-async function fixtureApi(page: Page) {
+async function fixtureApi(page: Page, analysesCount = 1) {
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname
     const method = route.request().method()
     let body: unknown
     if (path === '/api/bootstrap') body = { csrf_token: 'ui-test', max_upload_bytes: 1000000 }
     else if (method === 'GET' && path === '/api/jobs') body = { jobs: [] }
-    else if (method === 'GET' && path === '/api/jenkins') body = { profiles: [] }
-    else if (method === 'GET' && path === '/api/grafana') body = { profiles: [] }
+    else if (method === 'GET' && (path === '/api/jenkins' || path === '/api/grafana')) body = { profiles: [] }
     else if (method === 'GET' && /^\/api\/runs\/[^/]+\/analyses\/[^/]+\/advice$/.test(path)) body = { advice: null, job: null }
     else if (path === '/api/sources') body = { profiles: [] }
     else if (path === '/api/runs') body = { runs: [run], next_after: null }
     else if (path === '/api/baseline') body = { baseline: null }
     else if (method === 'GET' && path === '/api/releases') body = { releases: [], next_after: null, series_summary: [], corrupt_count: 0, corrupt_names: [] }
-    else if (path.endsWith('/analyses')) body = { analyses: [{ analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' }], next_after: null }
+    else if (path.endsWith('/analyses')) body = { analyses: analysesCount === 0 ? [] : [{ analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' }], next_after: null }
     else if (path.endsWith('/result')) body = result
     else if (path.endsWith('/buckets')) body = { buckets: [], next_from_ms: null }
     else throw new Error(`Unexpected UI request ${method} ${path}`)
@@ -68,7 +67,7 @@ async function openAnalysis(page: Page, shell: 'new' | 'old' = 'new') {
 }
 
 test('the header has no export action before an analysis is open', async ({ page }) => {
-  await fixtureApi(page)
+  await fixtureApi(page, 0)
   await page.goto('/?shell=new')
   await expect(exportLink(page)).toHaveCount(0)
 

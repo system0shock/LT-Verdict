@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { BASELINE_ERROR_LABELS } from '../src/shell/labels'
 import { HISTORY_LABELS } from '../src/shell/labels.history'
-import { DEFAULT_VISIBLE_RELEASES } from '../src/shell/history'
+import { DEFAULT_VISIBLE_RELEASES, dynamicsPoints, formatStarted, historyDynamicsOption, shortDynamicsLabel, type DynamicsPoint, type HistoryChartColors } from '../src/shell/history'
 import type { Release, ReleaseAnalysis, ReleaseProfile } from '../src/types'
 
 // The tab against a mocked server: table, expansion, numbers and their absence, the form payload, error phrases, accessibility.
@@ -384,21 +384,68 @@ test('dynamics points carry the verdict as shape and text, the table keeps the s
   await openHistory(page, {
     releases: [release(1, {}, { policy_verdict: 'PASS' }), release(2, {}, { policy_verdict: 'FAIL', ...notPass }), release(3, {}, { policy_verdict: 'NO_POLICY', ...notPass })],
     p95: { 1: '100', 2: '200', 3: '300' },
+    baselineRun: 'hist-run-1',
   })
   const chart = page.getByTestId('history-dynamics')
   await expect(chart.getByRole('img')).toHaveAttribute('aria-label', L.dynamicsAria(3, [L.dynamicsPoint('v1.1', 'PASS', '100'), L.dynamicsPoint('v1.2', 'FAIL', '200'), L.dynamicsPoint('v1.3', 'NO_POLICY', '300')].join('; ')))
-  await expect(chart.locator('circle')).toHaveCount(1)
-  await expect(chart.locator('rect')).toHaveCount(1)
-  await expect(chart.locator('polygon')).toHaveCount(1)
+  await expect(chart.locator('svg').first()).toBeVisible()
+  await expect(chart.locator('svg text').first()).toBeVisible()
+  expect(await chart.locator('svg path').count()).toBeGreaterThan(0)
   await expect(chart).toContainText(L.dynamicsLegend)
-  await expect(chart.locator('title').first()).toHaveText(L.dynamicsPoint('v1.1', 'PASS', '100'))
+  await expect(chart).toContainText(L.dynamicsBaselineLegend)
+  const cursor = page.getByTestId('history-dynamics-cursor')
+  await cursor.focus()
+  await page.keyboard.press('Home')
+  await expect(page.getByTestId('history-dynamics-readout')).toHaveText(L.dynamicsPoint('v1.1', 'PASS', '100'))
+  await page.keyboard.press('End')
+  await expect(page.getByTestId('history-dynamics-readout')).toHaveText(L.dynamicsPoint('v1.3', 'NO_POLICY', '300'))
   await expect(rowsOf(page).nth(0).locator('td').nth(3)).toHaveText('300')
+})
+
+test('historyDynamicsOption maps verdicts to circle/rect/triangle, avoids tooltip and draws baseline markLine', () => {
+  const colors: HistoryChartColors = { brand: '#1', pass: '#2', fail: '#3', warn: '#4', text: '#5', muted: '#6', border: '#7', fontFamily: 'sans-serif' }
+  const points: DynamicsPoint[] = [
+    { release: release(1), verdict: 'PASS', value: 120 },
+    { release: release(2), verdict: 'FAIL', value: 340 },
+    { release: release(3), verdict: 'NO_POLICY', value: 210 },
+  ]
+  const option = historyDynamicsOption(points, colors, 120)
+  expect(option.animation).toBe(false)
+  expect(option).not.toHaveProperty('tooltip')
+  const series = (option.series as Array<{
+    data: Array<{ value: number; symbol: string; itemStyle: { color: string } }>
+    markLine?: { data: Array<{ yAxis: number; lineStyle: { color: string } }> }
+  }>)[0]
+  expect(series.data.map((d) => [d.symbol, d.itemStyle.color, d.value])).toEqual([
+    ['circle', '#2', 120],
+    ['rect', '#3', 340],
+    ['triangle', '#4', 210],
+  ])
+  expect(series.markLine?.data[0]).toMatchObject({ yAxis: 120, lineStyle: { color: '#1' } })
+})
+
+test('dynamicsPoints omits empty or whitespace strings instead of plotting zero', () => {
+  const rel1 = release(1)
+  const rel2 = release(2)
+  const rel3 = release(3)
+  const rel4 = release(4)
+  const values: Record<string, string | null> = {
+    [rel1.analyses[0]!.analysis_id]: '',
+    [rel2.analyses[0]!.analysis_id]: '   ',
+    [rel3.analyses[0]!.analysis_id]: '0',
+    [rel4.analyses[0]!.analysis_id]: '120.5',
+  }
+  const points = dynamicsPoints([rel4, rel2, rel1, rel3], (id) => values[id] ?? null)
+  expect(points.map((point) => [point.release.label, point.value])).toEqual([
+    ['v1.3', 0],
+    ['v1.4', 120.5],
+  ])
 })
 
 test('without numbers the chart says so instead of drawing zeros', async ({ page }) => {
   await openHistory(page, { truncated: true })
   await expect(page.getByTestId('history-dynamics')).toContainText(L.dynamicsEmpty)
-  await expect(page.getByTestId('history-dynamics').locator('circle, rect, polygon')).toHaveCount(0)
+  await expect(page.getByTestId('history-dynamics').locator('svg')).toHaveCount(0)
 })
 
 test('re-pin replaces the analysis of the release with another analysis of the same run', async ({ page }) => {
@@ -483,4 +530,21 @@ test('the statistical count and the suggestion look beyond the four shown releas
   await expect(rowsOf(page)).toHaveCount(DEFAULT_VISIBLE_RELEASES)
   await expect(page.getByTestId('history-statistical-hint')).toHaveCount(0)
   await expect(page.getByTestId('history-statistical')).toBeVisible()
+})
+
+test('regression: formatStarted timezone, shortDynamicsLabel surrogate pairs, and negative yAxis min', () => {
+  expect(formatStarted('2026-10-05T21:56:29Z')).toBe('2026-10-05 21:56 UTC')
+  expect(formatStarted('2026-10-05T21:56:29+00:00')).toBe('2026-10-05 21:56 UTC')
+  expect(formatStarted('2026-10-05T21:56:29+03:00')).toBe('2026-10-05 21:56 +03:00')
+  expect(formatStarted('2026-10-05T21:56:29+03:00')).not.toContain('UTC')
+
+  expect(shortDynamicsLabel('🚀'.repeat(6))).toBe('🚀'.repeat(6))
+  const truncated = shortDynamicsLabel('🚀'.repeat(12))
+  expect(truncated).toBe(`${'🚀'.repeat(9)}...`)
+  expect([...truncated]).toHaveLength(12)
+  expect(() => encodeURIComponent(truncated)).not.toThrow()
+
+  const colors: HistoryChartColors = { brand: '#1', pass: '#2', fail: '#3', warn: '#4', text: '#5', muted: '#6', border: '#7', fontFamily: 'sans-serif' }
+  const option = historyDynamicsOption([{ release: release(1), verdict: 'PASS', value: -10 }], colors, null)
+  expect((option.yAxis as { min: number }).min).toBe(-10)
 })

@@ -87,13 +87,10 @@ test('the header names the open run by time, its policy and arm', async ({ page 
   const identity = page.locator('.run-identity')
 
   await buttons(page).nth(1).click()
+  await expect(page.locator('#verdict')).toBeVisible()
   await expect(identity).not.toContainText('load.jtl')
   await expect(identity).toContainText(SHELL_LABELS.runAccepted)
   await expect(identity).toContainText(`jmeter_jtl_csv-${prefixes[1]}`)
-  await expect(identity).not.toContainText(SHELL_LABELS.runPolicy)
-
-  await page.locator(`button[title="${analysisId}"]`).click()
-  await expect(page.locator('#verdict')).toBeVisible()
   await expect(identity).toContainText(`${SHELL_LABELS.runPolicy} basic-api-sla`)
   await expect(identity).toContainText(`${SHELL_LABELS.runArm} blue`)
 })

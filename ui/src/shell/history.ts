@@ -1,4 +1,8 @@
+import type { EChartsCoreOption } from 'echarts/core'
 import type { AnalysisSummary, Release, ReleaseAnalysis, ReleaseProfile, ReleaseRequest, ReleaseUpdate } from '../types'
+import { HISTORY_LABELS } from './labels.history'
+import { formatNumber } from './overview'
+import { valueAxis } from './timeChart'
 
 export const DEFAULT_VISIBLE_RELEASES = 4
 // The suggestion and the statistical count look at the newest releases of the series (20 is the statistical maximum), the table shows four.
@@ -66,10 +70,16 @@ export function releaseRequest(
   }
 }
 
-// "2026-10-05T21:56:29Z" -> "2026-10-05 21:56 UTC"; any other form stays as is.
+// "2026-10-05T21:56:29Z" -> "2026-10-05 21:56 UTC"; non-UTC offsets keep their offset without claiming UTC.
 export function formatStarted(value: string): string {
-  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(value)
-  return match ? `${match[1]} ${match[2]} UTC` : value
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2}|[+-]\d{4})?$/.exec(value)
+  if (!match) return value
+  const zone = match[3]
+  if (!zone) return `${match[1]} ${match[2]}`
+  if (zone === 'Z' || zone === '+00:00' || zone === '-00:00' || zone === '+0000' || zone === '-0000') {
+    return `${match[1]} ${match[2]} UTC`
+  }
+  return `${match[1]} ${match[2]} ${zone}`
 }
 
 // A release analysis shaped like the list of saved analyses of a run, so the app can open it.
@@ -148,6 +158,21 @@ export function statisticalAvailability(releases: readonly Release[], opened: Re
 }
 
 export interface DynamicsPoint { release: Release; verdict: ReleaseAnalysis['policy_verdict']; value: number }
+export interface HistoryChartColors {
+  brand: string
+  pass: string
+  fail: string
+  warn: string
+  text: string
+  muted: string
+  border: string
+  fontFamily: string
+}
+
+export function shortDynamicsLabel(label: string): string {
+  const chars = [...label]
+  return chars.length > 10 ? `${chars.slice(0, 9).join('')}...` : label
+}
 
 // Points of the p95 chart in ascending time order; a release without a number is not drawn.
 export function dynamicsPoints(releases: readonly Release[], valueOf: (analysisId: string) => string | null): DynamicsPoint[] {
@@ -155,10 +180,80 @@ export function dynamicsPoints(releases: readonly Release[], valueOf: (analysisI
   for (const release of releases) {
     const analysis = release.analyses[0]
     const raw = analysis ? valueOf(analysis.analysis_id) : null
-    const value = raw === null ? Number.NaN : Number(raw)
+    const value = raw === null || raw.trim() === '' ? Number.NaN : Number(raw)
     if (analysis && Number.isFinite(value)) points.push({ release, verdict: analysis.policy_verdict, value })
   }
   return points.sort((a, b) => (a.release.started_at < b.release.started_at ? -1 : a.release.started_at > b.release.started_at ? 1 : 0))
+}
+
+export function historyDynamicsOption(
+  points: readonly DynamicsPoint[],
+  colors: HistoryChartColors,
+  baselineValue: number | null = null,
+): EChartsCoreOption {
+  const hasBaseline = baselineValue !== null && Number.isFinite(baselineValue)
+  let minValue = hasBaseline ? Math.min(0, baselineValue) : 0
+  let maxValue = hasBaseline ? Math.max(1, baselineValue) : 1
+  for (const point of points) {
+    if (!Number.isFinite(point.value)) continue
+    if (point.value < minValue) minValue = point.value
+    if (point.value > maxValue) maxValue = point.value
+  }
+  const axis = valueAxis(minValue, maxValue)
+  const text = { color: colors.muted, fontSize: 12, fontFamily: colors.fontFamily }
+  return {
+    animation: false,
+    grid: { left: 56, right: 16, top: 18, bottom: 44 },
+    xAxis: {
+      type: 'category',
+      data: points.map((point) => shortDynamicsLabel(point.release.label)),
+      axisLine: { lineStyle: { color: colors.border } },
+      axisTick: { show: false },
+      axisLabel: { ...text, interval: 0, hideOverlap: true },
+    },
+    yAxis: {
+      type: 'value',
+      min: axis.min,
+      max: axis.max,
+      interval: axis.interval,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: colors.border } },
+      axisLabel: { ...text, formatter: (value: number) => formatNumber(value) },
+    },
+    series: [{
+      type: 'line',
+      silent: true,
+      showSymbol: true,
+      showAllSymbol: true,
+      symbolSize: 12,
+      lineStyle: { color: colors.muted, width: 1.5 },
+      data: points.map((point) => {
+        const symbol = point.verdict === 'PASS' ? 'circle' : point.verdict === 'FAIL' ? 'rect' : 'triangle'
+        const color = point.verdict === 'PASS' ? colors.pass : point.verdict === 'FAIL' ? colors.fail : colors.warn
+        return { value: point.value, symbol, itemStyle: { color } }
+      }),
+      ...(hasBaseline
+        ? {
+            markLine: {
+              silent: true,
+              symbol: 'none',
+              data: [{
+                yAxis: baselineValue,
+                lineStyle: { type: [5, 4], width: 1.5, color: colors.brand },
+                label: {
+                  formatter: HISTORY_LABELS.dynamicsBaseline(formatNumber(baselineValue)),
+                  position: baselineValue >= axis.max ? 'insideStartBottom' : 'insideStartTop',
+                  color: colors.brand,
+                  fontSize: 12,
+                  fontFamily: colors.fontFamily,
+                },
+              }],
+            },
+          }
+        : {}),
+    }],
+  }
 }
 
 export function releaseUpdate(release: Release, analysisId: string): ReleaseUpdate {

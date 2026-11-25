@@ -5,10 +5,10 @@ import { ApiError, clearBaseline, compareBaseline, getBaseline, getBaselineCondi
 import { baselineIneligibility, type BaselineFacts } from './shell/history'
 import { BASELINE_LABELS } from './shell/labels'
 import { EN_COMPARE_LABELS, type CompareLabels } from './shell/labels.compare'
-import type { AnalysisReference, BaselineComparison, BaselineCondition, BaselineConditionDecision, BaselineConditionWindows, BaselineRequest, BaselineSelection, BaselineSlotView } from './types'
+import type { AnalysisReference, AnalysisResult, BaselineComparison, BaselineCondition, BaselineConditionDecision, BaselineConditionWindows, BaselineRequest, BaselineSelection, BaselineSlotView } from './types'
 
 // `version` changes when the history tab assigned a baseline; `preferredSeries` is the series of the release opened from the history.
-const props = withDefaults(defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean; labels?: CompareLabels; version?: number; preferredSeries?: string; facts?: BaselineFacts | null }>(), { labels: () => EN_COMPARE_LABELS, version: 0, preferredSeries: undefined, facts: null })
+const props = withDefaults(defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean; labels?: CompareLabels; version?: number; preferredSeries?: string; facts?: BaselineFacts | null; result?: AnalysisResult | null; useEcharts?: boolean }>(), { labels: () => EN_COMPARE_LABELS, version: 0, preferredSeries: undefined, facts: null, result: null, useEcharts: false })
 // The series of the shown baseline: the saved analytics ask the server for the same baseline.
 const emit = defineEmits<{ 'active-series': [series: string | undefined] }>()
 const slots = ref<BaselineSlotView[]>([])
@@ -615,6 +615,8 @@ function warningText(code: string): string {
       <BaselineCharts
         :comparison="comparison"
         :labels="labels"
+        :result="result"
+        :use-echarts="useEcharts"
       />
       <div
         class="table-wrap"

@@ -97,6 +97,20 @@ export interface CompareLabels {
   chartsLoading: string
   chartsUnavailable: string
   chartsTruncated: string
+  chartsAria: string
+  chartsAxisLabel: string
+  chartsLegend: string
+  chartsCurrent: string
+  chartsBaseline: string
+  chartsEmpty: string
+  chartsIncompatible: string
+  chartsPartial: string
+  chartsCursorLabel: string
+  chartsCursorHint: string
+  chartsCursorNone: string
+  chartsCursorTime: (time: string) => string
+  chartsCursorText: (time: string, rps: string, errors: string, p95: string) => string
+  chartsThresholdMark: (value: string, unit: string) => string
   // Значение атрибута lang для английских фрагментов внутри русской панели (ошибки сервера, внутренности графика).
   // В старом интерфейсе не задано: атрибута нет.
   foreignLang: string | undefined
@@ -203,6 +217,20 @@ export const EN_COMPARE_LABELS: CompareLabels = {
   chartsLoading: 'Loading saved buckets…',
   chartsUnavailable: 'Chart comparison unavailable.',
   chartsTruncated: 'Showing the first 500 bins per run. Later bins are omitted; use a wider bin or the individual run view.',
+  chartsAria: 'Current vs baseline load charts on a shared relative time axis',
+  chartsAxisLabel: 'Time from run start',
+  chartsLegend: 'Solid: current · dashed: baseline. Relative time from each run start; gaps are not interpolated.',
+  chartsCurrent: 'Current',
+  chartsBaseline: 'Baseline',
+  chartsEmpty: 'No load bucket data available for comparison.',
+  chartsIncompatible: 'Chart comparison is unavailable because metric definitions are incompatible.',
+  chartsPartial: 'Showing a partial run history: the bucket loading limit was reached.',
+  chartsCursorLabel: 'Comparison time cursor',
+  chartsCursorHint: 'Use Left and Right arrow keys to move the cursor across intervals, Home and End to jump to the ends.',
+  chartsCursorNone: 'cursor not selected',
+  chartsCursorTime: (time) => `Offset from run start: ${time}`,
+  chartsCursorText: (time, rps, errors, p95) => `${time}: RPS ${rps}, errors ${errors}, p95 ${p95}`,
+  chartsThresholdMark: (value, unit) => `threshold ${value} ${unit}`,
   foreignLang: undefined,
 }
 
@@ -380,5 +408,19 @@ export const COMPARE_LABELS: CompareLabels = {
   chartsLoading: 'Загрузка сохранённых интервалов…',
   chartsUnavailable: 'Сравнение графиков недоступно.',
   chartsTruncated: 'Показаны первые 500 интервалов каждого прогона. Остальные не показаны: возьмите шаг шире или откройте вид отдельного прогона.',
+  chartsAria: 'Графики сравнения нагрузки текущего прогона и baseline на общей шкале времени',
+  chartsAxisLabel: 'Время от начала прогона',
+  chartsLegend: 'Сплошная линия: текущий прогон · пунктир: baseline. Относительное время от начала каждого прогона; пропуски не интерполируются.',
+  chartsCurrent: 'Текущий',
+  chartsBaseline: 'Baseline',
+  chartsEmpty: 'Данных нагрузки по интервалам для сравнения нет.',
+  chartsIncompatible: 'Сравнение графиков недоступно: определения метрик несовместимы.',
+  chartsPartial: 'Показана не вся история интервалов: достигнут предел загрузки.',
+  chartsCursorLabel: 'Курсор сравнения по времени',
+  chartsCursorHint: 'Стрелки влево и вправо двигают курсор по интервалам, Home и End переходят к краям. Курсор можно двигать и мышью над графиками.',
+  chartsCursorNone: 'курсор не выбран',
+  chartsCursorTime: (time) => `Отметка времени от начала прогона: ${time}`,
+  chartsCursorText: (time, rps, errors, p95) => `${time}: RPS ${rps}, ошибки ${errors}, p95 ${p95}`,
+  chartsThresholdMark: (value, unit) => `порог ${value} ${unit}`,
   foreignLang: 'en',
 }

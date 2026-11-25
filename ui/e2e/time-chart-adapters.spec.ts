@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import type { Bucket, ResourceSeriesEntry, ResourceSeriesValues } from '../src/types'
+import type { AnalysisResult, Bucket, ResourceSeriesEntry, ResourceSeriesValues } from '../src/types'
+import { compareFrame, compareLanes, compareReadout, compareStops, compareThresholds, nearestStopIndex } from '../src/shell/compareChart'
+import { COMPARE_LABELS } from '../src/shell/labels.compare'
 import { deepLane, resourceTrack } from '../src/shell/deep'
 import { DEEP_LABELS } from '../src/shell/labels'
 import { formatNumber, loadFrame, loadLane, loadSeries } from '../src/shell/overview'
@@ -149,4 +151,124 @@ test('laneGrid and valueAxis support optional plotHeight and ySplits while prese
   expect(valueAxis(0, 7, true, 4)).toEqual({ min: 0, max: 12, interval: 3 })
   const option = laneOption({ ...lane, hi: 100 }, { fromMs: 0, toMs: 6000, originMs: 0 }, [], { timeLabels: false, stageLabels: true, plotHeight: 236, ySplits: 4 }, colors)
   expect(option.yAxis).toMatchObject({ min: 0, max: 100, interval: 25 })
+})
+
+test('ChartLane.baseline adds a dashed muted second series without changing primary series', () => {
+  const withBaseline = laneOption(
+    { ...lane, baseline: [[{ x: 0, y: 12 }, { x: 6000, y: 90 }]] },
+    { fromMs: 0, toMs: 6000, originMs: 0 },
+    [],
+    { timeLabels: false, stageLabels: false },
+    colors,
+  )
+  const series = withBaseline.series as Array<{ type: string; lineStyle: { color: string; type?: number[] }; data: Array<{ value: [number, number | null] }> }>
+  expect(series).toHaveLength(2)
+  expect(series[0].lineStyle.color).toBe(colors.brand)
+  expect(series[1].lineStyle).toMatchObject({ color: colors.muted, type: [6, 4] })
+  expect(series[1].data.map((point) => point.value)).toEqual([[0, 12], [6000, 90]])
+})
+
+test('compareThresholds extracts overall rps/p95 thresholds and ignores transaction or ratio rules', () => {
+  const result = {
+    evidence: [
+      { id: 'c1', type: 'policy_check', rule_id: 'overall-rps', metric: 'throughput_rps', operator: 'gte', threshold: 18, status: 'FAIL', scope: { kind: 'overall' } },
+      { id: 'c2', type: 'policy_check', rule_id: 'overall-p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 2000, status: 'PASS' },
+      { id: 'c3', type: 'policy_check', rule_id: 'checkout-p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 500, status: 'FAIL', scope: { kind: 'transaction', label: 'POST /checkout' } },
+      { id: 'c4', type: 'policy_check', rule_id: 'overall-errors', metric: 'error_rate_ratio', operator: 'lte', threshold: 0.02, status: 'FAIL', scope: { kind: 'overall' } },
+    ],
+  } as unknown as AnalysisResult
+  expect(compareThresholds(result)).toEqual({
+    rps: [{ id: 'overall-rps', value: 18, text: COMPARE_LABELS.chartsThresholdMark('18', 'RPS'), violated: true }],
+    p95: [{ id: 'overall-p95', value: 2000, text: COMPARE_LABELS.chartsThresholdMark('2\u00a0000', 'мс'), violated: false }],
+  })
+})
+
+test('compareLanes, compareFrame, compareStops and compareReadout align current and baseline', () => {
+  const cur = loadSeries([bucket(0, 100, 1, 200), bucket(1000, 150, 2, 250)], 1)
+  const base = loadSeries([bucket(0, 80, 0, 180), bucket(2000, 200, 4, 300)], 1)
+  const result = {
+    evidence: [
+      { id: 'c1', type: 'policy_check', rule_id: 'p95-sla', metric: 'response_time_p95_ms', operator: 'lte', threshold: 500, status: 'PASS', scope: { kind: 'overall' } },
+    ],
+  } as unknown as AnalysisResult
+  const lanes = compareLanes(cur, base, result)
+  expect(lanes.rps.hi).toBe(200)
+  expect(lanes.errors.integer).toBe(true)
+  expect(lanes.p95.hi).toBe(500)
+  expect(lanes.p95.thresholds).toHaveLength(1)
+  expect(lanes.p95.baseline).toHaveLength(2)
+  const frame = compareFrame(cur, base)
+  expect(frame).toEqual({ fromMs: 0, toMs: 2000, originMs: 0 })
+  const stops = compareStops(cur, base)
+  expect(stops).toEqual([0, 1000, 2000])
+  expect(nearestStopIndex(stops, frame, 0.5)).toBe(1)
+  expect(compareReadout(cur, base, 1000)).toMatchObject({
+    time: '0:01',
+    current: { rps: '150', errors: '2', p95: '250' },
+    baseline: { rps: '—', errors: '—', p95: '—' },
+  })
+  expect(compareReadout(cur, base, -5000).time).toBe('-0:05')
+})
+
+test('compareThresholds resolves transaction scope via metric_evidence_id and isolates rule thresholds', () => {
+  const result = {
+    evidence: [
+      { id: 'm-overall', type: 'metric_summary', scope: { kind: 'overall' } },
+      { id: 'm-tx', type: 'metric_summary', scope: { kind: 'transaction', group_path: [], label: 'POST /pay', sample_kind: 'JMETER_SAMPLER' } },
+      { id: 'c-tx', type: 'policy_check', rule_id: 'tx-pay-p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 250, status: 'FAIL', metric_evidence_id: 'm-tx' },
+      { id: 'c-w1', type: 'policy_check', rule_id: 'p95-sla', metric: 'response_time_p95_ms', operator: 'lte', threshold: 100, status: 'PASS', window_id: 'w1', metric_evidence_id: 'm-overall' },
+      { id: 'c-w2', type: 'policy_check', rule_id: 'p95-sla', metric: 'response_time_p95_ms', operator: 'lte', threshold: 200, status: 'FAIL', window_id: 'w2', metric_evidence_id: 'm-overall' },
+    ],
+  } as unknown as AnalysisResult
+  expect(compareThresholds(result)).toEqual({
+    rps: [],
+    p95: [
+      { id: 'p95-sla', value: 100, text: COMPARE_LABELS.chartsThresholdMark('100', 'мс'), violated: false },
+      { id: 'p95-sla', value: 200, text: COMPARE_LABELS.chartsThresholdMark('200', 'мс'), violated: true },
+    ],
+  })
+})
+
+test('loadSeries and compareLanes guard NaN bucket metrics and zero rollup', () => {
+  const zeroRollup = loadSeries([bucket(0, 10, 1, 50), bucket(1000, 20, 0, 60)], 0)
+  expect(zeroRollup.points.map((p) => p.rps)).toEqual([0, 0])
+  expect(Number.isFinite(zeroRollup.missingIntervals)).toBe(true)
+
+  const nanSeries = loadSeries([bucket(0, Number.NaN, Number.NaN, Number.NaN)], 1)
+  const validSeries = loadSeries([bucket(0, 10, 1, 50)], 1)
+  const tainted = { ...validSeries, max: { rps: Number.NaN, errors: Number.NaN, p95: Number.NaN } }
+  const lanes = compareLanes(nanSeries, tainted, null)
+  expect([lanes.rps.hi, lanes.errors.hi, lanes.p95.hi]).toEqual([0, 0, 0])
+})
+
+test('regression: compareThresholds skips negative/non-finite thresholds and compareFrame handles large arrays', () => {
+  const result = {
+    evidence: [
+      { id: 'c-neg', type: 'policy_check', rule_id: 'r-neg', metric: 'response_time_p95_ms', operator: 'lte', threshold: -5, status: 'FAIL', scope: { kind: 'overall' } },
+      { id: 'c-nan', type: 'policy_check', rule_id: 'r-nan', metric: 'throughput_rps', operator: 'gte', threshold: Number.NaN, status: 'NO_VERDICT', scope: { kind: 'overall' } },
+      { id: 'c-ok', type: 'policy_check', rule_id: 'r-ok', metric: 'response_time_p95_ms', operator: 'lte', threshold: 250, status: 'PASS', scope: { kind: 'overall' } },
+    ],
+  } as unknown as AnalysisResult
+  expect(compareThresholds(result)).toEqual({
+    rps: [],
+    p95: [{ id: 'r-ok', value: 250, text: COMPARE_LABELS.chartsThresholdMark('250', 'мс'), violated: false }],
+  })
+
+  const largePoints = Array.from({ length: 200_000 }, (_, index) => ({
+    startMs: index * 1000,
+    rps: 10,
+    errors: 0,
+    p95: 50,
+  }))
+  const emptySeries = loadSeries([], 1)
+  expect(compareFrame({ ...emptySeries, points: largePoints }, emptySeries)).toEqual({
+    fromMs: 0,
+    toMs: 199_999_000,
+    originMs: 0,
+  })
+  expect(compareFrame({ ...emptySeries, points: [{ startMs: Number.NaN, rps: 0, errors: 0, p95: 0 }] }, emptySeries)).toEqual({
+    fromMs: 0,
+    toMs: 1000,
+    originMs: 0,
+  })
 })

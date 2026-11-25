@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { OVERVIEW_LABELS } from '../src/shell/labels'
-import { CAPACITY_LABELS } from '../src/shell/labels.tables'
+import { CAPACITY_LABELS, RESOURCE_TABLES_LABELS } from '../src/shell/labels.tables'
 
 const reference = { run_id: 'capacity-screens-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'capacity-screens.jtl' }
@@ -108,7 +108,7 @@ test('new shell: resource statistics are formatted and empty values are a dash',
   await open(page, result('PASS', [resourceSummary]))
   await page.locator('#shell-tab-tables').click()
 
-  const row = page.getByRole('region', { name: 'Resource summaries' }).locator('tbody tr').first()
+  const row = page.getByRole('region', { name: RESOURCE_TABLES_LABELS.summariesRegion }).locator('tbody tr').first()
   await expect(row).not.toContainText('Not available')
   await expect(row).not.toContainText(longRatio)
   await expect(row).toContainText('1.234567890123')

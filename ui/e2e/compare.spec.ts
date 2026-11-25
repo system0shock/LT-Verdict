@@ -24,6 +24,8 @@ type CompareOptions = {
   noBaseline?: boolean
   postBaselineFails?: boolean
   buckets?: boolean
+  bucketsError?: boolean
+  evidence?: unknown[]
   shell?: 'new' | 'old'
   precise?: boolean
   slotArm?: string
@@ -132,20 +134,24 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
       body = {
         ...result, policy_verdict: opts.verdict ?? 'NO_POLICY', run_validity: opts.validity ?? 'VALID',
         analysis_coverage: opts.coverage ?? result.analysis_coverage,
+        evidence: opts.evidence ?? result.evidence,
       }
     }
     else if (path.endsWith('/buckets')) {
-      if (opts.buckets) {
+      if (opts.bucketsError) {
+        status = 500
+        body = { error: { code: 'X', message: 'Buckets exploded' } }
+      } else if (opts.buckets) {
+        const isBase = path.includes(reference.run_id)
         body = {
           buckets: [
-            { bucket_start_ms: 1000, sample_count: 10, error_count: 0, p95_latency_ms: 100, max_latency_ms: 110, hdr_v2_base64: 'AAAA' },
-            { bucket_start_ms: 2000, sample_count: 12, error_count: 1, p95_latency_ms: 120, max_latency_ms: 130, hdr_v2_base64: 'AAAA' },
+            { bucket_start_ms: 0, sample_count: isBase ? 8 : 10, error_count: 0, p95_latency_ms: isBase ? 90 : 100, max_latency_ms: 110, hdr_v2_base64: 'AAAA' },
+            { bucket_start_ms: 1000, sample_count: isBase ? 10 : 12, error_count: 1, p95_latency_ms: isBase ? 110 : 120, max_latency_ms: 130, hdr_v2_base64: 'AAAA' },
           ],
           next_from_ms: null,
         }
       } else {
-        status = 500
-        body = { error: { code: 'X', message: 'Buckets exploded' } }
+        body = { buckets: [], next_from_ms: null }
       }
     } else throw new Error(`Unexpected UI request ${method} ${path}`)
     await route.fulfill({ status, json: body })
@@ -351,16 +357,47 @@ test('the old interface keeps the exact English texts of the interpolated lines'
   expect(await panel.locator('[lang]').count()).toBe(0)
 })
 
-test('the comparison chart block is Russian around the English chart internals', async ({ page }) => {
-  await openCompare(page, { comparability: 'UNCONFIRMED', buckets: true })
+test('the comparison chart block renders ECharts current vs baseline and thresholds in Russian without CSP violations', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as never as { csp: string[] }).csp = []
+    document.addEventListener('securitypolicyviolation', (event) => (window as never as { csp: string[] }).csp.push(`${event.violatedDirective} ${event.blockedURI}`))
+  })
+  await openCompare(page, {
+    comparability: 'UNCONFIRMED',
+    buckets: true,
+    verdict: 'FAIL',
+    evidence: [
+      { id: 'c1', type: 'policy_check', rule_id: 'overall-rps', metric: 'throughput_rps', operator: 'gte', threshold: 15, status: 'FAIL', scope: { kind: 'overall' } },
+      { id: 'c2', type: 'policy_check', rule_id: 'overall-p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 200, status: 'PASS', scope: { kind: 'overall' } },
+      { id: 'c3', type: 'policy_check', rule_id: 'tx-p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 50, status: 'FAIL', scope: { kind: 'transaction', label: 'POST /checkout' } },
+    ],
+  })
   await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
-  await page.getByText(COMPARE_LABELS.chartsSummary, { exact: true }).click()
-  const load = page.getByRole('button', { name: COMPARE_LABELS.chartsLoad, exact: true })
-  await expect(load).toBeVisible()
-  await expect(page.getByText(EN_COMPARE_LABELS.chartsLoad, { exact: true })).toHaveCount(0)
-  await load.click()
-  await expect(page.locator('#baseline-panel .load-charts')).toBeVisible()
-  await expect(page.locator('#baseline-panel .load-charts')).toHaveAttribute('lang', 'en')
+  const charts = page.getByTestId('compare-charts')
+  await expect(charts).toBeVisible()
+  await expect(charts).toContainText(COMPARE_LABELS.chartsSummary)
+  await expect(page.getByTestId('compare-chart-legend')).toHaveText(COMPARE_LABELS.chartsLegend)
+  await expect(page.locator('#baseline-panel .load-charts')).toHaveCount(0)
+  for (const key of ['rps', 'errors', 'p95']) {
+    await expect(page.getByTestId(`compare-track-${key}`).getByTestId('time-chart')).toBeVisible()
+    await expect(page.getByTestId(`compare-track-${key}`).locator('svg').first()).toBeVisible()
+    await expect(page.getByTestId(`compare-track-${key}`).locator('svg text').first()).toBeVisible()
+    expect(await page.getByTestId(`compare-track-${key}`).locator('svg path').count()).toBeGreaterThan(0)
+  }
+  // Baseline dashed series and threshold markLine texts are rendered in SVG without transaction-scoped thresholds.
+  const rpsTexts = await page.getByTestId('compare-track-rps').locator('svg text').allTextContents()
+  expect(rpsTexts.some((text) => text.includes('15'))).toBe(true)
+  const p95Texts = await page.getByTestId('compare-track-p95').locator('svg text').allTextContents()
+  expect(p95Texts.some((text) => text.includes('200'))).toBe(true)
+  expect(p95Texts.some((text) => text.includes('50'))).toBe(false)
+  // Keyboard cursor updates current & baseline readouts.
+  const cursor = page.getByTestId('compare-chart-cursor')
+  await cursor.focus()
+  await page.keyboard.press('Home')
+  await expect(page.getByTestId('compare-value-rps')).toContainText('10')
+  await expect(page.getByTestId('compare-baseline-value-rps')).toContainText('8')
+  await page.locator('.theme-toggle').click()
+  expect(await page.evaluate(() => (window as never as { csp: string[] }).csp)).toEqual([])
 })
 
 test('changing a window id drops the shown comparison', async ({ page }) => {

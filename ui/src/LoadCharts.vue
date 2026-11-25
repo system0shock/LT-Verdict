@@ -2,7 +2,39 @@
 import { computed } from 'vue'
 import type { Bucket } from './types'
 
-const props = defineProps<{ buckets: Bucket[]; baselineBuckets?: Bucket[]; rollup: number; markers?: Array<{ at_ms: number; service: string; error_type: string; message: string }> }>()
+export interface LoadChartsLabels {
+  legend: string
+  openSearchNote: string
+  rpsTitle: string
+  rpsUnit: string
+  errorsTitle: string
+  errorsUnit: string
+  p95Title: string
+  p95Unit: string
+  axisTitle: string
+  locale?: string
+}
+
+const DEFAULT_LABELS: LoadChartsLabels = {
+  legend: 'Solid: current · dashed: baseline. Relative time, common scale; gaps are not interpolated.',
+  openSearchNote: 'Пунктир — события OpenSearch на общей временной оси; совпадение во времени не доказывает причину.',
+  rpsTitle: 'Requests per second',
+  rpsUnit: 'RPS',
+  errorsTitle: 'Errors per bin',
+  errorsUnit: 'count/bin',
+  p95Title: 'P95 latency',
+  p95Unit: 'ms',
+  axisTitle: 'Time from run start (ms)',
+}
+
+const props = defineProps<{
+  buckets: Bucket[]
+  baselineBuckets?: Bucket[]
+  rollup: number
+  markers?: Array<{ at_ms: number; service: string; error_type: string; message: string }>
+  labels?: LoadChartsLabels
+}>()
+const chartLabels = computed(() => props.labels ?? DEFAULT_LABELS)
 const width = 600
 const height = 180
 const left = 52
@@ -51,16 +83,16 @@ const p95 = computed(() => series((bucket) => bucket.p95_latency_ms))
       v-if="baselineBuckets?.length"
       class="muted"
     >
-      Solid: current · dashed: baseline. Relative time, common scale; gaps are not interpolated.
+      {{ chartLabels.legend }}
     </p>
     <p
       v-if="visibleMarkers.length"
       class="muted"
     >
-      Пунктир — события OpenSearch на общей временной оси; совпадение во времени не доказывает причину.
+      {{ chartLabels.openSearchNote }}
     </p>
     <figure
-      v-for="chart in [{ id: 'rps', label: 'Requests per second', unit: 'RPS', data: rps }, { id: 'errors', label: 'Errors per bin', unit: 'count/bin', data: errors }, { id: 'p95', label: 'P95 latency', unit: 'ms', data: p95 }]"
+      v-for="chart in [{ id: 'rps', label: chartLabels.rpsTitle, unit: chartLabels.rpsUnit, data: rps }, { id: 'errors', label: chartLabels.errorsTitle, unit: chartLabels.errorsUnit, data: errors }, { id: 'p95', label: chartLabels.p95Title, unit: chartLabels.p95Unit, data: p95 }]"
       :key="chart.id"
     >
       <figcaption>{{ chart.label }}</figcaption>
@@ -136,24 +168,24 @@ const p95 = computed(() => series((bucket) => bucket.p95_latency_ms))
           :x="left"
           :y="height - bottom + 13"
           class="chart-label"
-        >{{ start.toLocaleString() }}</text>
+        >{{ start.toLocaleString(chartLabels.locale) }}</text>
         <text
           :x="width - right"
           :y="height - bottom + 13"
           text-anchor="end"
           class="chart-label"
-        >{{ (start + span).toLocaleString() }}</text>
+        >{{ (start + span).toLocaleString(chartLabels.locale) }}</text>
         <text
           :x="width / 2"
           :y="height - 8"
           text-anchor="middle"
           class="chart-label"
-        >Time from run start (ms)</text>
+        >{{ chartLabels.axisTitle }}</text>
         <text
           :x="left"
           :y="top - 4"
           class="chart-label"
-        >{{ chart.data.max.toLocaleString() }} {{ chart.unit }}</text>
+        >{{ chart.data.max.toLocaleString(chartLabels.locale) }} {{ chart.unit }}</text>
       </svg>
     </figure>
   </div>

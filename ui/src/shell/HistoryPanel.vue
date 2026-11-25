@@ -56,6 +56,13 @@ const newestArm = computed(() => newest.value?.analyses[0]?.arm ?? null)
 const suggested = computed(() => (newest.value ? suggestManualBaseline(releases.value, newest.value, newestArm.value) : null))
 const statistical = computed(() => (newest.value ? statisticalAvailability(releases.value, newest.value, newestArm.value) : null))
 const points = computed(() => dynamicsPoints(rows.value, (analysisId) => metricOf(analysisId, 'response_time_p95_ms')))
+const baselineValue = computed(() => {
+  const baselinePoint = points.value.find((point) => {
+    const analysis = point.release.analyses[0]
+    return analysis ? isBaseline(point.release, analysis) : false
+  })
+  return baselinePoint ? baselinePoint.value : null
+})
 const hiddenLabels = computed(() => rows.value.filter((release) => !points.value.some((point) => point.release.release_id === release.release_id)).map((release) => release.label))
 const busyAny = computed(() => loading.value || busy.value || props.working)
 
@@ -379,6 +386,7 @@ async function save() {
       v-if="releases.length"
       :points="points"
       :hidden="hiddenLabels"
+      :baseline-value="baselineValue"
     />
 
     <div

@@ -274,6 +274,10 @@ internal class AnalysisJobs(
                                                 "AUTO_WINDOW_SPAN_UNSUPPORTED",
                                                 "Derived grid exceeds 100000 cells; declare an explicit window or a larger step",
                                             )
+                                        "SOURCE_PROFILE_NOT_FOUND" ->
+                                            Diagnostic("SOURCE_PROFILE_NOT_FOUND", "Configured source profile was not found")
+                                        "SOURCE_NOT_CONFIGURED" ->
+                                            Diagnostic("SOURCE_NOT_CONFIGURED", "Online source acquisition is not configured")
                                         else -> Diagnostic("ANALYSIS_FAILED", "Analysis failed")
                                     }
                                 },

@@ -7,6 +7,11 @@ from tools import verify_slice0
 
 # example name -> a fragment the first rejection must contain
 EXPECTED = {
+    "doctor-report-bad-status": "checks[0].status: not one of",
+    "doctor-report-missing-resource-side": "missing resource_side",
+    "doctor-report-offline-ready": "$.resource_side: not one of",
+    "doctor-report-unknown-field": "unknown field base_url",
+    "doctor-report-unknown-query-code": "queries[0].code: not one of",
     "resource-hash-bad-hash": "$.semantic_sha256: does not match pattern",
     "resource-hash-missing-semantic": "missing semantic_sha256",
     "resource-hash-unknown-field": "unknown field path",
@@ -27,6 +32,10 @@ EXPECTED = {
     "source-probe-unknown-failure-code": "$.code: not one of",
     "source-probe-unknown-field": "unknown field base_url",
     "source-probe-window-over-240-cells": "$.window.cells: out of range",
+    "source-reload-bad-revision": "$.revision: does not match pattern",
+    "source-reload-bad-status": "$.status: must equal 'RELOADED'",
+    "source-reload-missing-profiles": "missing profiles",
+    "source-reload-unknown-field": "unknown field path",
 }
 
 

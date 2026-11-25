@@ -1,0 +1,11 @@
+{
+  "schema_version": "source-reload.v1",
+  "status": "RELOADED",
+  "profile_count": 1,
+  "profiles": ["prom-main"],
+  "added": [],
+  "removed": [],
+  "changed": [],
+  "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "path": "/etc/ltv/connections.json"
+}

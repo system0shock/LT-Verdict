@@ -23,7 +23,7 @@ import TransactionsTable from './shell/TransactionsTable.vue'
 import TrendTable from './shell/TrendTable.vue'
 import ShellPanel from './shell/ShellPanel.vue'
 import ShellTabs from './shell/ShellTabs.vue'
-import { JOB_LABELS, SETUP_MESSAGES, SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
+import { JOB_LABELS, SETUP_LABELS, SETUP_MESSAGES, SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
 import { NORMALIZED_LABELS, type TablesSubTabKey } from './shell/labels.tables'
 import { tablesTargetSubTab } from './shell/tables'
 import { browserStorage, resolveNewShell } from './shell/shell'
@@ -40,13 +40,16 @@ import {
   listAnalyses,
   listRuns,
   listSources,
+  probeSourceQuery,
+  reloadSources,
   uploadInput,
   validatePolicy,
+  validateSources,
 } from './api'
 import { pairSourceRequests } from './shell/setup'
 import { summarizeVerdict } from './verdictSummary'
 import type { AttentionTarget } from './shell/overview'
-import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, Release, ReleaseAnalysis, RunSummary, SourceProfile, SourceRequest, SourceStepMode, Theme } from './types'
+import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, Release, ReleaseAnalysis, RunSummary, SourceCheckResponse, SourceProbeResponse, SourceProfile, SourceRequest, SourceStepMode, Theme } from './types'
 import { COMPARE_LABELS } from './shell/labels.compare'
 import { ANALYTICS_LABELS, DOWNLOAD_LABELS, EN_ANALYTICS_LABELS, EN_DOWNLOAD_LABELS, EXPORT_LABELS } from './shell/labels.export'
 
@@ -114,6 +117,15 @@ const trendFile = ref<File | null>(null)
 const sourceContextFiles = ref<File[]>([])
 const sourceProfiles = ref<SourceProfile[]>([])
 const sourceProfileIds = ref<string[]>([])
+const reloadingSources = ref(false)
+const sourceReloadStatus = ref('')
+const sourceReloadError = ref('')
+const validatingSources = ref(false)
+const sourceValidation = ref<SourceCheckResponse | null>(null)
+const sourceValidationError = ref('')
+const probingSource = ref(false)
+const sourceProbeResult = ref<SourceProbeResponse | null>(null)
+const sourceProbeError = ref('')
 const postgresProfileId = ref('')
 const postgresPreFile = ref<File | null>(null)
 const postgresPostFile = ref<File | null>(null)
@@ -166,6 +178,8 @@ let policyRevision = 0
 let policyFileCheck: Promise<unknown> | null = null
 let policyEdits = 0
 let adviceRevision = 0
+let sourceValidationRevision = 0
+let sourceProbeRevision = 0
 let uploadAbort: AbortController | null = null
 
 const verdictSummary = computed(() => {
@@ -302,7 +316,15 @@ function selectTrend(file: File | null) {
 }
 
 function selectSourceProfiles(ids: string[]) {
+  sourceValidationRevision += 1
+  sourceProbeRevision += 1
   sourceProfileIds.value = ids
+  validatingSources.value = false
+  sourceValidation.value = null
+  sourceValidationError.value = ''
+  probingSource.value = false
+  sourceProbeResult.value = null
+  sourceProbeError.value = ''
   if (ids.length) {
     resourceFile.value = null
     diagnosticFile.value = null
@@ -315,6 +337,99 @@ function selectSourceProfiles(ids: string[]) {
   errorMessage.value = ''
 }
 
+function sourceOperationErrorText(failure: unknown): string {
+  const code = failure instanceof ApiError ? failure.code : 'REQUEST_FAILED'
+  const text = SETUP_LABELS.sourceOperationErrors[code]
+  return text ? `${text} (${code})` : SETUP_LABELS.sourceErrorFallback(code)
+}
+
+function sourcesBusy() {
+  return working.value || (uploadProgress.value > 0 && !job.value) || !!postgresCapturePhase.value || trialBusy.value
+}
+
+async function reloadSourceProfiles() {
+  if (reloadingSources.value || sourcesBusy()) return
+  reloadingSources.value = true
+  sourceReloadStatus.value = ''
+  sourceReloadError.value = ''
+  try {
+    const reloaded = await reloadSources()
+    await refreshSources()
+    const httpIds = new Set(httpSourceProfiles.value.map((profile) => profile.id))
+    sourceProfileIds.value = sourceProfileIds.value.filter((id) => httpIds.has(id))
+    if (postgresProfileId.value && !postgresProfiles.value.some((profile) => profile.id === postgresProfileId.value)) {
+      postgresProfileId.value = ''
+    }
+    sourceValidationRevision += 1
+    sourceProbeRevision += 1
+    validatingSources.value = false
+    sourceValidation.value = null
+    sourceValidationError.value = ''
+    probingSource.value = false
+    sourceProbeResult.value = null
+    sourceProbeError.value = ''
+    sourceReloadStatus.value = SETUP_LABELS.reloadProfilesSummary(
+      reloaded.profile_count,
+      reloaded.added.length,
+      reloaded.changed.length,
+      reloaded.removed.length,
+    )
+  } catch (failure) {
+    sourceReloadError.value = sourceOperationErrorText(failure)
+  } finally {
+    reloadingSources.value = false
+  }
+}
+
+async function validateSourceProfiles() {
+  if (validatingSources.value || reloadingSources.value || sourcesBusy()) return
+  const revision = ++sourceValidationRevision
+  validatingSources.value = true
+  sourceValidation.value = null
+  sourceValidationError.value = ''
+  try {
+    const selectedId =
+      sourceProfileIds.value.length === 1
+        ? sourceProfileIds.value[0]
+        : sourceProfileIds.value.length === 0 && postgresProfileId.value
+          ? postgresProfileId.value
+          : undefined
+    const response = await validateSources(selectedId)
+    if (revision !== sourceValidationRevision) return
+    sourceValidation.value = response
+  } catch (failure) {
+    if (revision !== sourceValidationRevision) return
+    sourceValidationError.value = sourceOperationErrorText(failure)
+  } finally {
+    if (revision === sourceValidationRevision) validatingSources.value = false
+  }
+}
+
+async function probeSelectedSource(rawQueryId: string) {
+  if (probingSource.value || reloadingSources.value || sourcesBusy()) return
+  const profileId = sourceProfileIds.value.length === 1 ? sourceProfileIds.value[0] : ''
+  const queryId = rawQueryId.trim()
+  if (!profileId || !queryId) {
+    sourceProbeResult.value = null
+    sourceProbeError.value = SETUP_LABELS.probeQueryRequired
+    return
+  }
+  const revision = ++sourceProbeRevision
+  probingSource.value = true
+  sourceProbeResult.value = null
+  sourceProbeError.value = ''
+  try {
+    const response = await probeSourceQuery({ profile_id: profileId, query_id: queryId })
+    if (revision !== sourceProbeRevision) return
+    sourceProbeResult.value = response
+  } catch (failure) {
+    if (revision !== sourceProbeRevision) return
+    sourceProbeError.value = sourceOperationErrorText(failure)
+  } finally {
+    if (revision === sourceProbeRevision) probingSource.value = false
+  }
+}
+
 function selectSourceContexts(files: File[]) {
   sourceContextFiles.value = files
   queueBusy.value = false
@@ -323,6 +438,12 @@ function selectSourceContexts(files: File[]) {
 }
 
 function selectPostgresProfile(id: string) {
+  if (sourceProfileIds.value.length === 0) {
+    sourceValidationRevision += 1
+    validatingSources.value = false
+    sourceValidation.value = null
+    sourceValidationError.value = ''
+  }
   postgresProfileId.value = id
   errorMessage.value = ''
 }
@@ -1109,6 +1230,15 @@ function focusPolicy() {
             :source-margin="sourceMargin"
             :source-max-idle-gap="sourceMaxIdleGap"
             :source-request-error="sourceRequestState.error"
+            :reloading-sources="shellNew ? reloadingSources : undefined"
+            :source-reload-status="shellNew ? sourceReloadStatus : undefined"
+            :source-reload-error="shellNew ? sourceReloadError : undefined"
+            :validating-sources="shellNew ? validatingSources : undefined"
+            :source-validation="shellNew ? sourceValidation : undefined"
+            :source-validation-error="shellNew ? sourceValidationError : undefined"
+            :probing-source="shellNew ? probingSource : undefined"
+            :source-probe-result="shellNew ? sourceProbeResult : undefined"
+            :source-probe-error="shellNew ? sourceProbeError : undefined"
             :policy="policy"
             :policy-status="policyStatus"
             :policy-errors="policyErrors"
@@ -1124,6 +1254,9 @@ function focusPolicy() {
             @trend="selectTrend"
             @source-contexts="selectSourceContexts"
             @source-profiles="selectSourceProfiles"
+            @reload-sources="reloadSourceProfiles"
+            @validate-sources="validateSourceProfiles"
+            @probe-source="probeSelectedSource"
             @postgres-profile="selectPostgresProfile"
             @postgres-pre="selectPostgresPre"
             @postgres-post="selectPostgresPost"

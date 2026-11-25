@@ -40,9 +40,9 @@ import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.sources.PostgresAnalysisInput
 import io.ltverdict.sources.PromqlSource
-import io.ltverdict.sources.SourceConnections
 import io.ltverdict.sources.SourceHttp
 import io.ltverdict.sources.SourceInputFailure
+import io.ltverdict.sources.SourceRegistry
 import io.ltverdict.sources.analyzeWithSources
 import io.ltverdict.sources.capturePostgresPhase
 import io.ltverdict.sources.cliMessage
@@ -98,6 +98,7 @@ internal fun runCli(
                 } else {
                     captureSource(args.drop(1), stdout)
                 }
+            "doctor" -> doctorCommand(args.drop(1), stdout)
             "opensearch" -> prepareOpenSearchCommand(args.drop(1), stdout)
             else -> usage()
         }
@@ -672,7 +673,17 @@ private fun ui(args: List<String>): Int {
         index += 2
     }
 
-    val connections = connectionsPath?.let { readSourceFile(it, ::readSourceConnections) } ?: SourceConnections(emptyList(), emptyList())
+    val registry =
+        try {
+            SourceRegistry(connectionsPath)
+        } catch (failure: SourceInputFailure) {
+            throw CliFailure(
+                EXIT_INVALID_INPUT,
+                failure.code,
+                jsonPointer = failure.jsonPointer,
+                detail = failure.detail,
+            )
+        }
     val jenkins =
         jenkinsConfigPath?.let {
             requireRegularFile(it, EXIT_INVALID_INPUT, "JENKINS_CONFIG_INVALID")
@@ -684,9 +695,7 @@ private fun ui(args: List<String>): Int {
                 throw CliFailure(EXIT_INVALID_INPUT, "JENKINS_CONFIG_INVALID")
             }
         } ?: JenkinsConnections(emptyList())
-    val profiles = connections.http
-    val sourceHttp = if (profiles.isEmpty()) null else SourceHttp(profiles)
-    val source = sourceHttp?.let { PromqlSource(profiles, it) }
+    val initialSources = registry.current()
     val directory = DataDirectory.open(dataDir, "server")
     val store = RunBundleStore(directory)
     val jenkinsWorkflows =
@@ -700,7 +709,7 @@ private fun ui(args: List<String>): Int {
     val jobs =
         try {
             AnalysisJobs(parallelism) { request, progress, cancelled ->
-                analyzeWithSources(service, request, source, progress, cancelled, cancelled::beforePublish)
+                analyzeWithSources(service, request, registry.current().promql, progress, cancelled, cancelled::beforePublish)
             }
         } catch (failure: Exception) {
             directory.close()
@@ -722,15 +731,16 @@ private fun ui(args: List<String>): Int {
                 LocalApiContext(
                     store,
                     jobs,
-                    profiles,
-                    connections.postgres,
+                    initialSources.profiles,
+                    initialSources.postgres,
                     adviceService,
                     adviceJobs,
                     jenkins.summaries(),
                     jenkinsWorkflows,
                     directory.root.resolve("transport/jenkins-artifacts"),
-                    sourceHttp,
+                    initialSources.http,
                     aiModels = advisorySetup.models,
+                    sourceRegistry = registry,
                 ),
             )
         } catch (failure: Exception) {
@@ -972,6 +982,7 @@ private fun usageText(): String =
             "ltv source probe --connections <profiles.json> --profile <id> --query-id <id> [--window-ms <n>] [--step-ms <n>] " +
             "[--end-epoch-ms <n>] [--format text|json] | " +
             "ltv source hash <resource-snapshot.json> | ltv source hash --run <run-id> --analysis <analysis-id> [--data-dir <path>] | " +
+            "ltv doctor --connections <profiles.json> [--profile <id>] [--online] [--format text|json] | " +
             "ltv opensearch prepare --context <file> --templates <file> --load-sha256 <hash> --output-dir <new-dir> | " +
             "ltv stages detect <input> [--out <file>] [--steady-steps top|all] | " +
             "ltv policy validate <policy.json>|- | ltv report <run-id> <analysis-id> " +
@@ -982,7 +993,9 @@ private fun usageText(): String =
             System.lineSeparator() +
             "ltv source validate: validate source profiles offline" +
             System.lineSeparator() +
-            "ltv source probe: test one saved query against a source"
+            "ltv source probe: test one saved query against a source" +
+            System.lineSeparator() +
+            "ltv doctor: check source profiles offline or probe saved queries with --online"
     )
 
 internal class CliFailure(

@@ -10,6 +10,7 @@ import io.ltverdict.integrations.grafana.GrafanaPanelRequest
 import io.ltverdict.integrations.grafana.grafanaPanelLink
 import io.ltverdict.integrations.grafana.renderGrafanaPanel
 import io.ltverdict.sources.SourceProfile
+import io.ltverdict.sources.SourceState
 import io.ltverdict.sources.SourceTransport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,12 +26,13 @@ import java.util.Base64
 internal fun Route.grafanaRoutes(context: LocalApiContext) {
     get("/api/grafana") {
         call.requireOnlyQueries()
+        val state = context.sourceState()
         call.respondJson(
             buildJsonObject {
                 put(
                     "profiles",
                     buildJsonArray {
-                        context.sourceProfiles.filter { it.transport == SourceTransport.GRAFANA_PROXY }.forEach {
+                        state.profiles.filter { it.transport == SourceTransport.GRAFANA_PROXY }.forEach {
                             add(
                                 buildJsonObject {
                                     put("id", it.id)
@@ -45,16 +47,18 @@ internal fun Route.grafanaRoutes(context: LocalApiContext) {
     }
 
     get("/api/runs/{runId}/analyses/{analysisId}/grafana-link") {
-        val (profile, panel) = grafanaRequest(call, context)
+        val state = context.sourceState()
+        val (profile, panel) = grafanaRequest(call, context, state)
         call.respondJson(buildJsonObject { put("source_link", grafanaPanelLink(profile, panel).toString()) })
     }
 
     post("/api/runs/{runId}/analyses/{analysisId}/grafana-render") {
-        val (profile, panel) = grafanaRequest(call, context)
+        val state = context.sourceState()
+        val (profile, panel) = grafanaRequest(call, context, state)
         call.requireJson()
         if (receiveBaselineRequest(call).isNotEmpty()) malformed("Render body must be empty")
         val http =
-            context.sourceHttp
+            state.http
                 ?: throw ApiFailure(HttpStatusCode.ServiceUnavailable, "GRAFANA_UNAVAILABLE", "Grafana transport is not configured")
         val rendered = withContext(Dispatchers.IO) { renderGrafanaPanel(profile, panel) { http.getGrafanaPanel(profile, panel) } }
         call.respondJson(
@@ -70,10 +74,11 @@ internal fun Route.grafanaRoutes(context: LocalApiContext) {
 private suspend fun grafanaRequest(
     call: ApplicationCall,
     context: LocalApiContext,
+    state: SourceState,
 ): Pair<SourceProfile, GrafanaPanelRequest> {
     call.requireOnlyQueries("profile", "dashboard", "panel", "theme")
     val profile =
-        context.sourceProfiles.singleOrNull { it.id == call.singleQuery("profile") && it.transport == SourceTransport.GRAFANA_PROXY }
+        state.profiles.singleOrNull { it.id == call.singleQuery("profile") && it.transport == SourceTransport.GRAFANA_PROXY }
             ?: notFound("Grafana profile was not found")
     context.store.requireAnalysis(call)
     val documents =

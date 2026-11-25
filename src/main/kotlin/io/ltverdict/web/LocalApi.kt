@@ -19,8 +19,11 @@ import io.ltverdict.integrations.jenkins.JenkinsProfileSummary
 import io.ltverdict.integrations.jenkins.JenkinsWorkflow
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.sources.PostgresProfile
+import io.ltverdict.sources.PromqlSource
 import io.ltverdict.sources.SourceHttp
 import io.ltverdict.sources.SourceProfile
+import io.ltverdict.sources.SourceRegistry
+import io.ltverdict.sources.SourceState
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
@@ -44,13 +47,25 @@ internal data class LocalApiContext(
     val aiModels: AiModelsConfig? = null,
     // Test seam: production always uses the 4 GiB input limit.
     val uploadLimitBytes: Long = MAX_UPLOAD_BYTES,
+    val sourceRegistry: SourceRegistry? = null,
 )
+
+internal fun LocalApiContext.sourceState(): SourceState =
+    sourceRegistry?.current()
+        ?: SourceState(
+            sourceProfiles,
+            postgresProfiles,
+            sourceHttp,
+            sourceHttp?.let { PromqlSource(sourceProfiles, it) },
+            null,
+        )
 
 internal fun Application.installLocalApi(context: LocalApiContext) {
     val seriesCache = SnapshotCache()
     val sessionToken = randomToken()
     val csrfToken = randomToken()
     val postgresCapturePermit = Semaphore(1)
+    val probePermit = Semaphore(2)
     val jenkinsPermit = Semaphore(1)
     val podViewPermit = kotlinx.coroutines.sync.Semaphore(1)
 
@@ -132,7 +147,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
         releaseRoutes(context)
         comparisonRoutes(context)
         jobRoutes(context)
-        sourceRoutes(context, postgresCapturePermit)
+        sourceRoutes(context, postgresCapturePermit, probePermit)
         artifactRoutes(context)
         analyticsRoutes(context)
         adviceRoutes(context)

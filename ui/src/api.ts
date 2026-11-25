@@ -25,6 +25,10 @@ import type {
   RunSummary,
   ResourceSeriesCatalog,
   ResourceSeriesValues,
+  SourceCheckResponse,
+  SourceProbeRequest,
+  SourceProbeResponse,
+  SourceReloadResponse,
   SourceRequest,
   SourcesResponse,
   WindowComparisonRequest,
@@ -153,6 +157,29 @@ export function getResult(runId: string, analysisId: string): Promise<AnalysisRe
 
 export function listSources(): Promise<SourcesResponse> {
   return request('/api/sources')
+}
+
+export function reloadSources(): Promise<SourceReloadResponse> {
+  return request('/api/sources/reload', {
+    method: 'POST',
+    headers: mutationHeaders(),
+  })
+}
+
+export function validateSources(profileId?: string): Promise<SourceCheckResponse> {
+  return request('/api/sources/validate', {
+    method: 'POST',
+    headers: mutationHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(profileId ? { profile_id: profileId } : {}),
+  })
+}
+
+export function probeSourceQuery(body: SourceProbeRequest): Promise<SourceProbeResponse> {
+  return request('/api/sources/probe', {
+    method: 'POST',
+    headers: mutationHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
 }
 
 export function getBaseline(): Promise<{ baseline: BaselineSelection | null; baselines?: BaselineSlotView[] }> {

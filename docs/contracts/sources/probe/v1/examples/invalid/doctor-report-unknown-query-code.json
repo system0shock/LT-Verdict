@@ -1,0 +1,44 @@
+{
+  "schema_version": "doctor-report.v1",
+  "online": true,
+  "connections": {
+    "status": "OK",
+    "profile_count": 1
+  },
+  "profiles": [
+    {
+      "profile_id": "prom-main",
+      "source_kind": "prometheus",
+      "transport": "direct",
+      "arm": null,
+      "query_count": 1,
+      "rule_count": 1,
+      "checks": [
+        { "id": "config", "status": "OK", "code": null },
+        { "id": "url", "status": "OK", "code": null }
+      ],
+      "resource_side": "UNAVAILABLE",
+      "online": {
+        "queries": [
+          {
+            "query_id": "cpu",
+            "status": "FAIL",
+            "code": "RAW_UPSTREAM_BODY",
+            "http_status": 500,
+            "series_count": null,
+            "observed_cells": null,
+            "expected_cells": null,
+            "decoder_check": null
+          }
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "ok": 2,
+    "warn": 0,
+    "fail": 1,
+    "skipped": 0
+  },
+  "resource_side": "UNAVAILABLE"
+}

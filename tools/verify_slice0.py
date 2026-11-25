@@ -404,8 +404,8 @@ def probe_schema_errors(document: object, schema: dict) -> list[str]:
 
 
 def verify_probe_contract(directory: Path = PROBE_DIR) -> None:
-    """ADR 0033: source-probe.v1, source-check.v1 and resource-hash.v1; examples are named <schema>-<reason>.json."""
-    for name in ("source-probe", "source-check", "resource-hash"):
+    """ADR 0033: source-probe.v1, source-check.v1, resource-hash.v1, doctor-report.v1 and source-reload.v1; examples are named <schema>-<reason>.json."""
+    for name in ("source-probe", "source-check", "resource-hash", "doctor-report", "source-reload"):
         with (directory / f"{name}.schema.json").open(encoding="utf-8") as source:
             schema = json.load(source)
         for kind, must_fail in (("valid", False), ("invalid", True)):

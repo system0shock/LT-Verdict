@@ -103,7 +103,9 @@ echo $?        # 0 PASS, 2 FAIL, 3 NO_VERDICT, 4 неверный вход, 5 н
 `fixtures/slice1/jmeter/csv-5.6.3/input.jtl`.
 
 Перед первым `ltv analyze --connections` проверьте файл профилей:
-`ltv source validate --connections profiles.json` (без обращения к сети).
+`ltv source validate --connections profiles.json` или сводную диагностику
+`ltv doctor --connections profiles.json` (без обращения к сети; с `--online`
+`doctor` также выполняет сохранённые запросы в рамках бюджета профиля).
 Для проверки одного сохранённого запроса выполните `ltv source probe --connections profiles.json --profile <id> --query-id <id>`.
 Подробности — в [разделе проверки профиля](docs/user/online-sources.md#проверка-профиля-ltv-source-validate-ltv-source-probe-ltv-source-hash).
 

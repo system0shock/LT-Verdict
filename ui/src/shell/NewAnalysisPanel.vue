@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import type { AdvisoryAiConfig, Policy, PolicyError, SourceProfile, SourceStepMode } from '../types'
+import { computed, ref, watch } from 'vue'
+import type {
+  AdvisoryAiConfig,
+  Policy,
+  PolicyError,
+  SourceCheckResponse,
+  SourceProbeResponse,
+  SourceProfile,
+  SourceStepMode,
+} from '../types'
 import ModelChoice from './ModelChoice.vue'
 import { SETUP_LABELS } from './labels'
 import { RULES_LABELS } from './labels.rules'
@@ -29,6 +37,15 @@ const props = defineProps<{
   sourceMargin: string
   sourceMaxIdleGap: string
   sourceRequestError: string
+  reloadingSources?: boolean
+  sourceReloadStatus?: string
+  sourceReloadError?: string
+  validatingSources?: boolean
+  sourceValidation?: SourceCheckResponse | null
+  sourceValidationError?: string
+  probingSource?: boolean
+  sourceProbeResult?: SourceProbeResponse | null
+  sourceProbeError?: string
   policy: Policy | null
   policyStatus: string
   policyErrors: PolicyError[]
@@ -46,6 +63,9 @@ const emit = defineEmits<{
   trend: [file: File | null]
   'source-contexts': [files: File[]]
   'source-profiles': [ids: string[]]
+  'reload-sources': []
+  'validate-sources': []
+  'probe-source': [queryId: string]
   'postgres-profile': [id: string]
   'postgres-pre': [file: File | null]
   'postgres-post': [file: File | null]
@@ -69,6 +89,13 @@ const emit = defineEmits<{
 // Запуск пары плеч (P1d): профили каждого плеча живут здесь, а в App уходит их объединение, чтобы окно и шаг проверялись как раньше.
 const pairOn = ref(false)
 const pairSlots = ref<string[][]>([[], []])
+const probeQueryId = ref('')
+const probeEligibleProfile = computed(() => {
+  if (pairOn.value || props.sourceProfileIds.length !== 1) return null
+  const selected = props.sourceProfiles.find((profile) => profile.id === props.sourceProfileIds[0])
+  if (!selected || !['prometheus', 'victoria_metrics', 'influxdb'].includes(selected.source_kind)) return null
+  return selected
+})
 // Запросы плеч строятся от source-request.v3 (pairSourceRequests), поэтому режим шага «авто» запуск пары не допускает.
 const pairBlockers = computed(() => [
   ...pairLaunchBlockers(pairSlots.value, props.sourceProfiles),
@@ -90,6 +117,23 @@ function setPairSlot(index: number, ids: string[]) {
   pairSlots.value = pairSlots.value.map((slot, position) => (position === index ? ids : slot))
   emitPairProfiles()
 }
+
+watch(
+  () => props.sourceProfiles,
+  (profiles) => {
+    const validIds = new Set(profiles.map((profile) => profile.id))
+    let changed = false
+    const nextSlots = pairSlots.value.map((slot) => {
+      const filtered = slot.filter((id) => validIds.has(id))
+      if (filtered.length !== slot.length) changed = true
+      return filtered
+    })
+    if (!changed) return
+    pairSlots.value = nextSlots
+    if (pairOn.value) emitPairProfiles()
+  },
+  { deep: true },
+)
 
 function start() {
   if (pairOn.value) emit('analyze-pair', pairSlots.value)
@@ -300,6 +344,139 @@ function levelLabel(level: ReadinessLevel) {
                 class="field__hint"
               >
                 {{ SETUP_LABELS.sourceProfilesEmpty }}
+              </p>
+              <div class="policy-editor__actions">
+                <button
+                  type="button"
+                  class="button-secondary"
+                  data-testid="reload-sources"
+                  :disabled="busy || reloadingSources"
+                  @click="emit('reload-sources')"
+                >
+                  {{ reloadingSources ? SETUP_LABELS.reloadingProfiles : SETUP_LABELS.reloadProfiles }}
+                </button>
+                <button
+                  type="button"
+                  class="button-secondary"
+                  data-testid="validate-sources"
+                  :disabled="busy || validatingSources || (sourceProfiles.length === 0 && postgresProfiles.length === 0)"
+                  @click="emit('validate-sources')"
+                >
+                  {{ validatingSources ? SETUP_LABELS.validatingProfiles : SETUP_LABELS.validateProfiles }}
+                </button>
+              </div>
+              <p
+                v-if="sourceReloadStatus"
+                data-testid="source-reload-status"
+                class="field__hint"
+                role="status"
+              >
+                {{ sourceReloadStatus }}
+              </p>
+              <p
+                v-if="sourceReloadError"
+                data-testid="source-reload-error"
+                class="validation-error"
+                role="alert"
+              >
+                {{ sourceReloadError }}
+              </p>
+              <div
+                v-if="sourceValidation"
+                data-testid="source-validation-result"
+                role="status"
+              >
+                <p
+                  v-for="item in sourceValidation.profiles"
+                  :key="item.profile_id"
+                  class="field__hint"
+                >
+                  {{ SETUP_LABELS.validateProfileLine(item.profile_id, item.checks) }}
+                </p>
+                <p
+                  v-if="sourceValidation.profiles.length === 0"
+                  class="field__hint"
+                >
+                  {{ SETUP_LABELS.validateProfilesEmpty }}
+                </p>
+              </div>
+              <p
+                v-if="sourceValidationError"
+                data-testid="source-validation-error"
+                class="validation-error"
+                role="alert"
+              >
+                {{ sourceValidationError }}
+              </p>
+            </div>
+
+            <div
+              v-if="probeEligibleProfile"
+              class="field"
+            >
+              <label for="source-probe-query-id">{{ SETUP_LABELS.probeQueryLabel }}</label>
+              <input
+                id="source-probe-query-id"
+                v-model="probeQueryId"
+                data-testid="source-probe-query-id"
+                type="text"
+                maxlength="128"
+                :placeholder="SETUP_LABELS.probeQueryPlaceholder"
+                :disabled="busy || probingSource"
+              >
+              <div class="policy-editor__actions">
+                <button
+                  type="button"
+                  class="button-secondary"
+                  data-testid="probe-source"
+                  :disabled="busy || probingSource"
+                  @click="emit('probe-source', probeQueryId)"
+                >
+                  {{ probingSource ? SETUP_LABELS.probingQuery : SETUP_LABELS.probeQueryButton }}
+                </button>
+              </div>
+              <p class="field__hint">
+                {{ SETUP_LABELS.probeQueryHint }}
+              </p>
+              <p
+                v-if="sourceProbeResult"
+                data-testid="source-probe-result"
+                :class="sourceProbeResult.status === 'FAILED' ? 'validation-error' : 'field__hint'"
+                role="status"
+              >
+                {{
+                  sourceProbeResult.status === 'OK'
+                    ? SETUP_LABELS.probeSummaryOk(
+                      sourceProbeResult.series_count ?? 0,
+                      sourceProbeResult.decoder_check?.accepted ?? false,
+                      sourceProbeResult.decoder_check?.code ?? null,
+                      sourceProbeResult.redacted_count,
+                    )
+                    : SETUP_LABELS.probeSummaryFailed(
+                      sourceProbeResult.code ?? 'SOURCE_HTTP_ERROR',
+                      sourceProbeResult.http_status,
+                    )
+                }}
+              </p>
+              <ul
+                v-if="sourceProbeResult && sourceProbeResult.series.length > 0"
+                data-testid="source-probe-series"
+                class="field__hint"
+              >
+                <li
+                  v-for="(entry, index) in sourceProbeResult.series"
+                  :key="index"
+                >
+                  {{ entry.observed_cells }}/{{ entry.expected_cells }}: {{ Object.entries(entry.labels).map(([k, v]) => `${k}=${v}`).join(', ') }}
+                </li>
+              </ul>
+              <p
+                v-if="sourceProbeError"
+                data-testid="source-probe-error"
+                class="validation-error"
+                role="alert"
+              >
+                {{ sourceProbeError }}
               </p>
             </div>
 

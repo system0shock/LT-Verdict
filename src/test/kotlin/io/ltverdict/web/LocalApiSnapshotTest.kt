@@ -419,6 +419,25 @@ class LocalApiSnapshotTest {
                     api.post("/api/sources/postgresql/$phase", "application/json", none),
                 )
             }
+            record("POST /api/sources/reload (unconfigured)", api.post("/api/sources/reload", "application/json", none))
+            record("POST /api/sources/validate (empty)", api.post("/api/sources/validate", "application/json", "{}".encodeToByteArray()))
+            record(
+                "POST /api/sources/validate (unknown profile)",
+                api.post("/api/sources/validate", "application/json", """{"profile_id":"missing"}""".encodeToByteArray()),
+            )
+            record(
+                "POST /api/sources/probe (unknown profile)",
+                api.post("/api/sources/probe", "application/json", """{"profile_id":"missing","query_id":"cpu"}""".encodeToByteArray()),
+            )
+            record(
+                "POST /api/sources/probe (invalid field)",
+                api.post("/api/sources/probe", "application/json", """{"profile_id":"p","expression":"up"}""".encodeToByteArray()),
+            )
+            record("POST /api/resources/semantic-hash (valid)", api.post("/api/resources/semantic-hash", "application/json", resources))
+            record(
+                "POST /api/resources/semantic-hash (invalid)",
+                api.post("/api/resources/semantic-hash", "application/json", "{}".encodeToByteArray()),
+            )
             record("GET /api/grafana", api.get("/api/grafana"))
             record("GET .../grafana-link", api.get("$base/$bareId/grafana-link?profile=missing&dashboard=demo&panel=1"))
             record(

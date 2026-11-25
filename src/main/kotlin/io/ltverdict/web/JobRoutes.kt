@@ -80,7 +80,7 @@ internal fun Route.jobRoutes(context: LocalApiContext) {
 
     post("/api/jobs") {
         call.requireMultipart()
-        val request = receiveJob(call, context.store, context.sourceProfiles)
+        val request = receiveJob(call, context.store, context.sourceState().profiles)
         when (val submitted = context.jobs.submit(request)) {
             is SubmitResult.Accepted -> call.respondJson(submitted.status.toJson(), HttpStatusCode.Accepted)
             SubmitResult.Busy -> conflict("BUSY", "Analysis queue is full")

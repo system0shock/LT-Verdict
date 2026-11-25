@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/sources/probe/v1/source-reload.schema.json",
+  "title": "LT Verdict source reload v1",
+  "description": "Result of atomic profile reload from the configured --connections file (ADR 0033 P9, POST /api/sources/reload). Returns profile IDs, diff sets, and SHA-256 revision of the read bytes; never reveals file paths, file contents, addresses, or credentials.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "profile_count",
+    "profiles",
+    "added",
+    "removed",
+    "changed",
+    "revision"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "source-reload.v1"
+    },
+    "status": {
+      "const": "RELOADED"
+    },
+    "profile_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "profiles": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "added": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "removed": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "changed": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

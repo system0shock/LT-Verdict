@@ -135,6 +135,8 @@ export function pairLaunchBlockers(slots: string[][], profiles: SourceProfile[])
   const declared: string[] = []
   slots.forEach((slot, index) => {
     const number = index + 1
+    const missing = slot.filter((id) => !byId.has(id))
+    missing.forEach((id) => blockers.push(SETUP_LABELS.pairMissingProfile(number, id)))
     const withSeries = slot.map((id) => byId.get(id)).filter((profile): profile is SourceProfile => !!profile && hasSeries(profile))
     if (withSeries.length === 0) {
       blockers.push(SETUP_LABELS.pairArmEmpty(number))

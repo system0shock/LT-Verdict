@@ -20,6 +20,7 @@
 /api/releases/{releaseId}/(method:DELETE)
 /api/releases/{releaseId}/(method:GET)
 /api/releases/{releaseId}/(method:PUT)
+/api/resources/semantic-hash/(method:POST)
 /api/runs/(method:GET)
 /api/runs/{runId}/analyses/(method:GET)
 /api/runs/{runId}/analyses/{analysisId}/advice/(method:GET)
@@ -51,4 +52,7 @@
 /api/sources/(method:GET)
 /api/sources/postgresql/post/(method:POST)
 /api/sources/postgresql/pre/(method:POST)
+/api/sources/probe/(method:POST)
+/api/sources/reload/(method:POST)
+/api/sources/validate/(method:POST)
 /api/{...}

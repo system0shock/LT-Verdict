@@ -149,6 +149,42 @@ class MetricPacksTest {
         assertEquals("DEGRADED", gaps.getValue("status").jsonPrimitive.content)
         assertTrue(gaps.getValue("finding_refs").jsonArray.isEmpty())
     }
+
+    @Test
+    fun `postgresql pack recognises postgres_exporter capabilities and becomes SUCCESS when all are present`() {
+        val result =
+            buildJsonObject {
+                put(
+                    "evidence",
+                    buildJsonArray {
+                        add(summary("pg-conn", "pg_connections_utilization"))
+                        add(summary("pg-idle", "pg_idle_in_transaction"))
+                        add(summary("pg-cache", "pg_cache_hit_ratio"))
+                        add(summary("pg-commit", "pg_xact_commit_rate"))
+                        add(summary("pg-rollback", "pg_xact_rollback_rate"))
+                        add(summary("pg-deadlocks", "pg_deadlocks_rate"))
+                        add(summary("pg-temp", "pg_temp_bytes_rate"))
+                        add(check("pg-conn-check", "pg-conn", "FAIL"))
+                    },
+                )
+                put("findings", buildJsonArray { add(finding("pg-conn-finding", "pg-conn", "pg-conn-check")) })
+            }
+
+        val pg =
+            metricPackAnalysis(result)
+                .getValue("packs")
+                .jsonArray
+                .map { it.jsonObject }
+                .single { it.getValue("id").jsonPrimitive.content == "postgresql" }
+
+        assertEquals("SUCCESS", pg.getValue("status").jsonPrimitive.content)
+        assertEquals(
+            listOf("connections", "idle_in_transaction", "cache_hit", "transactions", "deadlocks", "temp_bytes"),
+            pg.getValue("available_capabilities").jsonArray.map { it.jsonPrimitive.content },
+        )
+        assertTrue(pg.getValue("missing_capabilities").jsonArray.isEmpty())
+        assertEquals(listOf("pg-conn-finding"), pg.getValue("finding_refs").jsonArray.map { it.jsonPrimitive.content })
+    }
 }
 
 private fun summary(

@@ -60,6 +60,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.PrintStream
@@ -88,6 +89,7 @@ internal fun runCli(
                 EXIT_OK
             }
             "analyze" -> analyze(args.drop(1), stdout, stderr, stdin)
+            "quickstart" -> quickstartCommand(args.drop(1), stdout)
             "policy" -> validatePolicyCommand(args.drop(1), stdout, stdin)
             "stages" -> stagesCommand(args.drop(1), stdout, stderr)
             "report" -> report(args.drop(1), stdout)
@@ -473,13 +475,127 @@ private val OUT_DIR_FILES = listOf("result.json", "report.html", "chart.svg", "s
 // Checked before the analysis: the directory and each artifact must be a plain directory or file, not a link or the input itself.
 private fun requireOutDir(
     dir: Path,
-    input: Path,
+    input: Path? = null,
 ) {
     fun invalid(): Nothing = throw CliFailure(EXIT_INVALID_INPUT, "OUT_DIR_INVALID")
     if (Files.exists(dir, LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) invalid()
     OUT_DIR_FILES.map(dir::resolve).filter { Files.exists(it, LinkOption.NOFOLLOW_LINKS) }.forEach {
-        if (!Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) || Files.isSameFile(it, input)) invalid()
+        if (!Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) || (input != null && Files.isSameFile(it, input))) invalid()
     }
+}
+
+private object QuickstartAssets
+
+private fun quickstartCommand(
+    args: List<String>,
+    stdout: PrintStream,
+): Int {
+    var outDir = Path.of("ltv-quickstart-out")
+    var dataDir = defaultDataDir()
+    var outDirSeen = false
+    var dataDirSeen = false
+    var index = 0
+    while (index < args.size) {
+        if (index + 1 >= args.size) usage()
+        when (args[index]) {
+            "--out-dir" -> {
+                if (outDirSeen) usage()
+                outDirSeen = true
+                outDir = path(args[index + 1])
+            }
+            "--data-dir" -> {
+                if (dataDirSeen) usage()
+                dataDirSeen = true
+                dataDir = path(args[index + 1])
+            }
+            else -> usage()
+        }
+        index += 2
+    }
+    requireOutDir(outDir)
+
+    fun assetBytes(name: String): ByteArray =
+        QuickstartAssets::class.java
+            .getResourceAsStream("/quickstart/$name")
+            ?.use { it.readAllBytes() }
+            ?: throw IllegalStateException("QUICKSTART_ASSET_MISSING: $name")
+
+    val jtlBytes = assetBytes("input.jtl")
+    val policy =
+        when (val validation = validatePolicy(ByteArrayInputStream(assetBytes("policy.json")))) {
+            is PolicyValidation.Valid -> validation
+            is PolicyValidation.Invalid -> throw IllegalStateException("QUICKSTART_POLICY_INVALID")
+        }
+    val resources =
+        when (val validation = validateResourceSnapshot(ByteArrayInputStream(assetBytes("resource-snapshot.json")))) {
+            is ResourceValidation.Valid -> validation
+            is ResourceValidation.Invalid -> throw IllegalStateException("QUICKSTART_RESOURCES_INVALID")
+        }
+    check(validatePlatformBinding(policy.policy, resources.snapshot).isEmpty()) { "QUICKSTART_PLATFORM_BINDING_INVALID" }
+
+    var analysisId = ""
+    lateinit var chart: ByteArray
+    var errorGroups: ByteArray? = null
+    var timeline: RunTimeline? = null
+    val result =
+        DataDirectory.open(dataDir).use { directory ->
+            val store = RunBundleStore(directory)
+            val accepted = store.acceptInput(ByteArrayInputStream(jtlBytes), "input.jtl")
+            analyzeWithSources(
+                AnalysisService(store, EngineConfig()),
+                AnalysisRequest(
+                    accepted,
+                    policy,
+                    resources = resources,
+                ),
+                null,
+            ).also { outcome ->
+                analysisId = outcome.analysisId
+                chart = renderSavedLoadChart(outcome.analysisDirectory.resolve("rollup-60s.ndjson"))
+                errorGroups = readErrorGroupsFile(outcome.analysisDirectory)
+                timeline = readRunTimeline(outcome.analysisDirectory)
+            }.canonicalResult
+        }
+
+    val json = Json.parseToJsonElement(result.decodeToString()).jsonObject
+    val runId = json.getValue("run_id").jsonPrimitive.content
+    val verdict = json.getValue("policy_verdict").jsonPrimitive.content
+    val incidentCount =
+        json
+            .getValue("incidents")
+            .jsonObject
+            .getValue("total_count")
+            .jsonPrimitive.content
+    val summaryExitCode =
+        when (verdict) {
+            "PASS", "NO_POLICY" -> EXIT_OK
+            "FAIL" -> EXIT_FAIL
+            else -> EXIT_NO_VERDICT
+        }
+    writeOutDir(
+        outDir,
+        linkedMapOf(
+            "result.json" to result,
+            "report.html" to renderHtmlReport(result, analysisId, errorGroups, null, timeline),
+            "chart.svg" to chart,
+            "summary.txt" to summaryText(analysisId, summaryExitCode, result, errorGroups, null),
+            "junit.xml" to junitXml(result),
+        ),
+    )
+
+    val outAbs = outDir.toAbsolutePath().normalize()
+    val dataAbs = dataDir.toAbsolutePath().normalize()
+    stdout.println("Quickstart analysis complete:")
+    stdout.println("  run_id: $runId")
+    stdout.println("  analysis_id: $analysisId")
+    stdout.println("  policy_verdict: $verdict")
+    stdout.println("  incidents: $incidentCount")
+    stdout.println("  report: ${outAbs.resolve("report.html")}")
+    stdout.println("  out_dir: $outAbs")
+    stdout.println("  data_dir: $dataAbs")
+    stdout.println("Next:")
+    stdout.println("  ltv ui --data-dir \"$dataAbs\"")
+    return EXIT_OK
 }
 
 private fun writeOutDir(
@@ -1010,6 +1126,7 @@ private fun usageText(): String =
             "[--postgres-pre <pre.json>] [--postgres-post <post.json>] [--pg-profile-html <report.html>] " +
             "[--connections <profiles.json> --source <source.json>] [--histogram-significant-digits <3..5>] " +
             "[--jenkins-build <id>] [--commit <ref>] [--data-dir <path>] | " +
+            "ltv quickstart [--out-dir <dir>] [--data-dir <path>] | " +
             "ltv source pre|post --connections <profiles.json> --profile <id> [--pre <pre.json>] [--pg-profile-html <output.html>] | " +
             "ltv source validate --connections <profiles.json> [--profile <id>] [--format text|json] | " +
             "ltv source probe --connections <profiles.json> --profile <id> --query-id <id> [--window-ms <n>] [--step-ms <n>] " +
@@ -1028,7 +1145,9 @@ private fun usageText(): String =
             System.lineSeparator() +
             "ltv source probe: test one saved query against a source" +
             System.lineSeparator() +
-            "ltv doctor: check source profiles offline or probe saved queries with --online"
+            "ltv doctor: check source profiles offline or probe saved queries with --online" +
+            System.lineSeparator() +
+            "ltv quickstart: run the self-contained starter dataset and generate report.html with incidents"
     )
 
 internal class CliFailure(

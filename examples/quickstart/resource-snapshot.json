@@ -1,0 +1,86 @@
+{
+  "schema_version": "resource-snapshot.v1",
+  "load_input_sha256": "c8409b65801fd1203d514595a7eb68002900254227e2df5fdda545ec84cef9ee",
+  "start_epoch_ms": 1767225600000,
+  "step_ms": 10000,
+  "point_count": 12,
+  "series": [
+    {
+      "id": "checkout-api.cpu",
+      "metric": "openshift_container_cpu_limit_ratio",
+      "unit": "ratio",
+      "entity": "checkout-api",
+      "role": "system",
+      "aggregation": "interval_mean",
+      "labels": {
+        "namespace": "shop"
+      },
+      "values": [
+        0.24,
+        0.28,
+        0.32,
+        0.38,
+        0.91,
+        0.95,
+        0.93,
+        0.89,
+        0.72,
+        0.64,
+        0.31,
+        0.25
+      ]
+    },
+    {
+      "id": "catalog-svc.cpu",
+      "metric": "openshift_container_cpu_limit_ratio",
+      "unit": "ratio",
+      "entity": "catalog-svc",
+      "role": "system",
+      "aggregation": "interval_mean",
+      "labels": {
+        "namespace": "shop"
+      },
+      "values": [
+        0.22,
+        0.24,
+        0.25,
+        0.27,
+        0.3,
+        0.33,
+        0.32,
+        0.31,
+        0.29,
+        0.28,
+        0.24,
+        0.21
+      ]
+    }
+  ],
+  "windows": [
+    {
+      "id": "steady",
+      "from_epoch_ms": 1767225640000,
+      "to_epoch_ms": 1767225700000
+    }
+  ],
+  "rules": [
+    {
+      "id": "checkout-cpu-high",
+      "series_id": "checkout-api.cpu",
+      "unit": "ratio",
+      "operator": "gt",
+      "threshold": 0.85,
+      "min_consecutive_cells": 2,
+      "effect": "sla"
+    },
+    {
+      "id": "catalog-cpu-high",
+      "series_id": "catalog-svc.cpu",
+      "unit": "ratio",
+      "operator": "gt",
+      "threshold": 0.85,
+      "min_consecutive_cells": 2,
+      "effect": "sla"
+    }
+  ]
+}

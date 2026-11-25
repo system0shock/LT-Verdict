@@ -1,0 +1,40 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "quickstart-shop",
+  "defaults": {
+    "sample_floor": 20,
+    "min_samples": 100
+  },
+  "rules": [
+    {
+      "id": "checkout-p95",
+      "metric": "response_time_p95_ms",
+      "operator": "lte",
+      "threshold": 500,
+      "scope": {
+        "kind": "transaction",
+        "name": "POST /checkout"
+      }
+    },
+    {
+      "id": "checkout-error-rate",
+      "metric": "error_rate_ratio",
+      "operator": "lte",
+      "threshold": 0.01,
+      "scope": {
+        "kind": "transaction",
+        "name": "POST /checkout"
+      }
+    },
+    {
+      "id": "catalog-p95",
+      "metric": "response_time_p95_ms",
+      "operator": "lte",
+      "threshold": 500,
+      "scope": {
+        "kind": "transaction",
+        "name": "GET /catalog"
+      }
+    }
+  ]
+}

@@ -72,9 +72,24 @@ Gatling (`simulation.log`, текстовый и бинарный). «Прове
 Подробности границ: [alignment review v0.6](docs/prc-v0.6-alignment-review.md) и
 [нормативный PRC/PRD v0.6](lt-verdict-prc-prd-v0.6.md).
 
-## Быстрый старт: analyze, затем report
+## Быстрый старт: одна команда из архива или `analyze`, затем `report`
 
-После сборки (см. «Быстрый запуск» ниже). Сохраните политику в `policy.json`:
+После распаковки `ltv-<версия>.zip` (или сборки `./gradlew installDist`) получить
+готовый HTML-отчёт с инцидентами без внешнего клона репозитория можно одной командой:
+
+```powershell
+.\ltv-<версия>\bin\ltv.bat quickstart --out-dir .\quickstart-out --data-dir .\quickstart-data
+```
+
+В Linux: `./ltv-<версия>/bin/ltv quickstart --out-dir ./quickstart-out --data-dir ./quickstart-data`.
+Команда прогоняет встроенный стартовый пример (`examples/quickstart/`: JTL, `policy.v1` и
+`resource-snapshot.v1`), записывает `result.json`, `report.html` (с разделом «Инциденты» и
+группами ошибок), `chart.svg`, `summary.txt`, `junit.xml` и печатает путь к отчёту и команду
+для открытия в локальном UI (`ltv ui --data-dir ...`). Готовые стартовые профили источников
+для OpenShift, JVM и PostgreSQL лежат в `docs/contracts/sources/v1/` внутри архива
+([подробнее](docs/user/test-onboarding.md), [пакеты метрик](docs/user/platform-metric-packs.md)).
+
+Для собственных прогонов сохраните политику в `policy.json`:
 
 ```json
 {
@@ -190,14 +205,19 @@ Temurin и на урезанном runtime без инструментов JDK).
 2. Проверьте сумму: `sha256sum -c ltv-0.1.0.zip.sha256` (Linux) или
    `(Get-FileHash ltv-0.1.0.zip).Hash` в PowerShell и сравните с содержимым `.sha256`.
 3. Распакуйте архив в любой каталог, например `C:\ltv` или `~/ltv`.
-4. Проверьте установку и запустите UI:
+4. Проверьте установку, прогоните 1-командный quickstart и откройте отчёт или UI:
 
 ```powershell
 .\ltv-0.1.0\bin\ltv.bat --version
-.\ltv-0.1.0\bin\ltv.bat ui
+.\ltv-0.1.0\bin\ltv.bat quickstart --out-dir .\quickstart-out --data-dir .\quickstart-data
+.\ltv-0.1.0\bin\ltv.bat ui --data-dir .\quickstart-data
 ```
 
-В Linux те же команды: `./ltv-0.1.0/bin/ltv --version` и `./ltv-0.1.0/bin/ltv ui`.
+В Linux те же команды: `./ltv-0.1.0/bin/ltv --version`,
+`./ltv-0.1.0/bin/ltv quickstart --out-dir ./quickstart-out --data-dir ./quickstart-data` и
+`./ltv-0.1.0/bin/ltv ui --data-dir ./quickstart-data`.
+Стартовый набор `examples/quickstart/`, стартовые профили источников в `docs/contracts/sources/v1/`
+и документация в `docs/user/` уже входят в архив.
 
 ### Сборка из исходников
 
@@ -222,6 +242,7 @@ Linux использует `./gradlew installDist` и
 - [Руководство локального анализа Slice 1](docs/user/slice-1-local-analysis.md)
 - [Инциденты v0: группировка находок в Обзоре и отчёте](docs/user/incidents.md)
 - [Онлайн-источники и offline replay](docs/user/online-sources.md)
+- [Пакеты метрик и стартовые профили OpenShift, JVM и PostgreSQL](docs/user/platform-metric-packs.md)
 - [Advisory AI: prerequisites и настройка ModelStudio](docs/user/advisory-ai.md)
 - [Jenkins, Grafana и Confluence-ready output](docs/user/jenkins-and-reports.md)
 - [Подготовка нагрузочного теста и onboarding skill](docs/user/test-onboarding.md)

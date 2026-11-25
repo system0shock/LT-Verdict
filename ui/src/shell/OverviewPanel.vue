@@ -9,14 +9,15 @@ import { OVERVIEW_LABELS } from './labels'
 import { CAPACITY_LABELS } from './labels.tables'
 import CapacityKneeChart from './CapacityKneeChart.vue'
 import LogErrorsPanel from './LogErrorsPanel.vue'
+import MiniInteractiveChart from './MiniInteractiveChart.vue'
 import PlatformMap from './PlatformMap.vue'
 import SharedCursorChart from './SharedCursorChart.vue'
-import TimeChart from './TimeChart.vue'
 import {
-  attentionItems, capacityBlock, formatNumber, formatOffset, incidentView, keyMetrics, loadP95Thresholds, loadSeries,
-  platformTiles, transactionCatalog, trendOverview, type AttentionKind, type AttentionTarget, type IncidentAction,
+  attentionItems, capacityBlock, formatNumber, formatOffset, incidentView, keyMetrics, loadFrame, loadLane,
+  loadP95Thresholds, loadSeries, platformTiles, transactionCatalog, trendOverview,
+  type AttentionKind, type AttentionTarget, type IncidentAction, type IncidentCard,
 } from './overview'
-import { stageBands, type ChartFrame, type ChartLane, type ChartToken } from './timeChart'
+import { stageBands, type ChartFrame, type ChartLane, type ChartThreshold, type ChartToken } from './timeChart'
 import type { AnalysisResult, AnalysisSummary, ResourceSeriesCatalog, ResourceSeriesEntry } from '../types'
 
 const props = defineProps<{
@@ -69,6 +70,13 @@ const controller = new AbortController()
 function sparklineLane(seriesId: string, color: ChartToken = 'brand'): ChartLane | null {
   const track = sparklineTracks.value.get(seriesId)
   if (!track || !sparklineFrame.value) return null
+  const thresholds: ChartThreshold[] = track.thresholds.map((t) => ({
+    id: t.ruleId,
+    value: t.value,
+    text: `${formatNumber(t.value, 2)}${track.unit ? ` ${track.unit}` : ''}`,
+    violated: t.violated,
+  }))
+  const hi = Math.max(track.max, ...thresholds.map((t) => t.value), 1)
   return {
     key: `spark:${seriesId}`,
     color,
@@ -81,15 +89,88 @@ function sparklineLane(seriesId: string, color: ChartToken = 'brand'): ChartLane
       return points.length ? [points] : []
     }),
     lo: Math.min(0, track.min),
-    hi: track.max > 0 ? track.max : 1,
-    thresholds: track.thresholds.map((t) => ({ id: t.ruleId, value: t.value, text: '', violated: t.violated })),
+    hi,
+    thresholds,
   }
 }
 
-function incidentSparkline(action: IncidentAction | null, priority: string): ChartLane | null {
-  if (!action || action.kind !== 'navigate' || !action.target.seriesId) return null
-  const color: ChartToken = priority === 'HIGH' ? 'fail' : priority === 'MEDIUM' ? 'warn' : 'brand'
-  return sparklineLane(action.target.seriesId, color)
+function resolveIncidentSeriesId(card: IncidentCard): string | null {
+  if (card.primaryAction?.kind === 'navigate' && card.primaryAction.target.seriesId) {
+    return card.primaryAction.target.seriesId
+  }
+  for (const evId of card.evidenceIds) {
+    const found = props.result.evidence.find((e) => 'id' in e && e.id === evId)
+    if (found && (found.type === 'resource_policy_check' || found.type === 'resource_summary' || found.type === 'trend_check')) {
+      return found.series_id
+    }
+  }
+  if (card.family === 'RESOURCE') {
+    const byEntity = props.result.evidence.find(
+      (e): e is Extract<AnalysisResult['evidence'][number], { type: 'trend_check' | 'resource_summary' }> =>
+        (e.type === 'trend_check' || e.type === 'resource_summary')
+        && e.entity === card.scopeLabel,
+    )
+    if (byEntity) return byEntity.series_id
+  }
+  return null
+}
+
+function incidentChart(card: IncidentCard): {
+  lane: ChartLane
+  frame: ChartFrame
+  stages: typeof stages.value
+  label: string
+  unit: string
+  decimals: number
+} | null {
+  const color: ChartToken = card.priority === 'HIGH' ? 'fail' : card.priority === 'MEDIUM' ? 'warn' : 'c3'
+  const seriesId = resolveIncidentSeriesId(card)
+  if (seriesId && sparklineFrame.value) {
+    const lane = sparklineLane(seriesId, color)
+    const track = sparklineTracks.value.get(seriesId)
+    if (lane && track) {
+      return {
+        lane,
+        frame: sparklineFrame.value,
+        stages: [],
+        label: track.label,
+        unit: track.unit,
+        decimals: track.unit === 'count' || track.unit === 'bytes' ? 0 : 2,
+      }
+    }
+  }
+  if (card.family === 'TRANSACTION' && series.value.points.length) {
+    let metric: 'p95' | 'errors' | 'rps' = 'p95'
+    const thresholds: ChartThreshold[] = []
+    for (const evId of card.evidenceIds) {
+      const found = props.result.evidence.find((e) => 'id' in e && e.id === evId)
+      if (found?.type === 'policy_check') {
+        if (found.metric === 'error_rate_ratio') metric = 'errors'
+        else if (found.metric === 'throughput_rps') metric = 'rps'
+        else metric = 'p95'
+        const val = Number(found.threshold)
+        if (Number.isFinite(val) && val > 0 && metric === 'p95') {
+          thresholds.push({
+            id: found.rule_id,
+            value: val,
+            text: `порог ${formatNumber(val, 0)} мс`,
+            violated: found.status === 'FAIL',
+          })
+        }
+        break
+      }
+    }
+    const base = loadLane(series.value, metric, metric === 'p95' ? (thresholds.length ? thresholds : p95Thresholds.value) : [])
+    return {
+      lane: { ...base, color: metric === 'errors' ? 'fail' : color, area: metric !== 'errors', bars: metric === 'errors' },
+      frame: loadFrame(series.value),
+      stages: stages.value,
+      label: metric === 'errors' ? OVERVIEW_LABELS.trackErrors : metric === 'rps' ? OVERVIEW_LABELS.trackRps : `${OVERVIEW_LABELS.trackP95} (${card.scopeLabel})`,
+      unit: metric === 'errors' ? 'шт' : metric === 'rps' ? OVERVIEW_LABELS.unitRps : OVERVIEW_LABELS.unitMs,
+      decimals: metric === 'rps' ? 1 : 0,
+    }
+  }
+  return null
 }
 
 async function loadSparklines() {
@@ -97,7 +178,10 @@ async function loadSparklines() {
   const incidentSeries = [
     ...incidents.value.overviewItems,
     ...incidents.value.moreItems,
-  ].flatMap((item) => (item.primaryAction?.kind === 'navigate' && item.primaryAction.target.seriesId ? [item.primaryAction.target.seriesId] : []))
+  ].flatMap((item) => {
+    const id = resolveIncidentSeriesId(item)
+    return id ? [id] : []
+  })
   const wantedIds = [...new Set([
     ...platform.value.map((tile) => tile.seriesId),
     ...(trends.value?.cards.map((card) => card.seriesId) ?? []),
@@ -356,14 +440,18 @@ const kindLabels: Record<AttentionKind, string> = {
               <span v-if="card.refsTruncated">{{ OVERVIEW_LABELS.incidentRefsTruncated }}</span>
             </p>
             <div
-              v-if="incidentSparkline(card.primaryAction, card.priority) && sparklineFrame"
+              v-if="incidentChart(card)"
               class="inc-card__spark"
+              data-testid="incident-chart"
             >
-              <TimeChart
-                :lane="incidentSparkline(card.primaryAction, card.priority)!"
-                :frame="sparklineFrame"
-                :stages="[]"
-                :flags="{ timeLabels: false, stageLabels: false, sparkline: true, plotHeight: 56 }"
+              <MiniInteractiveChart
+                :lane="incidentChart(card)!.lane"
+                :frame="incidentChart(card)!.frame"
+                :stages="incidentChart(card)!.stages"
+                :label="incidentChart(card)!.label"
+                :unit="incidentChart(card)!.unit"
+                :decimals="incidentChart(card)!.decimals"
+                :plot-height="96"
               />
             </div>
             <p class="inc-card__summary">
@@ -486,6 +574,20 @@ const kindLabels: Record<AttentionKind, string> = {
                 <span>{{ card.intervalText }}</span>
                 <span>{{ OVERVIEW_LABELS.incidentFindings(card.findingCount) }}</span>
               </p>
+              <div
+                v-if="incidentChart(card)"
+                class="inc-card__spark"
+              >
+                <MiniInteractiveChart
+                  :lane="incidentChart(card)!.lane"
+                  :frame="incidentChart(card)!.frame"
+                  :stages="incidentChart(card)!.stages"
+                  :label="incidentChart(card)!.label"
+                  :unit="incidentChart(card)!.unit"
+                  :decimals="incidentChart(card)!.decimals"
+                  :plot-height="96"
+                />
+              </div>
               <p class="inc-card__summary">
                 {{ card.summary }}
               </p>
@@ -570,12 +672,14 @@ const kindLabels: Record<AttentionKind, string> = {
             <b>{{ tile.peakText }}</b>
             <span v-if="tile.unit">{{ tile.unit }}</span>
           </div>
-          <TimeChart
+          <MiniInteractiveChart
             v-if="sparklineLane(tile.seriesId, tile.status === 'FAIL' ? 'fail' : tile.status === 'DIAGNOSTIC' ? 'warn' : 'brand') && sparklineFrame"
             :lane="sparklineLane(tile.seriesId, tile.status === 'FAIL' ? 'fail' : tile.status === 'DIAGNOSTIC' ? 'warn' : 'brand')!"
             :frame="sparklineFrame"
-            :stages="[]"
-            :flags="{ timeLabels: false, stageLabels: false, sparkline: true, plotHeight: 42 }"
+            :label="tile.seriesId"
+            :unit="tile.unit ?? ''"
+            :plot-height="78"
+            :max-time-intervals="2"
           />
           <p class="v4-sub tile-card__meta">
             {{ tile.entity }} · {{ tile.metric }} · {{ tile.windowId }}
@@ -648,12 +752,13 @@ const kindLabels: Record<AttentionKind, string> = {
           <p class="v4-sub">
             <span v-if="card.entity">{{ card.entity }} · </span>{{ card.windowId }}
           </p>
-          <TimeChart
+          <MiniInteractiveChart
             v-if="sparklineLane(card.seriesId, 'c3') && sparklineFrame"
             :lane="sparklineLane(card.seriesId, 'c3')!"
             :frame="sparklineFrame"
-            :stages="[]"
-            :flags="{ timeLabels: false, stageLabels: false, sparkline: true, plotHeight: 54 }"
+            :label="card.seriesId"
+            :unit="card.unit ?? ''"
+            :plot-height="94"
           />
           <p class="tile-card__stats v4-sub v4-num">
             <span>{{ OVERVIEW_LABELS.trendsSlope(card.slope, card.unit) }}</span>

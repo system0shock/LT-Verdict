@@ -69,7 +69,15 @@ export interface ChartColors {
   c7?: string
   rest?: string
 }
-export interface LaneFlags { timeLabels: boolean; stageLabels: boolean; plotHeight?: number; ySplits?: number; sparkline?: boolean }
+export interface LaneFlags {
+  timeLabels: boolean
+  stageLabels: boolean
+  plotHeight?: number
+  ySplits?: number
+  sparkline?: boolean
+  maxTimeIntervals?: number
+  compactTimeAxis?: boolean
+}
 
 export const PLOT_INSET = { left: 56, right: 16 } as const
 const PLOT_HEIGHT = 78
@@ -103,7 +111,7 @@ export function laneGrid(flags: LaneFlags) {
     return { left: 2, right: 2, top: 4, bottom: 4, height: flags.plotHeight ?? 44 }
   }
   const top = flags.stageLabels ? 18 : 6
-  const bottom = flags.timeLabels ? 50 : 6
+  const bottom = flags.timeLabels ? (flags.compactTimeAxis ? 24 : 50) : 6
   const plotHeight = flags.plotHeight ?? PLOT_HEIGHT
   return { left: PLOT_INSET.left, right: PLOT_INSET.right, top, bottom, height: plotHeight + top + bottom }
 }
@@ -284,7 +292,7 @@ function thresholdLine(threshold: ChartThreshold, axisMax: number, colors: Chart
 
 export function laneOption(lane: ChartLane, frame: ChartFrame, stages: ChartStage[], flags: LaneFlags, colors: ChartColors): EChartsCoreOption {
   const grid = laneGrid(flags)
-  const ticks = flags.sparkline ? [] : timeTicks(frame)
+  const ticks = flags.sparkline ? [] : timeTicks(frame, flags.maxTimeIntervals ?? 6)
   const axis = valueAxis(lane.lo, lane.hi, lane.integer, flags.ySplits ?? 2, lane.tightMin)
   const text = { color: colors.muted, fontSize: 12, fontFamily: colors.fontFamily }
   const areas: unknown[] = flags.sparkline ? [] : [...stageAreas(stages, frame, flags, colors)]

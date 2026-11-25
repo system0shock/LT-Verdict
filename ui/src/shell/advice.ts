@@ -11,12 +11,19 @@ export function provenanceLines(advice: AdviceDocument): ProvenanceLine[] {
   const source = advice.provenance
   if (!source) return []
 
-  const lines: ProvenanceLine[] = [
-    { label: ADVICE_LABELS.model, value: source.model_id || ADVICE_LABELS.notStated },
-    { label: ADVICE_LABELS.promptVersion, value: source.prompt_version === 'advisory-system.v1'
-      ? ADVICE_LABELS.promptLegacy(source.prompt_version)
-      : source.prompt_version || ADVICE_LABELS.notStated },
-  ]
+  const lines: ProvenanceLine[] = []
+  if (source.provenance_kind === 'self-reported') {
+    lines.push({ label: ADVICE_LABELS.origin, value: ADVICE_LABELS.selfReportedOrigin })
+  }
+  lines.push({ label: ADVICE_LABELS.model, value: source.model_id || ADVICE_LABELS.notStated })
+  if (source.provenance_kind !== 'self-reported' || source.prompt_version) {
+    lines.push({
+      label: ADVICE_LABELS.promptVersion,
+      value: source.prompt_version === 'advisory-system.v1'
+        ? ADVICE_LABELS.promptLegacy(source.prompt_version)
+        : source.prompt_version || ADVICE_LABELS.notStated,
+    })
+  }
   if (typeof source.provider_requests === 'number') {
     lines.push(source.provider_requests > 1
       ? { label: ADVICE_LABELS.requests, value: String(source.provider_requests), hint: ADVICE_LABELS.requestsRetry }

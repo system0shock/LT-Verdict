@@ -215,6 +215,13 @@ internal data class RunnerProvenance(
     val exitCode: Int,
 )
 
+internal data class SelfReportedProvenance(
+    val runnerId: String,
+    val runnerVersion: String? = null,
+    val modelId: String,
+    val durationMillis: Long? = null,
+)
+
 internal fun interface AdvisoryRunner {
     fun invoke(evidence: AdvisoryEvidence): RunnerOutcome
 
@@ -353,6 +360,57 @@ internal class AdvisoryAiService(
             reused = false,
         )
     }
+
+    fun saveSelfReported(
+        runId: String,
+        analysisId: String,
+        outputBytes: ByteArray,
+        provenance: SelfReportedProvenance,
+    ): AdviceRunResult {
+        adviceStore.read(runId, analysisId)?.let { return AdviceRunResult.Saved(it, reused = true) }
+        val analysis = runBundles.readAnalysis(runId, analysisId) ?: throw NoSuchElementException("ANALYSIS_NOT_FOUND")
+        val analysisManifestSha256 = sha256Hex(Files.readAllBytes(analysis.path.resolve("manifest.json")))
+        val result = runBundles.readAnalysisDocuments(runId, analysisId)?.first ?: throw NoSuchElementException("ANALYSIS_NOT_FOUND")
+        val evidence =
+            try {
+                AdvisoryEvidenceBuilder.build(runId, analysisId, analysisManifestSha256, result)
+            } catch (error: AdviceValidationException) {
+                return AdviceRunResult.Failed(error.reason)
+            }
+        val output =
+            try {
+                AdviceOutputValidator.validate(outputBytes, evidence.references)
+            } catch (error: AdviceValidationException) {
+                return AdviceRunResult.Failed(error.reason)
+            }
+        if (!validSelfReportedProvenance(provenance)) return AdviceRunResult.Failed(AdviceFailure.INVALID_OUTPUT)
+        val document =
+            buildJsonObject {
+                put("schema_version", "ai-advice.v1")
+                put("advisory", true)
+                put("run_id", runId)
+                put("analysis_id", analysisId)
+                put("analysis_manifest_sha256", analysisManifestSha256)
+                put("evidence_input_sha256", evidence.sha256)
+                put("output", output)
+                put(
+                    "provenance",
+                    buildJsonObject {
+                        put("invocation_id", UUID.randomUUID().toString())
+                        put("provenance_kind", SELF_REPORTED_PROVENANCE_KIND)
+                        put("runner_id", provenance.runnerId)
+                        provenance.runnerVersion?.let { put("runner_version", it) }
+                        put("model_id", provenance.modelId)
+                        provenance.durationMillis?.let { put("duration_ms", it) }
+                        put("validation", "PASSED")
+                    },
+                )
+            }
+        return AdviceRunResult.Saved(
+            adviceStore.write(runId, analysisId, analysisManifestSha256, document),
+            reused = false,
+        )
+    }
 }
 
 internal fun validateStoredAdvice(
@@ -374,6 +432,28 @@ internal fun validateStoredAdvice(
     }
     AdviceOutputValidator.validate(canonicalJson(document.objectValue("output")), evidence.references)
     val provenance = document.objectValue("provenance")
+    val provenanceKind = if ("provenance_kind" in provenance.keys) provenance.string("provenance_kind") else null
+    if (provenanceKind == SELF_REPORTED_PROVENANCE_KIND) {
+        if (!provenance.keys.containsAll(SELF_REPORTED_PROVENANCE_FIELDS) ||
+            !(SELF_REPORTED_PROVENANCE_FIELDS + SELF_REPORTED_PROVENANCE_OPTIONAL_FIELDS).containsAll(provenance.keys) ||
+            !validSelfReportedRunnerId(provenance.string("runner_id")) ||
+            ("runner_version" in provenance.keys && !RUNNER_VERSION_PATTERN.matches(provenance.string("runner_version"))) ||
+            !validModelSlug(provenance.string("model_id")) ||
+            ("duration_ms" in provenance.keys && provenance.long("duration_ms") !in 0..613_000) ||
+            provenance.string("validation") != "PASSED"
+        ) {
+            invalid(AdviceFailure.INVALID_OUTPUT)
+        }
+        try {
+            UUID.fromString(provenance.string("invocation_id"))
+        } catch (_: IllegalArgumentException) {
+            invalid(AdviceFailure.INVALID_OUTPUT)
+        }
+        return
+    }
+    if (provenanceKind != null && provenanceKind != RUNNER_PROVENANCE_KIND) {
+        invalid(AdviceFailure.INVALID_OUTPUT)
+    }
     // The model is not compared with the current configuration: the operator may change the file, and advice saved
     // earlier must stay readable (ADR 0023, D4). The slug pattern and the closed key set are checked instead.
     val hasEndpointHost = "endpoint_host" in provenance.keys
@@ -466,6 +546,14 @@ private fun validProvenance(value: RunnerProvenance): Boolean =
         } &&
         value.durationMillis in 0..613_000 &&
         value.exitCode == 0
+
+private fun validSelfReportedProvenance(value: SelfReportedProvenance): Boolean =
+    validSelfReportedRunnerId(value.runnerId) &&
+        (value.runnerVersion == null || RUNNER_VERSION_PATTERN.matches(value.runnerVersion)) &&
+        validModelSlug(value.modelId) &&
+        (value.durationMillis == null || value.durationMillis in 0..613_000)
+
+internal fun sanitizeAdvisoryJson(value: JsonElement): JsonElement = sanitize(value)
 
 private fun sanitize(
     value: JsonElement,
@@ -598,7 +686,18 @@ private val PROVENANCE_FIELDS =
     )
 
 // Present in advice saved after endpoint_host (ADR 0023, CM3) and provider_requests (ADR 0021, D4) appeared.
-private val PROVENANCE_OPTIONAL_FIELDS = setOf("endpoint_host", "provider_requests")
+private val PROVENANCE_OPTIONAL_FIELDS = setOf("endpoint_host", "provider_requests", "provenance_kind")
+
+private const val RUNNER_PROVENANCE_KIND = "runner"
+internal const val SELF_REPORTED_PROVENANCE_KIND = "self-reported"
+internal val SELF_REPORTED_RUNNER_ID_PATTERN = Regex("^[a-z0-9][a-z0-9._-]{0,63}$")
+
+internal fun validSelfReportedRunnerId(value: String): Boolean =
+    SELF_REPORTED_RUNNER_ID_PATTERN.matches(value) && value != QwenCode0211.RUNNER_ID
+
+private val SELF_REPORTED_PROVENANCE_FIELDS =
+    setOf("invocation_id", "provenance_kind", "runner_id", "model_id", "validation")
+private val SELF_REPORTED_PROVENANCE_OPTIONAL_FIELDS = setOf("runner_version", "duration_ms")
 
 /** `endpoint_host` of advice made by the direct runner: the CLI uses its own channel, so no host is observed (ADR 0027). */
 internal const val DIRECT_ENDPOINT_HOST = "cli-builtin"

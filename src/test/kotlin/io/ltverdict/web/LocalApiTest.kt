@@ -703,6 +703,167 @@ class LocalApiTest {
     }
 
     @Test
+    fun `PUT advice enforces auth, validates contract, persists self-reported advice idempotently, and fails soft when unavailable`() {
+        val validBody =
+            """
+            {
+              "output": {
+                "schema_version": "ai-advice-output.v1",
+                "summary": "Latency elevated on spike sampler.",
+                "hypotheses": [
+                  {
+                    "rank": 1,
+                    "observation": "Spike p95 exceeded threshold.",
+                    "possible_explanation": "Downstream saturation.",
+                    "recommended_check": "Inspect resource series.",
+                    "evidence_refs": ["analysis-result.json#/evidence/0"]
+                  }
+                ],
+                "recommendations": [],
+                "caveats": ["Advisory only."]
+              },
+              "provenance": {
+                "provenance_kind": "self-reported",
+                "runner_id": "claude-code",
+                "runner_version": "1.0.0",
+                "model_id": "claude-sonnet-4-5",
+                "duration_ms": 250
+              }
+            }
+            """.trimIndent()
+
+        withServer { store, api ->
+            api.bootstrap()
+            val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
+            val id = api.createJob(input.runId).analysisId(api)
+            val path = "/api/runs/${input.runId}/analyses/$id/advice"
+            assertEquals(403, api.putUnauthenticated(path, validBody.encodeToByteArray()).statusCode())
+            assertError(api.put(path, "application/json", validBody.encodeToByteArray()), 503, "AI_UNAVAILABLE")
+        }
+
+        withServer(
+            adviceRunner = AdvisoryRunner { RunnerOutcome.Unavailable(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED) },
+        ) { store, api ->
+            api.bootstrap()
+            val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
+            val id = api.createJob(input.runId).analysisId(api)
+            val path = "/api/runs/${input.runId}/analyses/$id/advice"
+            val originalResult = api.get("/api/runs/${input.runId}/analyses/$id/result").body()
+
+            assertError(api.put(path, "application/json", "{".encodeToByteArray()), 400, "MALFORMED_REQUEST")
+            assertError(
+                api.put(path, "application/json", """{"output":{},"provenance":{},"extra":1}""".encodeToByteArray()),
+                400,
+                "MALFORMED_REQUEST",
+            )
+            assertError(
+                api.put(
+                    path,
+                    "application/json",
+                    """{"output":{"schema_version":"ai-advice-output.v1","summary":"x","hypotheses":[],"recommendations":[],"caveats":[]},"provenance":{"runner_id":"claude-code","model_id":"claude-sonnet-4-5","endpoint_host":"cli-builtin"}}"""
+                        .encodeToByteArray(),
+                ),
+                422,
+                "INVALID_OUTPUT",
+            )
+            assertError(
+                api.put(
+                    path,
+                    "application/json",
+                    validBody.replace("\"claude-code\"", "\"gigacode-qwen-code\"").encodeToByteArray(),
+                ),
+                422,
+                "INVALID_OUTPUT",
+            )
+            assertError(
+                api.put(
+                    path,
+                    "application/json",
+                    validBody.replace("analysis-result.json#/evidence/0", "analysis-result.json#/evidence/999").encodeToByteArray(),
+                ),
+                422,
+                "UNKNOWN_EVIDENCE_REFERENCE",
+            )
+
+            val created = api.put(path, "application/json", validBody.encodeToByteArray())
+            assertEquals(201, created.statusCode())
+            val createdJson = created.jsonObject()
+            assertEquals(JsonPrimitive(false), createdJson["reused"])
+            val createdProv =
+                createdJson
+                    .getValue("advice")
+                    .jsonObject
+                    .getValue("provenance")
+                    .jsonObject
+            assertEquals(JsonPrimitive("self-reported"), createdProv["provenance_kind"])
+            assertEquals(JsonPrimitive("claude-code"), createdProv["runner_id"])
+            assertFalse("endpoint_host" in createdProv)
+
+            val repeated = api.put(path, "application/json", validBody.encodeToByteArray())
+            assertEquals(200, repeated.statusCode())
+            assertEquals(JsonPrimitive(true), repeated.jsonObject()["reused"])
+            assertEquals(createdJson["advice"], repeated.jsonObject()["advice"])
+
+            val fetched = api.get(path).jsonObject()
+            assertEquals(createdJson["advice"], fetched["advice"])
+            assertEquals(originalResult, api.get("/api/runs/${input.runId}/analyses/$id/result").body())
+        }
+    }
+
+    @Test
+    fun `POST jobs captures jenkins_build and commit in identity, surfaces them in analytics, and keeps comparability`() =
+        withServer(clock = SteppingClock(Instant.parse("2026-11-25T00:00:00Z"))) { store, api ->
+            api.bootstrap()
+            val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
+            val untaggedId = api.createJob(input.runId).analysisId(api)
+            val taggedId =
+                api
+                    .createJob(
+                        input.runId,
+                        jenkinsBuild = "build-42",
+                        commit = "deadbeef<tag>",
+                    ).analysisId(api)
+            assertTrue(untaggedId != taggedId)
+
+            val invalidBuild =
+                api.multipart(
+                    "/api/jobs",
+                    listOf(
+                        FormPart("run_id", input.runId.encodeToByteArray()),
+                        FormPart("jenkins_build", "bad\nbuild".encodeToByteArray()),
+                    ),
+                )
+            assertError(invalidBuild, 400, "MALFORMED_REQUEST")
+
+            val analytics = api.get("/api/runs/${input.runId}/analyses/$taggedId/analytics").jsonObject()
+            val dynamics = analytics.getValue("dynamics").jsonObject
+            assertEquals(JsonPrimitive(0), dynamics["excluded_incompatible_count"])
+            assertEquals(JsonPrimitive(2), dynamics["comparable_count"])
+            val rows = dynamics.getValue("rows").jsonArray
+
+            fun rowFor(targetId: String): JsonObject =
+                rows
+                    .first { row ->
+                        row.jsonObject
+                            .getValue("reference")
+                            .jsonObject
+                            .getValue("analysis_id")
+                            .jsonPrimitive.content == targetId
+                    }.jsonObject
+            val untaggedRow = rowFor(untaggedId)
+            val taggedRow = rowFor(taggedId)
+            assertEquals(JsonNull, untaggedRow["jenkins_build"])
+            assertEquals(JsonNull, untaggedRow["commit"])
+            assertEquals(JsonPrimitive("build-42"), taggedRow["jenkins_build"])
+            assertEquals(JsonPrimitive("deadbeef<tag>"), taggedRow["commit"])
+
+            val html = api.get("/api/runs/${input.runId}/analyses/$taggedId/analytics?format=html").body()
+            assertTrue(html.contains("build-42"))
+            assertTrue(html.contains("deadbeef&lt;tag&gt;"))
+            assertFalse(html.contains("deadbeef<tag>"))
+        }
+
+    @Test
     fun `unconfigured backend exposes no online profiles`() =
         withServer { _, api ->
             api.bootstrap()
@@ -3288,7 +3449,7 @@ class LocalApiTest {
     }
 
     @Test
-    fun `pod view cannot be combined with an online source request and a job may have 25 parts`() {
+    fun `pod view cannot be combined with an online source request and a job may have 27 parts`() {
         withServer { store, api ->
             val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
             api.bootstrap()
@@ -3309,9 +3470,9 @@ class LocalApiTest {
             fun junkParts(count: Int) =
                 listOf(FormPart("run_id", input.runId.encodeToByteArray())) +
                     List(count - 1) { FormPart("unknown_$it", ByteArray(1), "x.bin", "application/octet-stream") }
-            // 25 parts pass the counter (the unknown names fail the body at the end); the 26th is one too many.
-            assertEquals("Job multipart body is invalid", messageOf(api.multipart("/api/jobs", junkParts(25))))
-            assertEquals("Job multipart body has too many parts", messageOf(api.multipart("/api/jobs", junkParts(26))))
+            // 27 parts pass the counter (the unknown names fail the body at the end); the 28th is one too many.
+            assertEquals("Job multipart body is invalid", messageOf(api.multipart("/api/jobs", junkParts(27))))
+            assertEquals("Job multipart body has too many parts", messageOf(api.multipart("/api/jobs", junkParts(28))))
         }
     }
 
@@ -4382,6 +4543,8 @@ class LocalApiTest {
             capacity: ByteArray? = null,
             trend: ByteArray? = null,
             podView: ByteArray? = null,
+            jenkinsBuild: String? = null,
+            commit: String? = null,
         ): HttpResponse<String> =
             multipart(
                 "/api/jobs",
@@ -4399,6 +4562,8 @@ class LocalApiTest {
                     if (capacity != null) add(FormPart("capacity_plan", capacity, "capacity.json", "application/json"))
                     if (trend != null) add(FormPart("trend_plan", trend, "trend.json", "application/json"))
                     if (podView != null) add(FormPart("pod_view", podView, "pod-view.json", "application/json"))
+                    if (jenkinsBuild != null) add(FormPart("jenkins_build", jenkinsBuild.encodeToByteArray()))
+                    if (commit != null) add(FormPart("commit", commit.encodeToByteArray()))
                 },
             )
 
@@ -4440,6 +4605,12 @@ class LocalApiTest {
             body: ByteArray,
         ): HttpResponse<String> =
             send(request(path).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofByteArray(body)))
+
+        fun putUnauthenticated(
+            path: String,
+            body: ByteArray,
+        ): HttpResponse<String> =
+            send(request(path).header("Content-Type", "application/json").PUT(HttpRequest.BodyPublishers.ofByteArray(body)))
 
         fun multipart(
             path: String,

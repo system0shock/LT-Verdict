@@ -804,6 +804,165 @@ class AdvisoryAiTest {
     }
 
     @Test
+    fun `saveSelfReported persists self-reported provenance, keeps result untouched, and reuses idempotently`() {
+        DataDirectory.open(tempDir.resolve("self-reported-save")).use { directory ->
+            val fixture = prepareAnalysis(directory)
+            val beforeResult = Files.readAllBytes(fixture.analysisPath.resolve("analysis-result.json"))
+            val bundles = RunBundleStore(directory)
+            val store = AiAdviceStore(directory, bundles)
+            val service =
+                AdvisoryAiService(
+                    bundles,
+                    store,
+                    AdvisoryRunner { RunnerOutcome.Unavailable(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED) },
+                )
+
+            val saved =
+                assertInstanceOf(
+                    AdviceRunResult.Saved::class.java,
+                    service.saveSelfReported(
+                        fixture.runId,
+                        fixture.analysisId,
+                        canonicalJson(validOutput("analysis-result.json#/evidence/0")),
+                        SelfReportedProvenance(
+                            runnerId = "claude-code",
+                            runnerVersion = "1.0.2",
+                            modelId = "claude-sonnet-4-5",
+                            durationMillis = 321,
+                        ),
+                    ),
+                )
+            assertFalse(saved.reused)
+            val prov =
+                saved.advice.document
+                    .getValue("provenance")
+                    .jsonObject
+            assertEquals(JsonPrimitive("self-reported"), prov["provenance_kind"])
+            assertEquals(JsonPrimitive("claude-code"), prov["runner_id"])
+            assertEquals(JsonPrimitive("1.0.2"), prov["runner_version"])
+            assertEquals(JsonPrimitive("claude-sonnet-4-5"), prov["model_id"])
+            assertEquals(JsonPrimitive(321), prov["duration_ms"])
+            assertEquals(JsonPrimitive("PASSED"), prov["validation"])
+            assertFalse("endpoint_host" in prov)
+            assertFalse("runner_artifact_sha256" in prov)
+            assertFalse("prompt_sha256" in prov)
+            assertFalse("provider_requests" in prov)
+            assertFalse("exit_code" in prov)
+
+            val readBack = store.read(fixture.runId, fixture.analysisId)
+            assertEquals(saved.advice.document, readBack?.document)
+
+            val repeated =
+                assertInstanceOf(
+                    AdviceRunResult.Saved::class.java,
+                    service.saveSelfReported(
+                        fixture.runId,
+                        fixture.analysisId,
+                        canonicalJson(validOutput("analysis-result.json#/evidence/0")),
+                        SelfReportedProvenance(runnerId = "other-client", modelId = "other-model"),
+                    ),
+                )
+            assertTrue(repeated.reused)
+            assertEquals(saved.advice.document, repeated.advice.document)
+            assertArrayEquals(beforeResult, Files.readAllBytes(fixture.analysisPath.resolve("analysis-result.json")))
+        }
+    }
+
+    @Test
+    fun `saveSelfReported rejects ungrounded evidence refs and invalid provenance`() {
+        DataDirectory.open(tempDir.resolve("self-reported-reject")).use { directory ->
+            val fixture = prepareAnalysis(directory)
+            val bundles = RunBundleStore(directory)
+            val store = AiAdviceStore(directory, bundles)
+            val service =
+                AdvisoryAiService(
+                    bundles,
+                    store,
+                    AdvisoryRunner { RunnerOutcome.Unavailable(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED) },
+                )
+
+            val badRef =
+                assertInstanceOf(
+                    AdviceRunResult.Failed::class.java,
+                    service.saveSelfReported(
+                        fixture.runId,
+                        fixture.analysisId,
+                        canonicalJson(validOutput("analysis-result.json#/evidence/999")),
+                        SelfReportedProvenance(runnerId = "claude-code", modelId = "claude-sonnet-4-5"),
+                    ),
+                )
+            assertEquals(AdviceFailure.UNKNOWN_EVIDENCE_REFERENCE, badRef.reason)
+
+            val badRunner =
+                assertInstanceOf(
+                    AdviceRunResult.Failed::class.java,
+                    service.saveSelfReported(
+                        fixture.runId,
+                        fixture.analysisId,
+                        canonicalJson(validOutput("analysis-result.json#/evidence/0")),
+                        SelfReportedProvenance(runnerId = "BAD CLIENT", modelId = "claude-sonnet-4-5"),
+                    ),
+                )
+            assertEquals(AdviceFailure.INVALID_OUTPUT, badRunner.reason)
+
+            val reservedRunner =
+                assertInstanceOf(
+                    AdviceRunResult.Failed::class.java,
+                    service.saveSelfReported(
+                        fixture.runId,
+                        fixture.analysisId,
+                        canonicalJson(validOutput("analysis-result.json#/evidence/0")),
+                        SelfReportedProvenance(runnerId = QwenCode0211.RUNNER_ID, modelId = "claude-sonnet-4-5"),
+                    ),
+                )
+            assertEquals(AdviceFailure.INVALID_OUTPUT, reservedRunner.reason)
+            assertNull(store.read(fixture.runId, fixture.analysisId))
+        }
+    }
+
+    @Test
+    fun `validateStoredAdvice rejects self-reported advice carrying runner-only fields`() {
+        DataDirectory.open(tempDir.resolve("self-reported-tamper")).use { directory ->
+            val fixture = prepareAnalysis(directory)
+            val bundles = RunBundleStore(directory)
+            val store = AiAdviceStore(directory, bundles)
+            val manifestSha256 = sha256Hex(Files.readAllBytes(fixture.analysisPath.resolve("manifest.json")))
+            val service =
+                AdvisoryAiService(
+                    bundles,
+                    store,
+                    AdvisoryRunner { RunnerOutcome.Unavailable(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED) },
+                )
+            val valid =
+                assertInstanceOf(
+                    AdviceRunResult.Saved::class.java,
+                    service.saveSelfReported(
+                        fixture.runId,
+                        fixture.analysisId,
+                        canonicalJson(validOutput("analysis-result.json#/evidence/0")),
+                        SelfReportedProvenance(runnerId = "qwen-code", modelId = "qwen3.8-max"),
+                    ),
+                ).advice.document
+
+            listOf(
+                "endpoint_host" to JsonPrimitive("cli-builtin"),
+                "runner_artifact_sha256" to JsonPrimitive("a".repeat(64)),
+                "prompt_sha256" to JsonPrimitive("b".repeat(64)),
+                "provider_requests" to JsonPrimitive(1),
+                "exit_code" to JsonPrimitive(0),
+                "runner_id" to JsonPrimitive(QwenCode0211.RUNNER_ID),
+            ).forEach { (forbiddenKey, forbiddenValue) ->
+                val tampered = valid.withProvenance { it + (forbiddenKey to forbiddenValue) }
+                assertThrows(AdviceValidationException::class.java) {
+                    val result = bundles.readAnalysisDocuments(fixture.runId, fixture.analysisId)!!.first
+                    val evidence = AdvisoryEvidenceBuilder.build(fixture.runId, fixture.analysisId, manifestSha256, result)
+                    validateStoredAdvice(tampered, fixture.runId, fixture.analysisId, manifestSha256, evidence)
+                }
+            }
+        }
+    }
+
+    @Test
     fun `prompt v1 file is pinned by hash next to the v2 file`() {
         // This is the v1 revision with the "Output language" section (label and schema unchanged, ADR 0021, D1 p. 1).
         // Earlier revisions (69f215a1... LF, cec9ec6d... CRLF) stay readable in stored advice; only the LF form is checked here.

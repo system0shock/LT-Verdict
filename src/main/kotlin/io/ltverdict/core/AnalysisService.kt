@@ -47,6 +47,8 @@ internal data class AnalysisRequest(
     val trend: TrendPlanValidation.Valid? = null,
     val podView: PodViewValidation.Valid? = null,
     val stages: LoadStagesValidation.Valid? = null,
+    val jenkinsBuild: String? = null,
+    val commit: String? = null,
 )
 
 internal data class AnalysisOutcome(
@@ -97,6 +99,8 @@ internal class AnalysisService(
                 else -> AnalysisMode.STANDARD
             }
         checkCancelled()
+        val jenkinsBuild = normalizeProvenanceText(request.jenkinsBuild, "jenkins_build")
+        val commit = normalizeProvenanceText(request.commit, "commit")
         requireStageCombination(request)
         require(request.sourceRequest == null) { "SOURCE_ACQUISITION_REQUIRED" }
         request.sourceAcquisition?.let {
@@ -161,6 +165,8 @@ internal class AnalysisService(
                 request.trend,
                 request.podView,
                 request.stages,
+                jenkinsBuild,
+                commit,
             )
         val analysisId = sha256Hex(identity)
         store.readAnalysis(request.input.runId, analysisId)?.let { stored ->

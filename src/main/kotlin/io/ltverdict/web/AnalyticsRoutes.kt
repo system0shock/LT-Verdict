@@ -22,6 +22,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -99,6 +100,8 @@ internal fun Route.analyticsRoutes(context: LocalApiContext) {
                             documents.identity,
                             applicationVersion = releases[entry.analysisId].releaseLabel(),
                             loadProfile = releases[entry.analysisId].releaseProfile(),
+                            jenkinsBuild = documents.identity.optionalText("jenkins_build"),
+                            commit = documents.identity.optionalText("commit"),
                         )
                 }
                 val baselineDocuments =
@@ -117,6 +120,8 @@ internal fun Route.analyticsRoutes(context: LocalApiContext) {
                             baselineDocuments.identity,
                             applicationVersion = releases[baseline.getValue("analysis_id").jsonPrimitive.content].releaseLabel(),
                             loadProfile = releases[baseline.getValue("analysis_id").jsonPrimitive.content].releaseProfile(),
+                            jenkinsBuild = baselineDocuments.identity.optionalText("jenkins_build"),
+                            commit = baselineDocuments.identity.optionalText("commit"),
                         )
                 }
                 buildJsonObject {
@@ -136,6 +141,8 @@ internal fun Route.analyticsRoutes(context: LocalApiContext) {
                                     current.identity,
                                     applicationVersion = releases[analysisId].releaseLabel(),
                                     loadProfile = releases[analysisId].releaseProfile(),
+                                    jenkinsBuild = current.identity.optionalText("jenkins_build"),
+                                    commit = current.identity.optionalText("commit"),
                                 ),
                                 candidates,
                                 baseline,
@@ -194,3 +201,5 @@ internal fun Route.analyticsRoutes(context: LocalApiContext) {
         }
     }
 }
+
+private fun JsonObject.optionalText(name: String): String? = (this[name] as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content

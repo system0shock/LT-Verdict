@@ -1,0 +1,23 @@
+{
+  "schema_version": "ai-advice.v1",
+  "advisory": true,
+  "run_id": "jmeter_jtl_csv-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "analysis_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "analysis_manifest_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "evidence_input_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "output": {
+    "schema_version": "ai-advice-output.v1",
+    "summary": "Inspect the bounded evidence before changing the test.",
+    "hypotheses": [],
+    "recommendations": [],
+    "caveats": []
+  },
+  "provenance": {
+    "invocation_id": "5f0b5f0e-8f0e-4b0e-9a3a-0d1a2b3c4d5e",
+    "provenance_kind": "self-reported",
+    "runner_id": "claude-code",
+    "model_id": "claude-sonnet-4-5",
+    "runner_artifact_sha256": "1db9709bf1753611ca2fec234cf5adf517376efeb1540fcf9e309da010f9ed38",
+    "validation": "PASSED"
+  }
+}

@@ -67,7 +67,7 @@ export interface OverlayMarker { profile_id: string; at_ms: number; service: str
 export interface ChartOverlay { schema_version: 'chart-overlays.v1'; series: OverlaySeries[]; markers: OverlayMarker[]; reasons: string[] }
 
 export interface MetricPack {
-  id: 'jvm' | 'openshift'
+  id: 'jvm' | 'openshift' | 'postgresql'
   status: 'SUCCESS' | 'DEGRADED' | 'SKIPPED'
   available_capabilities: string[]
   missing_capabilities: string[]

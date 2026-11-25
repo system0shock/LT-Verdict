@@ -7,7 +7,7 @@ defineProps<{ analysis: MetricPackAnalysis }>()
 <template>
   <section aria-labelledby="metric-packs-title">
     <h3 id="metric-packs-title">
-      JVM and OpenShift packs
+      JVM, OpenShift, and PostgreSQL packs
     </h3>
     <div
       class="table-wrap"
@@ -40,7 +40,7 @@ defineProps<{ analysis: MetricPackAnalysis }>()
             :data-testid="`metric-pack-${pack.id}`"
           >
             <th scope="row">
-              {{ pack.id === 'jvm' ? 'JVM' : 'OpenShift' }}
+              {{ pack.id === 'jvm' ? 'JVM' : pack.id === 'openshift' ? 'OpenShift' : 'PostgreSQL' }}
             </th>
             <td>{{ pack.status }}</td>
             <td>{{ pack.available_capabilities.join(', ') || 'None' }}</td>

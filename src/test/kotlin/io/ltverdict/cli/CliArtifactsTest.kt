@@ -62,13 +62,14 @@ class CliArtifactsTest {
             arrayOf("-h"),
             arrayOf("help"),
             arrayOf("analyze", "--help"),
+            arrayOf("quickstart", "--help"),
             arrayOf("report", "-h"),
         ).forEach { args ->
             val help = run(noStdin, *args)
             assertEquals(0, help.exitCode, args.joinToString(" "))
             assertEquals("", help.stderr)
             assertTrue(help.stdout.startsWith("Usage: ltv "), help.stdout)
-            listOf("--out-dir", "ltv summary", "--version", "--policy <policy.json>|-").forEach {
+            listOf("--out-dir", "ltv quickstart", "ltv summary", "--version", "--policy <policy.json>|-").forEach {
                 assertTrue(help.stdout.contains(it), "usage lacks $it")
             }
             assertTrue(help.stdout.contains("ltv source validate: validate source profiles offline"), help.stdout)

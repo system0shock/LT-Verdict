@@ -96,6 +96,21 @@ jobs:
           for f in result.json report.html chart.svg summary.txt junit.xml; do
             test -s "$work/out/$f"
           done
+          (cd "$work" && run "$home/bin/ltv" quickstart \
+            --data-dir "$work/quickstart-data" --out-dir "$work/quickstart-out") > /dev/null
+          for f in result.json report.html chart.svg summary.txt junit.xml; do
+            test -s "$work/quickstart-out/$f"
+          done
+          grep -q '<h2>Инциденты</h2>' "$work/quickstart-out/report.html"
+          grep -Eq '"total_count":[1-9][0-9]*' "$work/quickstart-out/result.json"
+          for profile in \
+            platform-openshift-connections.example.json \
+            platform-jvm-connections.example.json \
+            platform-jvm-standalone-connections.example.json \
+            platform-postgresql-promql-connections.example.json \
+            postgresql-connections.example.json; do
+            run "$home/bin/ltv" source validate --connections "$home/docs/contracts/sources/v1/$profile" > /dev/null
+          done
       - name: Write SHA256
         shell: bash
         env:

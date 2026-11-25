@@ -2,7 +2,7 @@ import unittest
 from dataclasses import replace
 from unittest.mock import patch
 
-from tools.platform_profile_templates import SIGNALS, render
+from tools.platform_profile_templates import POSTGRES_EXPORTER_SIGNALS, SIGNALS, STANDALONE_JVM_SIGNALS, render, render_preset
 from tools.platform_profiles import MAX_QUERIES_PER_PROFILE, build_connections
 
 BASE = {
@@ -265,6 +265,9 @@ class PlatformProfilesTest(unittest.TestCase):
             ("fixtures/platform/profile-config.peak.example.json", "docs/contracts/sources/v1/platform-openshift-peak-connections.example.json"),
             ("fixtures/platform/profile-config.autostep.example.json", "docs/contracts/sources/v1/platform-openshift-autostep-connections.example.json"),
             ("fixtures/platform/profile-config.load-generator.example.json", "docs/contracts/sources/v1/platform-openshift-load-generator-connections.example.json"),
+            ("fixtures/platform/profile-config.jvm.example.json", "docs/contracts/sources/v1/platform-jvm-connections.example.json"),
+            ("fixtures/platform/profile-config.jvm-standalone.example.json", "docs/contracts/sources/v1/platform-jvm-standalone-connections.example.json"),
+            ("fixtures/platform/profile-config.postgresql-promql.example.json", "docs/contracts/sources/v1/platform-postgresql-promql-connections.example.json"),
         )
         for config_path, example_path in pairs:
             config = json.loads(Path(config_path).read_text(encoding="utf-8"))
@@ -472,6 +475,70 @@ class CatalogProfileReconciliationTest(unittest.TestCase):
                                            {"load_metric": "response_time_p95_ms", "service": "orders-svc"}, [])
         self.assertIsNone(plan)
         self.assertIn("CONTROL_SERIES_MISSING", {item["reason"] for item in skipped})
+
+
+class StandaloneStarterProfilesTest(unittest.TestCase):
+    def test_standalone_jvm_preset_renders_job_folded_queries_without_openshift_labels(self):
+        config = {
+            "preset": "jvm-standalone",
+            "base_url": "http://127.0.0.1:9090",
+            "job": "orders-svc",
+            "signals": list(STANDALONE_JVM_SIGNALS),
+            "peak_aggregation": True,
+            "scrape_interval_ms": 30000,
+            "request_step_ms": 60000,
+        }
+        document = build_connections(config)
+        self.assertEqual("source-connections.v3", document["schema_version"])
+        profile = document["connections"][0]
+        self.assertEqual("jvm-1", profile["id"])
+        self.assertEqual(8, len(profile["queries"]))
+        for query in profile["queries"]:
+            self.assertEqual({"job": "orders-svc"}, query["labels"])
+            self.assertEqual("orders-svc", query["entity"])
+            self.assertNotIn("namespace_workload_pod", query["expression"])
+            self.assertNotIn("@", query["expression"])
+            self.assertIn("$__interval", query["expression"])
+            self.assertEqual(query["expression"].count("("), query["expression"].count(")"))
+
+    def test_postgres_exporter_preset_renders_instance_folded_queries(self):
+        config = {
+            "preset": "postgres-exporter",
+            "base_url": "http://127.0.0.1:9090",
+            "instance": "pg-main:9187",
+            "database": "loadtest",
+            "entity": "load-test-db",
+            "signals": list(POSTGRES_EXPORTER_SIGNALS),
+            "peak_aggregation": True,
+            "scrape_interval_ms": 30000,
+            "request_step_ms": 60000,
+        }
+        document = build_connections(config)
+        profile = document["connections"][0]
+        self.assertEqual("pg-1", profile["id"])
+        self.assertEqual(7, len(profile["queries"]))
+        for query in profile["queries"]:
+            self.assertEqual({"instance": "pg-main:9187"}, query["labels"])
+            self.assertEqual("load-test-db", query["entity"])
+            self.assertNotIn("@", query["expression"])
+            self.assertIn("$__interval", query["expression"])
+            self.assertEqual(query["expression"].count("("), query["expression"].count(")"))
+            self.assertEqual(query["aggregation"] == "interval_max", "max_over_time" in query["expression"])
+
+    def test_standalone_presets_match_uses_rate_and_reject_invalid_selectors(self):
+        for catalog in (STANDALONE_JVM_SIGNALS, POSTGRES_EXPORTER_SIGNALS):
+            for name, spec in catalog.items():
+                self.assertEqual(spec.uses_rate, "rate(" in spec.expression, name)
+        for bad in (
+            {"preset": "unknown", "base_url": "http://127.0.0.1:9090", "signals": ["cpu_limit_ratio"]},
+            {"preset": "jvm-standalone", "base_url": "http://127.0.0.1:9090", "job": 'bad"job', "signals": ["jvm_heap_used"]},
+            {"preset": "postgres-exporter", "base_url": "http://127.0.0.1:9090", "instance": "pg@bad", "database": "db", "signals": ["pg_deadlocks_rate"]},
+            {"preset": "postgres-exporter", "base_url": "http://127.0.0.1:9090", "instance": "pg:9187", "database": "db", "entity": "bad entity", "signals": ["pg_deadlocks_rate"]},
+        ):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                build_connections(bad)
+        with self.assertRaisesRegex(ValueError, "unknown preset"):
+            render_preset(POSTGRES_EXPORTER_SIGNALS["pg_deadlocks_rate"], "other", {}, "15s")
 
 
 if __name__ == "__main__":

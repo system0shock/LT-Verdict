@@ -198,3 +198,158 @@ def render(signal: Signal, ns: str, svc: str, sub: str, peak: bool = False, side
     expression = signal.expression.replace("@owner@", FRAGMENTS["owner"]).replace("@cont@", FRAGMENTS["cont"])
     return (expression.replace("@over@", "max_over_time" if peak else "avg_over_time")
             .replace("@sub@", sub).replace("@sidecars@", sidecars or "").replace("@ns@", ns).replace("@svc@", svc))
+
+
+def _per_job_over_time(selector: str) -> str:
+    """Worst instance for a standalone Prometheus JVM job; interval aggregation per instance first."""
+    return (
+        f"max by (job) (@over@((sum by (job, instance) ({selector}))"
+        "[$__interval:@sub@]))"
+    )
+
+
+STD_HEAP = 'jvm_memory_used_bytes{job="@job@",area="heap"}'
+STD_OLD_GEN = 'jvm_memory_used_bytes{job="@job@",area="heap",id=~".*Old Gen|Tenured Gen"}'
+STD_NON_HEAP = 'jvm_memory_used_bytes{job="@job@",area="nonheap"}'
+STD_THREADS = 'jvm_threads_live_threads{job="@job@"}'
+STD_PROCESS_CPU = 'process_cpu_usage{job="@job@"}'
+STD_GC_PAUSE_MAX = (
+    "max by (job) (max_over_time((max by (job, instance) "
+    '(jvm_gc_pause_seconds_max{job="@job@"}))[$__interval:@sub@]))'
+)
+STD_GC_TIME = (
+    "max by (job) (sum by (job, instance) "
+    '(rate(jvm_gc_pause_seconds_sum{job="@job@"}[$__interval])))'
+)
+STD_POOL_ACTIVE = 'max by (job, instance, pool) (hikaricp_connections_active{job="@job@"})'
+STD_POOL_MAX = 'max by (job, instance, pool) (hikaricp_connections_max{job="@job@"})'
+STD_POOL_RATIO = f"({STD_POOL_ACTIVE} / on (job, instance, pool) {STD_POOL_MAX})"
+STD_POOL_SATURATION = (
+    f"max by (job) (@over@({STD_POOL_RATIO}[$__interval:@sub@])) "
+    f"unless on (job) (count by (job) "
+    f"({STD_POOL_ACTIVE} unless on (job, instance, pool) {STD_POOL_RATIO}))"
+)
+
+STANDALONE_JVM_SIGNALS = {
+    "jvm_heap_used": Signal("jvm_heap_used", "bytes", "interval_mean", True, False, _per_job_over_time(STD_HEAP)),
+    "jvm_old_gen_used": Signal("jvm_old_gen_used", "bytes", "interval_mean", True, False, _per_job_over_time(STD_OLD_GEN)),
+    "jvm_non_heap_used": Signal("jvm_non_heap_used", "bytes", "interval_mean", True, False, _per_job_over_time(STD_NON_HEAP)),
+    "jvm_thread_count": Signal(
+        "jvm_thread_count",
+        "count",
+        "interval_mean",
+        False,
+        False,
+        _per_job_over_time(STD_THREADS).replace("@over@", "avg_over_time"),
+    ),
+    "jvm_process_cpu": Signal(
+        "jvm_process_cpu",
+        "ratio",
+        "interval_mean",
+        False,
+        False,
+        _per_job_over_time(STD_PROCESS_CPU).replace("@over@", "avg_over_time"),
+    ),
+    "jvm_gc_pause": Signal("jvm_gc_pause", "s", "interval_max", True, False, STD_GC_PAUSE_MAX, peak_only=True),
+    "jvm_gc_time": Signal("jvm_gc_time", "ratio", "interval_rate", False, True, STD_GC_TIME),
+    "jvm_pool_saturation": Signal("jvm_pool_saturation", "ratio", "interval_mean", True, False, STD_POOL_SATURATION),
+}
+
+
+PG_UP_ALIVE = 'max by (instance) (pg_up{instance="@instance@"} == 1)'
+PG_ACTIVE_CONN = 'sum by (instance) (pg_stat_activity_count{instance="@instance@",datname="@db@",state="active"})'
+PG_MAX_CONN = 'max by (instance) (pg_settings_max_connections{instance="@instance@"} > 0)'
+PG_IDLE_TX = 'sum by (instance) (pg_stat_activity_count{instance="@instance@",datname="@db@",state="idle in transaction"})'
+PG_BLKS_HIT = 'sum by (instance) (rate(pg_stat_database_blks_hit{instance="@instance@",datname="@db@"}[$__interval]))'
+PG_BLKS_READ = 'sum by (instance) (rate(pg_stat_database_blks_read{instance="@instance@",datname="@db@"}[$__interval]))'
+PG_DEADLOCKS_RATE = 'sum by (instance) (rate(pg_stat_database_deadlocks{instance="@instance@",datname="@db@"}[$__interval]))'
+PG_DEADLOCKS_PRESENT = 'sum by (instance) (pg_stat_database_deadlocks{instance="@instance@",datname="@db@"})'
+
+POSTGRES_EXPORTER_SIGNALS = {
+    "pg_connections_utilization": Signal(
+        "pg_connections_utilization",
+        "ratio",
+        "interval_mean",
+        True,
+        False,
+        f"max by (instance) (@over@(((({PG_ACTIVE_CONN} or (0 * {PG_UP_ALIVE})) / on (instance) {PG_MAX_CONN}))[$__interval:@sub@]))",
+    ),
+    "pg_idle_in_transaction": Signal(
+        "pg_idle_in_transaction",
+        "count",
+        "interval_mean",
+        True,
+        False,
+        f"max by (instance) (@over@((({PG_IDLE_TX} or (0 * {PG_UP_ALIVE})))[$__interval:@sub@]))",
+    ),
+    "pg_cache_hit_ratio": Signal(
+        "pg_cache_hit_ratio",
+        "ratio",
+        "interval_mean",
+        False,
+        True,
+        f"({PG_BLKS_HIT}) / on (instance) (({PG_BLKS_HIT} + {PG_BLKS_READ}) > 0)",
+    ),
+    "pg_xact_commit_rate": Signal(
+        "pg_xact_commit_rate",
+        "events/s",
+        "interval_rate",
+        False,
+        True,
+        'sum by (instance) (rate(pg_stat_database_xact_commit{instance="@instance@",datname="@db@"}[$__interval]))',
+    ),
+    "pg_xact_rollback_rate": Signal(
+        "pg_xact_rollback_rate",
+        "events/s",
+        "interval_rate",
+        False,
+        True,
+        'sum by (instance) (rate(pg_stat_database_xact_rollback{instance="@instance@",datname="@db@"}[$__interval]))',
+    ),
+    "pg_deadlocks_rate": Signal(
+        "pg_deadlocks_rate",
+        "events/s",
+        "interval_rate",
+        False,
+        True,
+        f"({PG_DEADLOCKS_RATE}) or ((0 * {PG_UP_ALIVE}) unless on (instance) {PG_DEADLOCKS_PRESENT})",
+    ),
+    "pg_temp_bytes_rate": Signal(
+        "pg_temp_bytes_rate",
+        "bytes/s",
+        "interval_rate",
+        False,
+        True,
+        'sum by (instance) (rate(pg_stat_database_temp_bytes{instance="@instance@",datname="@db@"}[$__interval]))',
+    ),
+}
+
+PRESET_SIGNALS = {
+    "openshift": SIGNALS,
+    "jvm-standalone": STANDALONE_JVM_SIGNALS,
+    "postgres-exporter": POSTGRES_EXPORTER_SIGNALS,
+}
+
+
+def render_preset(
+    signal: Signal,
+    preset: str,
+    target: dict[str, str],
+    sub: str,
+    peak: bool = False,
+    sidecars: str | None = None,
+) -> str:
+    if preset == "openshift":
+        return render(signal, target["namespace"], target["service"], sub, peak=peak, sidecars=sidecars)
+    if signal.peak_only and not peak:
+        raise ValueError(f"{signal.metric} needs interval_max aggregation")
+    if peak and not signal.peak:
+        raise ValueError(f"{signal.metric} has no peak variant")
+    if signal.sidecar and not sidecars:
+        raise ValueError(f"{signal.metric} needs the sidecar container regular expression")
+    expression = signal.expression.replace("@over@", "max_over_time" if peak else "avg_over_time").replace("@sub@", sub)
+    if preset == "jvm-standalone":
+        return expression.replace("@job@", target["job"])
+    if preset == "postgres-exporter":
+        return expression.replace("@instance@", target["instance"]).replace("@db@", target["database"])
+    raise ValueError(f"unknown preset: {preset}")

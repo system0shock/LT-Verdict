@@ -161,9 +161,40 @@ distributions {
                     "tools/advisory_ai_runtime_qwen.sh",
                     "tools/advisory_ai_runtime_relay.mjs",
                     "tools/onboard_test.py",
+                    "tools/platform_profiles.py",
+                    "tools/platform_profile_templates.py",
                 ),
             ) {
                 into("tools")
+            }
+            from("examples/quickstart") { into("examples/quickstart") }
+            from("examples/basic") { into("examples/basic") }
+            from(
+                files(
+                    "fixtures/platform/profile-config.example.json",
+                    "fixtures/platform/profile-config.peak.example.json",
+                    "fixtures/platform/profile-config.autostep.example.json",
+                    "fixtures/platform/profile-config.load-generator.example.json",
+                    "fixtures/platform/profile-config.jvm.example.json",
+                    "fixtures/platform/profile-config.jvm-standalone.example.json",
+                    "fixtures/platform/profile-config.postgresql-promql.example.json",
+                ),
+            ) {
+                into("fixtures/platform")
+            }
+            from(
+                files(
+                    "docs/contracts/sources/v1/platform-openshift-connections.example.json",
+                    "docs/contracts/sources/v1/platform-openshift-peak-connections.example.json",
+                    "docs/contracts/sources/v1/platform-openshift-autostep-connections.example.json",
+                    "docs/contracts/sources/v1/platform-openshift-load-generator-connections.example.json",
+                    "docs/contracts/sources/v1/platform-jvm-connections.example.json",
+                    "docs/contracts/sources/v1/platform-jvm-standalone-connections.example.json",
+                    "docs/contracts/sources/v1/platform-postgresql-promql-connections.example.json",
+                    "docs/contracts/sources/v1/postgresql-connections.example.json",
+                ),
+            ) {
+                into("docs/contracts/sources/v1")
             }
             from(
                 files(
@@ -179,7 +210,16 @@ distributions {
             from(
                 files("docs/user/test-onboarding.md", "docs/user/advisory-ai.md", "docs/user/jenkins-and-reports.md"),
             ) { into("docs/user") }
-            from(files("docs/user/saved-analytics.md", "docs/user/opensearch-correlation-preparation.md")) { into("docs/user") }
+            from(
+                files(
+                    "docs/user/saved-analytics.md",
+                    "docs/user/opensearch-correlation-preparation.md",
+                    "docs/user/incidents.md",
+                    "docs/user/slice-1-local-analysis.md",
+                    "docs/user/online-sources.md",
+                    "docs/user/platform-metric-packs.md",
+                ),
+            ) { into("docs/user") }
             from("docs/contracts/diagnostics/v1/opensearch-correlation-templates.example.json") { into("docs/contracts/diagnostics/v1") }
         }
     }
@@ -236,6 +276,7 @@ val ltvVersion = project.version.toString()
 tasks.processResources {
     dependsOn(uiBuild)
     from(uiDirectory.dir("dist")) { into("web") }
+    from("examples/quickstart") { into("quickstart") }
     inputs.property("ltvVersion", ltvVersion)
     filesMatching("ltv-version.properties") { expand("version" to ltvVersion) }
 }

@@ -130,4 +130,15 @@ private val PACKS =
                 PackCapability("sidecar_cpu_throttling", setOf("openshift_sidecar_cpu_throttling")),
             ),
         ),
+        MetricPack(
+            "postgresql",
+            listOf(
+                PackCapability("connections", setOf("pg_connections_utilization")),
+                PackCapability("idle_in_transaction", setOf("pg_idle_in_transaction")),
+                PackCapability("cache_hit", setOf("pg_cache_hit_ratio")),
+                PackCapability("transactions", setOf("pg_xact_commit_rate", "pg_xact_rollback_rate")),
+                PackCapability("deadlocks", setOf("pg_deadlocks_rate")),
+                PackCapability("temp_bytes", setOf("pg_temp_bytes_rate")),
+            ),
+        ),
     )

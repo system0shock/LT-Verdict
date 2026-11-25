@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.platform_profile_templates import SIGNALS, render
-from tools.platform_promql_scenarios import SCENARIOS, render_all
+from tools.platform_profile_templates import POSTGRES_EXPORTER_SIGNALS, SIGNALS, STANDALONE_JVM_SIGNALS, render, render_preset
+from tools.platform_promql_scenarios import SCENARIOS, STANDALONE_SCENARIOS, render_all
 
 
 def promtool_command():
@@ -43,6 +43,32 @@ class PlatformPromqlTest(unittest.TestCase):
             with self.subTest(signal=name):
                 expression = render(SIGNALS[name], "shop", "orders-svc", "15s")
                 self.assertIn("unless on (namespace)", expression)
+
+    def test_every_standalone_template_has_a_scenario(self):
+        covered_jvm = {s.signal for s in STANDALONE_SCENARIOS if s.preset == "jvm-standalone"}
+        self.assertEqual(set(STANDALONE_JVM_SIGNALS), covered_jvm)
+        covered_pg = {s.signal for s in STANDALONE_SCENARIOS if s.preset == "postgres-exporter"}
+        self.assertEqual(set(POSTGRES_EXPORTER_SIGNALS), covered_pg)
+
+    def test_standalone_jvm_pool_guard_and_postgres_zero_fallback(self):
+        pool = render_preset(
+            STANDALONE_JVM_SIGNALS["jvm_pool_saturation"],
+            "jvm-standalone",
+            {"job": "orders-svc"},
+            "15s",
+            peak=True,
+        )
+        self.assertIn("unless on (job) (count by (job)", pool)
+        self.assertIn("unless on (job, instance, pool)", pool)
+
+        deadlocks = render_preset(
+            POSTGRES_EXPORTER_SIGNALS["pg_deadlocks_rate"],
+            "postgres-exporter",
+            {"instance": "pg-main:9187", "database": "loadtest"},
+            "15s",
+        )
+        self.assertIn("unless on (instance)", deadlocks)
+        self.assertIn('pg_up{instance="pg-main:9187"} == 1', deadlocks)
 
     @unittest.skipUnless(promtool_command(), "promtool is not installed; set LTV_PROMTOOL to run the scenarios")
     def test_promtool_accepts_every_scenario(self):

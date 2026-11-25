@@ -1,0 +1,107 @@
+{
+  "schema_version": "source-connections.v3",
+  "connections": [
+    {
+      "id": "pg-promql-1",
+      "source_kind": "prometheus",
+      "transport": "direct",
+      "base_url": "http://127.0.0.1:9090",
+      "auth": {
+        "type": "none"
+      },
+      "governor": {
+        "requests_per_second": 5,
+        "burst": 5,
+        "timeout_ms": 30000,
+        "max_attempts": 3
+      },
+      "queries": [
+        {
+          "id": "load-test-db.pg_connections_utilization",
+          "expression": "max by (instance) (max_over_time((((sum by (instance) (pg_stat_activity_count{instance=\"pg-main:9187\",datname=\"loadtest\",state=\"active\"}) or (0 * max by (instance) (pg_up{instance=\"pg-main:9187\"} == 1))) / on (instance) max by (instance) (pg_settings_max_connections{instance=\"pg-main:9187\"} > 0)))[$__interval:15s]))",
+          "metric": "pg_connections_utilization",
+          "unit": "ratio",
+          "entity": "load-test-db",
+          "role": "system",
+          "aggregation": "interval_max",
+          "labels": {
+            "instance": "pg-main:9187"
+          }
+        },
+        {
+          "id": "load-test-db.pg_idle_in_transaction",
+          "expression": "max by (instance) (max_over_time(((sum by (instance) (pg_stat_activity_count{instance=\"pg-main:9187\",datname=\"loadtest\",state=\"idle in transaction\"}) or (0 * max by (instance) (pg_up{instance=\"pg-main:9187\"} == 1))))[$__interval:15s]))",
+          "metric": "pg_idle_in_transaction",
+          "unit": "count",
+          "entity": "load-test-db",
+          "role": "system",
+          "aggregation": "interval_max",
+          "labels": {
+            "instance": "pg-main:9187"
+          }
+        },
+        {
+          "id": "load-test-db.pg_cache_hit_ratio",
+          "expression": "(sum by (instance) (rate(pg_stat_database_blks_hit{instance=\"pg-main:9187\",datname=\"loadtest\"}[$__interval]))) / on (instance) ((sum by (instance) (rate(pg_stat_database_blks_hit{instance=\"pg-main:9187\",datname=\"loadtest\"}[$__interval])) + sum by (instance) (rate(pg_stat_database_blks_read{instance=\"pg-main:9187\",datname=\"loadtest\"}[$__interval]))) > 0)",
+          "metric": "pg_cache_hit_ratio",
+          "unit": "ratio",
+          "entity": "load-test-db",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "instance": "pg-main:9187"
+          }
+        },
+        {
+          "id": "load-test-db.pg_xact_commit_rate",
+          "expression": "sum by (instance) (rate(pg_stat_database_xact_commit{instance=\"pg-main:9187\",datname=\"loadtest\"}[$__interval]))",
+          "metric": "pg_xact_commit_rate",
+          "unit": "events/s",
+          "entity": "load-test-db",
+          "role": "system",
+          "aggregation": "interval_rate",
+          "labels": {
+            "instance": "pg-main:9187"
+          }
+        },
+        {
+          "id": "load-test-db.pg_xact_rollback_rate",
+          "expression": "sum by (instance) (rate(pg_stat_database_xact_rollback{instance=\"pg-main:9187\",datname=\"loadtest\"}[$__interval]))",
+          "metric": "pg_xact_rollback_rate",
+          "unit": "events/s",
+          "entity": "load-test-db",
+          "role": "system",
+          "aggregation": "interval_rate",
+          "labels": {
+            "instance": "pg-main:9187"
+          }
+        },
+        {
+          "id": "load-test-db.pg_deadlocks_rate",
+          "expression": "(sum by (instance) (rate(pg_stat_database_deadlocks{instance=\"pg-main:9187\",datname=\"loadtest\"}[$__interval]))) or ((0 * max by (instance) (pg_up{instance=\"pg-main:9187\"} == 1)) unless on (instance) sum by (instance) (pg_stat_database_deadlocks{instance=\"pg-main:9187\",datname=\"loadtest\"}))",
+          "metric": "pg_deadlocks_rate",
+          "unit": "events/s",
+          "entity": "load-test-db",
+          "role": "system",
+          "aggregation": "interval_rate",
+          "labels": {
+            "instance": "pg-main:9187"
+          }
+        },
+        {
+          "id": "load-test-db.pg_temp_bytes_rate",
+          "expression": "sum by (instance) (rate(pg_stat_database_temp_bytes{instance=\"pg-main:9187\",datname=\"loadtest\"}[$__interval]))",
+          "metric": "pg_temp_bytes_rate",
+          "unit": "bytes/s",
+          "entity": "load-test-db",
+          "role": "system",
+          "aggregation": "interval_rate",
+          "labels": {
+            "instance": "pg-main:9187"
+          }
+        }
+      ],
+      "scrape_interval_ms": 30000
+    }
+  ]
+}

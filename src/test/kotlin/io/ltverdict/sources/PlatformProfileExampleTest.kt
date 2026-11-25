@@ -197,4 +197,104 @@ class PlatformProfileExampleTest {
         val refused = acquire(unfolded)
         assertTrue(refused.evidence.toString().contains("AMBIGUOUS_SERIES"))
     }
+
+    @Test
+    fun `starter jvm, standalone jvm, and postgresql promql examples parse, validate autostep, recognise packs, and fold series`() {
+        val cases =
+            listOf(
+                Triple(
+                    Path.of("docs/contracts/sources/v1/platform-jvm-connections.example.json"),
+                    mapOf("namespace" to "shop"),
+                    """{"namespace":"shop"}""",
+                ),
+                Triple(
+                    Path.of("docs/contracts/sources/v1/platform-jvm-standalone-connections.example.json"),
+                    mapOf("job" to "orders-svc"),
+                    """{"job":"orders-svc"}""",
+                ),
+                Triple(
+                    Path.of("docs/contracts/sources/v1/platform-postgresql-promql-connections.example.json"),
+                    mapOf("instance" to "pg-main:9187"),
+                    """{"instance":"pg-main:9187"}""",
+                ),
+            )
+
+        cases.forEach { (path, expectedLabels, foldedLabelsJson) ->
+            val profiles = Files.newInputStream(path).use(::readSourceProfiles)
+            val queries = profiles.flatMap { it.queries }
+            assertTrue(profiles.all { it.scrapeIntervalMillis == 30_000L }, path.toString())
+            assertEquals(queries.size, queries.map { Triple(it.metric, it.entity, it.role) }.toSet().size, path.toString())
+            queries.forEach { query ->
+                assertEquals(expectedLabels, query.labels, "$path ${query.id}")
+                assertTrue("\$__interval" in query.expression, "$path ${query.id}")
+            }
+
+            val applied =
+                applyAutoStep(
+                    profiles,
+                    60_000L,
+                    60_000L,
+                    MAX_RESOURCE_CELLS,
+                    explicitGridCells(0L, 3_600_000L),
+                )
+            assertEquals(60_000L, applied.stepMillis, path.toString())
+
+            val metrics = queries.map { it.metric }.toSet().sorted()
+            val packResult =
+                metricPackAnalysis(
+                    buildJsonObject {
+                        put(
+                            "evidence",
+                            buildJsonArray {
+                                metrics.forEachIndexed { index, metric ->
+                                    add(
+                                        buildJsonObject {
+                                            put("id", "summary-$index")
+                                            put("type", "resource_summary")
+                                            put("series_id", "s$index")
+                                            put("metric", metric)
+                                            put("reasons", buildJsonArray {})
+                                        },
+                                    )
+                                }
+                            },
+                        )
+                        put("findings", buildJsonArray {})
+                    },
+                )
+            val recognised =
+                packResult
+                    .getValue("packs")
+                    .jsonArray
+                    .flatMap { it.jsonObject.getValue("series_ids").jsonArray }
+                    .map { it.jsonPrimitive.content }
+                    .toSet()
+            assertEquals(metrics.indices.map { "s$it" }.toSet(), recognised, path.toString())
+
+            val foldedBody =
+                """{"status":"success","data":{"resultType":"matrix","result":[""" +
+                    """{"metric":$foldedLabelsJson,"values":[[1767225601,"0.5"]]}]}}"""
+            val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+            server.createContext("/api/v1/query_range") { exchange ->
+                val bytes = foldedBody.encodeToByteArray()
+                exchange.sendResponseHeaders(200, bytes.size.toLong())
+                exchange.responseBody.use { it.write(bytes) }
+            }
+            server.start()
+            try {
+                val local =
+                    profiles.map {
+                        it.copy(
+                            baseUrl = URI("http://127.0.0.1:${server.address.port}"),
+                            governor = it.governor.copy(requestsPerSecond = 1_000.0, burst = 1_000),
+                        )
+                    }
+                val request = SourceRequest(local.first().id, 1767225600000, 1767225601000, 1000)
+                val snapshot = requireNotNull(PromqlSource(local, SourceHttp(local)).acquire(request, "a".repeat(64)).snapshot).snapshot
+                assertEquals(queries.size, snapshot.series.size, path.toString())
+            } finally {
+                server.stop(0)
+            }
+        }
+    }
 }

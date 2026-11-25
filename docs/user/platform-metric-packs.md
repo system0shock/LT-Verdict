@@ -127,6 +127,56 @@ gauge: максимум за интервал - это максимум опро
 `rate(...[$__interval])` подчиняется тому же правилу шага, что события
 OpenShift (шаг не меньше удвоенного интервала опроса).
 
+## Автономные стартовые профили (OpenShift, JVM и PostgreSQL) и запуск из `ltv.zip`
+
+Помимо профилей OpenShift (`namespace` + `workload`), генератор
+`tools/platform_profiles.py` поддерживает полностью самостоятельные стартовые
+пресеты для Prometheus без OpenShift и входит вместе с готовыми примерами в
+архив `ltv-<версия>.zip`:
+
+- **OpenShift (`preset: "openshift"`, по умолчанию):**
+  - конфиги `fixtures/platform/profile-config*.example.json`, примеры
+    `docs/contracts/sources/v1/platform-openshift-{,peak-,autostep-,load-generator-}connections.example.json`;
+  - OpenShift + Micrometer JVM: конфиг
+    [`fixtures/platform/profile-config.jvm.example.json`](../../fixtures/platform/profile-config.jvm.example.json)
+    и пример [`docs/contracts/sources/v1/platform-jvm-connections.example.json`](../contracts/sources/v1/platform-jvm-connections.example.json)
+    (`profile_prefix: "jvm"`, `scrape_interval_ms: 30000`, `peak_aggregation: true`).
+- **Standalone JVM (`preset: "jvm-standalone"`):** для JVM вне OpenShift
+  (VM, Docker, bare-metal) с метриками Micrometer по метке `job` (`sum by (job, instance)`
+  → `max by (job)` — худший инстанс сервиса; защита полноты у `jvm_pool_saturation`
+  сохраняется по `job, instance, pool`):
+  - конфиг [`fixtures/platform/profile-config.jvm-standalone.example.json`](../../fixtures/platform/profile-config.jvm-standalone.example.json),
+    пример [`docs/contracts/sources/v1/platform-jvm-standalone-connections.example.json`](../contracts/sources/v1/platform-jvm-standalone-connections.example.json).
+- **PostgreSQL (`preset: "postgres-exporter"` и JDBC `source_kind: "postgresql"`):**
+  - PromQL-профиль для `postgres_exporter` (`instance="@instance@"`, `datname="@db@"`,
+    пакет `postgresql` в ядре): конфиг
+    [`fixtures/platform/profile-config.postgresql-promql.example.json`](../../fixtures/platform/profile-config.postgresql-promql.example.json),
+    пример [`docs/contracts/sources/v1/platform-postgresql-promql-connections.example.json`](../contracts/sources/v1/platform-postgresql-promql-connections.example.json);
+  - нативный JDBC `pre`/`post` снимок (`source_kind: "postgresql"`): пример
+    [`docs/contracts/sources/v1/postgresql-connections.example.json`](../contracts/sources/v1/postgresql-connections.example.json)
+    и команды `ltv source pre` / `ltv source post` (подробно в
+    [онлайн-источниках](online-sources.md#postgresql-prepost)).
+
+### Сигналы `postgres_exporter` (пресет `postgres-exporter`)
+
+| Ключ в конфигурации | `metric` | `unit` | `aggregation` | Что считается | Вариант с пиком |
+| --- | --- | --- | --- | --- | --- |
+| `pg_connections_utilization` | `pg_connections_utilization` | `ratio` | `interval_mean` | `active` / `max_connections` по `datname` и `instance` (`0` при отсутствии активных соединений, если `pg_up == 1` и `max_connections > 0`) | да, `interval_max` |
+| `pg_idle_in_transaction` | `pg_idle_in_transaction` | `count` | `interval_mean` | число сессий в состоянии `idle in transaction` (`0` при `pg_up == 1`) | да, `interval_max` |
+| `pg_cache_hit_ratio` | `pg_cache_hit_ratio` | `ratio` | `interval_mean` | `rate(blks_hit)` / `(rate(blks_hit) + rate(blks_read))` при знаменателе `> 0` | нет |
+| `pg_xact_commit_rate` | `pg_xact_commit_rate` | `events/s` | `interval_rate` | `rate(pg_stat_database_xact_commit)` | нет |
+| `pg_xact_rollback_rate` | `pg_xact_rollback_rate` | `events/s` | `interval_rate` | `rate(pg_stat_database_xact_rollback)` | нет |
+| `pg_deadlocks_rate` | `pg_deadlocks_rate` | `events/s` | `interval_rate` | `rate(pg_stat_database_deadlocks)` (`0` при отсутствии счётчика и `pg_up == 1`) | нет |
+| `pg_temp_bytes_rate` | `pg_temp_bytes_rate` | `bytes/s` | `interval_rate` | `rate(pg_stat_database_temp_bytes)` | нет |
+
+Проверка и генерация прямо из распакованного `ltv-<версия>.zip`:
+
+```powershell
+.\bin\ltv.bat source validate --connections .\docs\contracts\sources\v1\platform-jvm-standalone-connections.example.json
+.\bin\ltv.bat source validate --connections .\docs\contracts\sources\v1\platform-postgresql-promql-connections.example.json
+python -m tools.platform_profiles --config .\fixtures\platform\profile-config.postgresql-promql.example.json --out .\pg-promql.json
+```
+
 ## Правила шаблонов
 
 - **Полнота контейнеров.** Отношения к limit публикуются, только если список

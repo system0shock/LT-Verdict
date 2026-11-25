@@ -1067,9 +1067,11 @@ Governor остаётся общим по origin, запросы выполня�
 запросах, то есть раньше предела 1 024 series.
 
 Профили для платформенных сигналов OpenShift (CPU и память к limit, OOM,
-рестарты, троттлинг, недоступные реплики, перекос по подам) выпускает генератор
-`python -m tools.platform_profiles`, а не пишутся вручную; контракт меток,
-правила и ограничения описаны в [документе о пакетах метрик OpenShift](platform-metric-packs.md).
+рестарты, троттлинг, недоступные реплики, перекос по подам), а также автономные
+стартовые профили JVM (`jvm`, `jvm-standalone`) и `postgres_exporter` (`pg_*`)
+выпускает генератор `python -m tools.platform_profiles`, а не пишутся вручную;
+контракт меток, правила и примеры в `docs/contracts/sources/v1/` описаны в
+[документе о пакетах метрик](platform-metric-packs.md).
 Если в конфигурации генератора задан `scrape_interval_ms`, он выпускает
 `source-connections.v3` с этим полем в каждом профиле, и автошаг `auto` работает
 ([пример](../contracts/sources/v1/platform-openshift-autostep-connections.example.json)).
@@ -1095,8 +1097,18 @@ private API использует `/source-context/{index}` с index1..16.
 
 ## PostgreSQL pre/post
 
-[Пример PostgreSQL-профиля](../contracts/sources/v1/postgresql-connections.example.json)
-использует `source-connections.v2`; HTTP-профили можно добавить в тот же массив
+Для PostgreSQL доступны два взаимодополняющих стартовых пути (примеры включены в
+архив `ltv.zip` в каталоге `docs/contracts/sources/v1/`):
+
+- **Prometheus `postgres_exporter` (PromQL во время прогона):**
+  [стартовый PromQL-профиль](../contracts/sources/v1/platform-postgresql-promql-connections.example.json)
+  (генератор `preset: "postgres-exporter"` в [руководстве по пакетам метрик](platform-metric-packs.md))
+  собирает временные ряды `pg_connections_utilization`, `pg_idle_in_transaction`,
+  `pg_cache_hit_ratio`, `pg_xact_commit_rate`, `pg_xact_rollback_rate`,
+  `pg_deadlocks_rate`, `pg_temp_bytes_rate` для пакета `postgresql`.
+- **Нативный JDBC `pre`/`post` (`source_kind: "postgresql"`):**
+  [Пример PostgreSQL-профиля](../contracts/sources/v1/postgresql-connections.example.json)
+  использует `source-connections.v2`; HTTP-профили можно добавить в тот же массив
 connections. Нужны отдельная read-only роль и environment-переменные credentials.
 Роль capture не должна выполнять нагрузку: её userid исключается из statement
 дельт и записывается в configuration как `lt_verdict.excluded_statement_userid`.

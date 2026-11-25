@@ -1,0 +1,119 @@
+{
+  "schema_version": "source-connections.v3",
+  "connections": [
+    {
+      "id": "jvm-standalone-1",
+      "source_kind": "prometheus",
+      "transport": "direct",
+      "base_url": "http://127.0.0.1:9090",
+      "auth": {
+        "type": "none"
+      },
+      "governor": {
+        "requests_per_second": 5,
+        "burst": 5,
+        "timeout_ms": 30000,
+        "max_attempts": 3
+      },
+      "queries": [
+        {
+          "id": "orders-svc.jvm_heap_used",
+          "expression": "max by (job) (max_over_time((sum by (job, instance) (jvm_memory_used_bytes{job=\"orders-svc\",area=\"heap\"}))[$__interval:15s]))",
+          "metric": "jvm_heap_used",
+          "unit": "bytes",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_max",
+          "labels": {
+            "job": "orders-svc"
+          }
+        },
+        {
+          "id": "orders-svc.jvm_old_gen_used",
+          "expression": "max by (job) (max_over_time((sum by (job, instance) (jvm_memory_used_bytes{job=\"orders-svc\",area=\"heap\",id=~\".*Old Gen|Tenured Gen\"}))[$__interval:15s]))",
+          "metric": "jvm_old_gen_used",
+          "unit": "bytes",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_max",
+          "labels": {
+            "job": "orders-svc"
+          }
+        },
+        {
+          "id": "orders-svc.jvm_non_heap_used",
+          "expression": "max by (job) (max_over_time((sum by (job, instance) (jvm_memory_used_bytes{job=\"orders-svc\",area=\"nonheap\"}))[$__interval:15s]))",
+          "metric": "jvm_non_heap_used",
+          "unit": "bytes",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_max",
+          "labels": {
+            "job": "orders-svc"
+          }
+        },
+        {
+          "id": "orders-svc.jvm_thread_count",
+          "expression": "max by (job) (avg_over_time((sum by (job, instance) (jvm_threads_live_threads{job=\"orders-svc\"}))[$__interval:15s]))",
+          "metric": "jvm_thread_count",
+          "unit": "count",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "job": "orders-svc"
+          }
+        },
+        {
+          "id": "orders-svc.jvm_process_cpu",
+          "expression": "max by (job) (avg_over_time((sum by (job, instance) (process_cpu_usage{job=\"orders-svc\"}))[$__interval:15s]))",
+          "metric": "jvm_process_cpu",
+          "unit": "ratio",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "job": "orders-svc"
+          }
+        },
+        {
+          "id": "orders-svc.jvm_gc_pause",
+          "expression": "max by (job) (max_over_time((max by (job, instance) (jvm_gc_pause_seconds_max{job=\"orders-svc\"}))[$__interval:15s]))",
+          "metric": "jvm_gc_pause",
+          "unit": "s",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_max",
+          "labels": {
+            "job": "orders-svc"
+          }
+        },
+        {
+          "id": "orders-svc.jvm_gc_time",
+          "expression": "max by (job) (sum by (job, instance) (rate(jvm_gc_pause_seconds_sum{job=\"orders-svc\"}[$__interval])))",
+          "metric": "jvm_gc_time",
+          "unit": "ratio",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_rate",
+          "labels": {
+            "job": "orders-svc"
+          }
+        },
+        {
+          "id": "orders-svc.jvm_pool_saturation",
+          "expression": "max by (job) (max_over_time((max by (job, instance, pool) (hikaricp_connections_active{job=\"orders-svc\"}) / on (job, instance, pool) max by (job, instance, pool) (hikaricp_connections_max{job=\"orders-svc\"}))[$__interval:15s])) unless on (job) (count by (job) (max by (job, instance, pool) (hikaricp_connections_active{job=\"orders-svc\"}) unless on (job, instance, pool) (max by (job, instance, pool) (hikaricp_connections_active{job=\"orders-svc\"}) / on (job, instance, pool) max by (job, instance, pool) (hikaricp_connections_max{job=\"orders-svc\"}))))",
+          "metric": "jvm_pool_saturation",
+          "unit": "ratio",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_max",
+          "labels": {
+            "job": "orders-svc"
+          }
+        }
+      ],
+      "scrape_interval_ms": 30000
+    }
+  ]
+}

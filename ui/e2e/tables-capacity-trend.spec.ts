@@ -135,6 +135,55 @@ test('overview trend attention opens and focuses the trend region', async ({ pag
   await expect(page.locator('#trend-results .table-wrap')).toBeFocused()
 })
 
+test('new shell renders the ECharts knee curve, keyboard cursor readout, and generator guard warning without CSP violations', async ({ page }) => {
+  const csp: string[] = []
+  page.on('securitypolicyviolation', (event) => csp.push(`${event.violatedDirective}:${event.blockedURI}`))
+  const guardedResult = {
+    ...result,
+    policy_verdict: 'PASS',
+    capacity_summary: {
+      ...capacity,
+      bound_type: 'LOWER_BOUND',
+      lower_inclusive: '296',
+      upper_exclusive: null,
+      policy_verdict: 'PASS',
+      reasons: ['CAPACITY_GUARD_FAILED'],
+      capacity_knee: '296',
+      knee_reason: 'KNEE_DETECTED',
+      stages: [
+        { ...capacity.stages[0], evidence_refs: ['ws-1', 'gc-1'] },
+        { ...capacity.stages[1], reasons: ['CAPACITY_GUARD_FAILED'], evidence_refs: ['ws-2', 'gc-2'] },
+      ],
+    },
+    evidence: [
+      ...result.evidence,
+      { id: 'ws-1', type: 'window_policy_summary', window_id: 'ramp-300', from_epoch_ms: 0, to_epoch_ms: 300_000, business_verdict: 'PASS', resource_verdict: 'PASS', verdict: 'PASS' },
+      { id: 'ws-2', type: 'window_policy_summary', window_id: 'ramp-350', from_epoch_ms: 300_000, to_epoch_ms: 600_000, business_verdict: 'PASS', resource_verdict: 'NO_POLICY', verdict: 'PASS' },
+      { id: 'wm-1', type: 'window_metric_summary', window_id: 'ramp-300', from_epoch_ms: 0, to_epoch_ms: 300_000, sample_count: 1000, error_count: 0, error_rate_ratio: null, throughput_rps: { numerator: 296, denominator: 1 }, latency_ms: { p50: 20, p95: 52, p99: 75, max: 120 }, resource_bindings: [] },
+      { id: 'wm-2', type: 'window_metric_summary', window_id: 'ramp-350', from_epoch_ms: 300_000, to_epoch_ms: 600_000, sample_count: 1000, error_count: 0, error_rate_ratio: null, throughput_rps: { numerator: 344, denominator: 1 }, latency_ms: { p50: 45, p95: 890, p99: 1400, max: 2100 }, resource_bindings: [] },
+      { id: 'rs-gen-2', type: 'resource_summary', series_id: 'gen-cpu', metric: 'cpu', unit: 'ratio', entity: 'gen', role: 'generator', aggregation: 'interval_mean', window_id: 'ramp-350', from_epoch_ms: 300_000, to_epoch_ms: 600_000, expected_cells: 30, observed_cells: 30, missing_cells: 0, longest_gap_cells: 0, statistics: { max: '0.96' }, reasons: [] },
+      { id: 'gc-1', type: 'resource_policy_check', window_id: 'ramp-300', rule_id: 'gen-cpu', series_id: 'gen-cpu', unit: 'ratio', operator: 'gt', threshold: '0.9', effect: 'diagnostic', status: 'PASS', reason: null },
+      { id: 'gc-2', type: 'resource_policy_check', window_id: 'ramp-350', rule_id: 'gen-cpu', series_id: 'gen-cpu', unit: 'ratio', operator: 'gt', threshold: '0.9', effect: 'diagnostic', status: 'FAIL', reason: null },
+      { ...kneeDiagnostic, method: 'piecewise-hinge-ln-p95.v2', confidence: 'HIGH', calibrated: true, diagnostic_only: true },
+    ],
+  }
+  await openTables(page, guardedResult)
+  const block = page.getByTestId('capacity-knee-chart-block')
+  await expect(block).toBeVisible()
+  await expect(block.locator('svg').first()).toBeVisible()
+  await expect(block.locator('svg text').first()).toBeVisible()
+  expect(await block.locator('svg path').count()).toBeGreaterThan(0)
+  await expect(page.getByTestId('capacity-guards-alert')).toBeVisible()
+  await expect(page.getByTestId('capacity-knee-diagnostic')).toContainText('откалибровано')
+  const slider = page.getByTestId('capacity-knee-cursor')
+  await slider.focus()
+  await slider.fill('1')
+  await slider.dispatchEvent('input')
+  await expect(page.getByTestId('capacity-knee-readout')).toContainText('Ступень ramp-350')
+  await expect(page.getByTestId('capacity-knee-readout')).toContainText('насыщение / нарушение')
+  expect(csp).toEqual([])
+})
+
 for (const theme of ['light', 'dark'] as const) {
   test(`capacity and trend tables have no serious axe violations in ${theme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme })

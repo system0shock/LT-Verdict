@@ -216,6 +216,46 @@ test('a standard result has no capacity block', async ({ page }) => {
   await expect(page.getByTestId('capacity-block')).toHaveCount(0)
 })
 
+test('capacity block shows generator guard warning and compact knee chart when latency points exist', async ({ page }) => {
+  const csp: string[] = []
+  page.on('securitypolicyviolation', (event) => csp.push(`${event.violatedDirective}:${event.blockedURI}`))
+  const withKneeAndGuard = {
+    ...result('PASS'),
+    capacity_summary: {
+      ...capacity('PASS'),
+      bound_type: 'LOWER_BOUND',
+      lower_inclusive: '95.745',
+      upper_exclusive: null,
+      capacity_knee: '95.745',
+      knee_reason: 'KNEE_DETECTED',
+      reasons: ['CAPACITY_GUARD_FAILED'],
+      stages: [
+        blockStage('step-40', 40, 'PASS'),
+        blockStage('step-96', 96, 'PASS', { achieved: '95.745', verified_bound_load: '95.745' }),
+        blockStage('step-104', 104, 'INDETERMINATE', { reasons: ['CAPACITY_GUARD_FAILED'] }),
+      ],
+    },
+    evidence: [
+      overall,
+      {
+        id: 'capacity-knee-diagnostic', type: 'capacity_knee_diagnostic', method: 'piecewise-hinge-ln-p95.v2',
+        status: 'DETECTED', confidence: 'HIGH', calibrated: true, diagnostic_only: true,
+        last_stable_stage_id: 'step-96', last_stable_load: '95.745', first_degraded_stage_id: 'step-104', first_degraded_load: '104',
+        reasons: [],
+        points: [{ stage_id: 'step-40', load: '40', value: 52 }, { stage_id: 'step-96', load: '95.745', value: 56 }, { stage_id: 'step-104', load: '104', value: 11536 }],
+      },
+    ],
+  }
+  await open(page, withKneeAndGuard)
+  const block = page.getByTestId('capacity-block')
+  await expect(block.getByTestId('capacity-block-knee')).toContainText('95,745')
+  await expect(block.getByTestId('capacity-block-guard-warning')).toBeVisible()
+  await expect(block.getByTestId('capacity-knee-chart-block')).toBeVisible()
+  await expect(block.getByTestId('capacity-knee-chart-block').locator('svg').first()).toBeVisible()
+  await expect(block.getByTestId('capacity-knee-chart-block').locator('svg text').first()).toBeVisible()
+  expect(await block.getByTestId('capacity-knee-chart-block').locator('svg path').count()).toBeGreaterThan(0)
+  expect(csp).toEqual([])
+})
 for (const theme of ['light', 'dark'] as const) {
   test('capacity block has no axe violations: ' + theme, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme })

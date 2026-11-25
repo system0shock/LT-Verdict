@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { AnalysisResult } from '../types'
+import CapacityKneeChart from './CapacityKneeChart.vue'
 import { CAPACITY_LABELS } from './labels.tables'
 import { capacityView } from './tables'
 
@@ -55,6 +56,7 @@ const view = computed(() => capacityView(props.result))
     >
       {{ CAPACITY_LABELS.smallSampleNote }}
     </p>
+    <CapacityKneeChart :result="result" />
     <div
       class="table-wrap"
       tabindex="0"

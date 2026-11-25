@@ -1160,9 +1160,10 @@ class CommandLineTest {
             )
             repeat(600) { second ->
                 val starts = if (second < 300) 296 else 344
+                val elapsed = if (second < 300) 1 else 200
                 repeat(starts) { index ->
                     val offset = if (second == 599 && index == starts - 1) 999 else index
-                    append("${1767225600000L + second * 1000L + offset},1,steady,200,OK,fixture,text,true,,0,0,1,1,null,0,0,0\n")
+                    append("${1767225600000L + second * 1000L + offset},$elapsed,steady,200,OK,fixture,text,true,,0,0,1,1,null,0,0,0\n")
                 }
             }
         }

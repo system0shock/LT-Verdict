@@ -511,12 +511,23 @@ internal class AnalysisService(
                 ).let { it.copy(evidence = it.evidence + stageWindowMetricSummaries(stageResolution.windows, windowMetrics)) }
             } else {
                 val windows = checkNotNull(resourceWindows)
+                val targetSlaWindowIds =
+                    request.capacity?.plan?.let { plan ->
+                        plan.requiredCapacity?.let { required ->
+                            plan.stages
+                                .filter { it.target <= required }
+                                .map(CapacityStageV1::evaluationWindowId)
+                                .toSet()
+                                .takeIf { it.isNotEmpty() }
+                        }
+                    }
                 val resourceEvaluation =
                     evaluateResources(
                         request.resources.snapshot,
                         windows,
                         checkCancelled,
                         request.policy?.policy?.let { expandPlatformRules(it, request.resources.snapshot) } ?: PlatformExpansion.EMPTY,
+                        resourceSlaWindowIds = targetSlaWindowIds,
                     ).let { evaluated ->
                         evaluated.copy(
                             evidence =

@@ -96,7 +96,7 @@ internal fun analysisIdentity(
             capacityPlanVersion = capacity?.let { "capacity-plan.v1" },
             // ADR 0026: a top-level binding only, like pod_view: the diagnostic evidence item changes the result bytes, but not
             // modules, input_versions or limits, which are part of the comparability key.
-            capacityKneeMethod = capacity?.let { "piecewise-hinge-ln-p95.v1" },
+            capacityKneeMethod = capacity?.let { KNEE_METHOD },
             trendPlanSha256 = trend?.semanticSha256,
             trendPlanVersion = trend?.let { "trend-plan.v1" },
             // ADR 0020, section 5: a top-level binding only. pod-view stays out of modules, input_versions and limits,

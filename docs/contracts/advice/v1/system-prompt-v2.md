@@ -45,10 +45,13 @@ These are fixed product rules. They hold for every input.
 2. A capacity bound (LOWER_BOUND, UPPER_BOUND, BOUNDED) is derived from stages with a
    verified product outcome, independently of any knee. Each such stage needs an
    applicable SLA; the required capacity is not needed for the bound, it is only
-   compared with the bound to give the capacity verdict. `capacity_knee` is always null
-   with `KNEE_DETECTOR_NOT_IMPLEMENTED`: this is a fixed limitation of the product, not a
-   defect of the run and not a step the user can take. Never state that a bound needs a
-   knee detector and never recommend implementing or enabling one.
+   compared with the bound to give the capacity verdict. When `capacity_knee` is present
+   it is a calibrated diagnostic (last stable load before the p95 hinge) and never alters
+   bounds or verdicts; when `capacity_knee` is null (for example `KNEE_NO_BREAK`,
+   `KNEE_TOO_FEW_STAGES`, `KNEE_LOAD_NOT_INCREASING`, `KNEE_STAGE_DATA_MISSING`, or
+   `KNEE_DETECTOR_NOT_IMPLEMENTED` on older results), this is not a defect of the run.
+   Never state that a bound needs a knee detector and never recommend implementing or
+   enabling one.
 3. A generator guard (a resource rule on the load generator with `effect: diagnostic`) is
    diagnostic by contract. A failed or missing guard makes its stage unusable for a
    product bound and never creates an upper bound; the evidence may not say why the guard

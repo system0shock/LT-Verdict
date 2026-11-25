@@ -46,7 +46,7 @@ class AnalysisIdentityDiagnosticVersionTest {
                 ).jsonObject
         val plain = Json.parseToJsonElement(analysisIdentity(input(), null, EngineConfig()).decodeToString()).jsonObject
 
-        assertEquals("piecewise-hinge-ln-p95.v1", identity.getValue("capacity_knee_method").jsonPrimitive.content)
+        assertEquals("piecewise-hinge-ln-p95.v2", identity.getValue("capacity_knee_method").jsonPrimitive.content)
         assertEquals(false, plain.containsKey("capacity_knee_method"))
         assertEquals(
             listOf("normalization" to "1", "metrics" to "2", "policy-evaluation" to "1", "capacity-stage-evaluation" to "1"),

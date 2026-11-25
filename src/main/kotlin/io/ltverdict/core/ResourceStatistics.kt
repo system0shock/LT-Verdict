@@ -18,6 +18,7 @@ internal fun evaluateResources(
     windows: List<ResourceWindowV1>,
     checkCancelled: () -> Unit = {},
     platform: PlatformExpansion = PlatformExpansion.EMPTY,
+    resourceSlaWindowIds: Set<String>? = null,
 ): ResourceEvaluation {
     val summaries = mutableListOf<JsonObject>()
     val checks = mutableListOf<JsonObject>()
@@ -42,7 +43,11 @@ internal fun evaluateResources(
         val slaStatuses = mutableListOf<String>()
         (snapshot.rules + platform.rules).forEach { rule ->
             checkCancelled()
-            if (rule.windowIds != null && window.id !in rule.windowIds) return@forEach
+            if (rule.windowIds != null) {
+                if (window.id !in rule.windowIds) return@forEach
+            } else if (resourceSlaWindowIds != null && rule.effect == ResourceRuleEffect.SLA && window.id !in resourceSlaWindowIds) {
+                return@forEach
+            }
             val checkId = resourceId("resource-policy-check", window.id, rule.id)
             val series = seriesById[rule.seriesId]
             val bindingFailure = platform.bindingFailures[rule.id]

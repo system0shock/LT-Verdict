@@ -216,7 +216,18 @@ test('capacity bound and knee variants retain unknown codes', () => {
   expect(unknown.stages[0].verdictText).toBe('WEIRD')
   expect(unknown.reasons).toEqual([{ code: 'UNKNOWN_REASON', text: reasonText('UNKNOWN_REASON') }])
   expect(unknown.kneeText).toBe(CAPACITY_LABELS.kneeNone('UNKNOWN_KNEE'))
+  expect(CAPACITY_LABELS.kneeNone('KNEE_NO_BREAK')).toContain('излома в кривой p95 не видно')
   expect(capacityView(build({ capacity_summary: { ...capacitySummary, capacity_knee: '12.5' } }))?.kneeText).toBe(CAPACITY_LABELS.kneeValue('12,5', 'requests/s'))
+  const calibratedView = capacityView(build({
+    capacity_summary: { ...capacitySummary, capacity_knee: '95.745', knee_reason: 'KNEE_DETECTED' },
+    evidence: [{
+      id: 'capacity-knee-diagnostic', type: 'capacity_knee_diagnostic', method: 'piecewise-hinge-ln-p95.v2',
+      status: 'DETECTED', confidence: 'HIGH', calibrated: true, diagnostic_only: true,
+      last_stable_stage_id: 'ramp-300', last_stable_load: '296', first_degraded_stage_id: 'ramp-350', first_degraded_load: '344', reasons: [],
+    }],
+  }))!
+  expect(calibratedView.kneeDiagnosticText).toContain('откалибровано, не влияет на границу ёмкости и вердикт')
+  expect(calibratedView.kneeDiagnosticText).toContain('достоверность: высокая')
   expect(capacityView(build({ capacity_summary: { ...capacitySummary, reasons: ['CAPACITY_INSUFFICIENT_SAMPLES'], stages: [] } }))?.smallSample).toBe(true)
   expect(capacityView(build({ capacity_summary: { ...capacitySummary, stages: undefined, reasons: undefined } }))?.stages).toEqual([])
 })

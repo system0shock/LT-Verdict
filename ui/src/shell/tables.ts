@@ -295,8 +295,16 @@ export function capacityView(result: AnalysisResult): CapacityView | null {
     kneeDiagnosticText: knee == null
       ? undefined
       : knee.status === 'DETECTED'
-        ? CAPACITY_LABELS.kneeDiagnosticDetected(capacityNumber(knee.last_stable_load), capacityNumber(knee.first_degraded_load), summary.unit, knee.last_stable_stage_id ?? '', knee.first_degraded_stage_id ?? '')
-        : CAPACITY_LABELS.kneeDiagnosticNone(knee.reasons ?? []),
+        ? CAPACITY_LABELS.kneeDiagnosticDetected(
+            capacityNumber(knee.last_stable_load),
+            capacityNumber(knee.first_degraded_load),
+            summary.unit,
+            knee.last_stable_stage_id ?? '',
+            knee.first_degraded_stage_id ?? '',
+            Boolean(knee.calibrated),
+            knee.confidence,
+          )
+        : CAPACITY_LABELS.kneeDiagnosticNone(knee.reasons ?? [], Boolean(knee.calibrated)),
     smallSample: stages.some((stage) => stage.smallSample) || (summary.reasons ?? []).includes('CAPACITY_INSUFFICIENT_SAMPLES'),
     stages,
   }

@@ -207,6 +207,7 @@ class DiagnosticCapacityTrendSnapshotTest {
                 "capacity_summary.stages[].evidence_refs#empty",
                 "capacity_summary.stages[].evidence_refs#items",
                 "capacity_summary.capacity_knee=null",
+                "capacity_summary.capacity_knee=value",
                 "capacity_summary.reasons#empty",
                 "capacity_summary.reasons#items",
                 "capacity_knee_diagnostic.last_stable_stage_id=null",

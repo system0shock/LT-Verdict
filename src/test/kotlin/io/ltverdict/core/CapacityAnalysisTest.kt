@@ -216,13 +216,23 @@ class CapacityAnalysisTest {
         listOf(
             policy("pass" to "PASS", "fail" to "PASS", guards = mapOf("pass" to "PASS")),
             policy("pass" to "PASS", "fail" to "PASS", guards = mapOf("pass" to "PASS", "fail" to "FAIL")),
-            policy("pass" to "PASS", "fail" to "PASS", guards = mapOf("pass" to "PASS", "fail" to "PASS")),
-        ).forEachIndexed { index, windowPolicy ->
-            val stageLoad = if (index == 2) load("pass" to List(29) { 300 }, "fail" to List(30) { 350 }) else good
-            val result = evaluateCapacity(plan, resources, stageLoad, RunValidity.VALID, windowPolicy)
-            assertEquals("INDETERMINATE", result.capacityJson.string("bound_type"))
-            assertEquals(PolicyVerdict.NO_VERDICT, result.policyVerdict)
+        ).forEach { windowPolicy ->
+            val result = evaluateCapacity(plan, resources, good, RunValidity.VALID, windowPolicy)
+            assertEquals("LOWER_BOUND", result.capacityJson.string("bound_type"))
+            assertEquals("300", result.capacityJson.string("lower_inclusive"))
+            assertEquals(JsonNull, result.capacityJson["upper_exclusive"])
+            assertEquals(PolicyVerdict.PASS, result.policyVerdict)
         }
+        val gappedPrefix =
+            evaluateCapacity(
+                plan,
+                resources,
+                load("pass" to List(29) { 300 }, "fail" to List(30) { 350 }),
+                RunValidity.VALID,
+                policy("pass" to "PASS", "fail" to "PASS", guards = mapOf("pass" to "PASS", "fail" to "PASS")),
+            )
+        assertEquals("INDETERMINATE", gappedPrefix.capacityJson.string("bound_type"))
+        assertEquals(PolicyVerdict.NO_VERDICT, gappedPrefix.policyVerdict)
     }
 
     @Test
@@ -464,12 +474,15 @@ class CapacityAnalysisTest {
 
         assertEquals(1, without.evidence.size)
         assertEquals(listOf("capacity_summary", "capacity_knee_diagnostic"), with.evidence.map { it.string("type") })
-        assertEquals(without.evidence.single(), with.evidence.first())
-        assertEquals(without.capacityJson, with.capacityJson)
+        for (key in listOf("bound_type", "lower_inclusive", "upper_exclusive", "policy_verdict", "stages", "reasons")) {
+            assertEquals(without.capacityJson[key], with.capacityJson[key], key)
+        }
         assertEquals(without.policyVerdict, with.policyVerdict)
         assertEquals(without.coverageReasons, with.coverageReasons)
-        assertEquals(JsonNull, with.capacityJson["capacity_knee"])
-        assertEquals("KNEE_DETECTOR_NOT_IMPLEMENTED", with.capacityJson.string("knee_reason"))
+        assertEquals(JsonNull, without.capacityJson["capacity_knee"])
+        assertEquals("KNEE_STAGE_DATA_MISSING", without.capacityJson.string("knee_reason"))
+        assertEquals("96", with.capacityJson.string("capacity_knee"))
+        assertEquals("KNEE_DETECTED", with.capacityJson.string("knee_reason"))
         val knee = with.evidence.last()
         assertEquals("DETECTED", knee.string("status"))
         assertEquals("k5", knee.string("last_stable_stage_id"))
@@ -481,6 +494,119 @@ class CapacityAnalysisTest {
         val missing = evaluateCapacity(plan, resources, load, RunValidity.VALID, policy, metrics - "k3").evidence.last()
         assertEquals(listOf("KNEE_STAGE_DATA_MISSING"), missing.getValue("reasons").jsonArray.map { it.jsonPrimitive.content })
         assertEquals("NOT_DETECTED", missing.string("status"))
+    }
+
+    @Test
+    fun `PASS prefix yields LOWER_BOUND on indeterminate tails while blocking non-contiguous patterns`() {
+        val resources = resources()
+        val three = listOf(stage("one", 100, 0), stage("two", 200, 300_000), stage("three", 300, 600_000))
+        val fullLoad = load("one" to List(30) { 100 }, "two" to List(30) { 200 }, "three" to List(30) { 300 })
+
+        // [PASS, PASS, INDETERMINATE(target missed)] -> LOWER_BOUND at 200
+        val collapseLoad = load("one" to List(30) { 100 }, "two" to List(30) { 200 }, "three" to List(30) { 150 })
+        val collapse =
+            evaluateCapacity(
+                plan(CapacityLoadAxis.RPS, BigDecimal("200"), three),
+                resources,
+                collapseLoad,
+                RunValidity.VALID,
+                policy("one" to "PASS", "two" to "PASS", "three" to "PASS"),
+            )
+        assertEquals("LOWER_BOUND", collapse.capacityJson.string("bound_type"))
+        assertEquals("200", collapse.capacityJson.string("lower_inclusive"))
+        assertEquals(JsonNull, collapse.capacityJson["upper_exclusive"])
+        assertEquals(PolicyVerdict.PASS, collapse.policyVerdict)
+
+        // [PASS, FAIL, INDETERMINATE(guard failed)] -> BOUNDED [100, 200)
+        val boundedTail =
+            evaluateCapacity(
+                plan(CapacityLoadAxis.RPS, BigDecimal("100"), three),
+                resources,
+                fullLoad,
+                RunValidity.VALID,
+                policy(
+                    "one" to "PASS",
+                    "two" to "FAIL",
+                    "three" to "PASS",
+                    guards = mapOf("one" to "PASS", "two" to "PASS", "three" to "FAIL"),
+                ),
+            )
+        assertEquals("BOUNDED", boundedTail.capacityJson.string("bound_type"))
+        assertEquals("100", boundedTail.capacityJson.string("lower_inclusive"))
+        assertEquals("200", boundedTail.capacityJson.string("upper_exclusive"))
+        assertEquals(PolicyVerdict.PASS, boundedTail.policyVerdict)
+
+        // [FAIL, INDETERMINATE] -> UPPER_BOUND (< 100)
+        val upperTail =
+            evaluateCapacity(
+                plan(CapacityLoadAxis.RPS, BigDecimal("100"), three.take(2)),
+                resources,
+                fullLoad,
+                RunValidity.VALID,
+                policy("one" to "FAIL", "two" to "PASS", guards = mapOf("one" to "PASS", "two" to "FAIL")),
+            )
+        assertEquals("UPPER_BOUND", upperTail.capacityJson.string("bound_type"))
+        assertEquals("100", upperTail.capacityJson.string("upper_exclusive"))
+        assertEquals(PolicyVerdict.FAIL, upperTail.policyVerdict)
+
+        // [PASS, INDETERMINATE, PASS] -> non-contiguous PASS -> INDETERMINATE
+        val nonContiguousPass =
+            evaluateCapacity(
+                plan(CapacityLoadAxis.RPS, BigDecimal("100"), three),
+                resources,
+                fullLoad,
+                RunValidity.VALID,
+                policy(
+                    "one" to "PASS",
+                    "two" to "PASS",
+                    "three" to "PASS",
+                    guards = mapOf("one" to "PASS", "two" to "FAIL", "three" to "PASS"),
+                ),
+            )
+        assertEquals("INDETERMINATE", nonContiguousPass.capacityJson.string("bound_type"))
+        assertEquals(PolicyVerdict.NO_VERDICT, nonContiguousPass.policyVerdict)
+
+        // [PASS, INDETERMINATE, FAIL] -> INDETERMINATE (never false LOWER_BOUND when a later stage failed)
+        val passIndetFail =
+            evaluateCapacity(
+                plan(CapacityLoadAxis.RPS, BigDecimal("100"), three),
+                resources,
+                fullLoad,
+                RunValidity.VALID,
+                policy(
+                    "one" to "PASS",
+                    "two" to "PASS",
+                    "three" to "FAIL",
+                    guards = mapOf("one" to "PASS", "two" to "FAIL", "three" to "PASS"),
+                ),
+            )
+        assertEquals("INDETERMINATE", passIndetFail.capacityJson.string("bound_type"))
+        assertEquals(PolicyVerdict.NO_VERDICT, passIndetFail.policyVerdict)
+
+        // [INDETERMINATE, PASS] -> INDETERMINATE
+        val indetPass =
+            evaluateCapacity(
+                plan(CapacityLoadAxis.RPS, BigDecimal("100"), three.take(2)),
+                resources,
+                fullLoad,
+                RunValidity.VALID,
+                policy("one" to "PASS", "two" to "PASS", guards = mapOf("one" to "FAIL", "two" to "PASS")),
+            )
+        assertEquals("INDETERMINATE", indetPass.capacityJson.string("bound_type"))
+        assertEquals(PolicyVerdict.NO_VERDICT, indetPass.policyVerdict)
+
+        // [PASS(target), NO_POLICY(headroom)] -> LOWER_BOUND and PASS (headroom CAPACITY_SLA_MISSING does not force NO_POLICY)
+        val headroomNoPolicy =
+            evaluateCapacity(
+                plan(CapacityLoadAxis.RPS, BigDecimal("100"), three.take(2)),
+                resources,
+                fullLoad,
+                RunValidity.VALID,
+                policy("one" to "PASS", "two" to "NO_POLICY"),
+            )
+        assertEquals("LOWER_BOUND", headroomNoPolicy.capacityJson.string("bound_type"))
+        assertEquals("100", headroomNoPolicy.capacityJson.string("lower_inclusive"))
+        assertEquals(PolicyVerdict.PASS, headroomNoPolicy.policyVerdict)
     }
 
     private fun plan(

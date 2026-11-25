@@ -94,7 +94,23 @@ class AnalysisDocumentsEquivalenceTest {
                             val pod = if (extras == 7) podView else null
                             val accepted = input(type)
                             val expected =
-                                legacyAnalysisIdentity(
+                                stripTopLevelKey(
+                                    legacyAnalysisIdentity(
+                                        accepted,
+                                        policy,
+                                        config,
+                                        resource,
+                                        diag,
+                                        optionalHashes,
+                                        optionalHashes,
+                                        cap,
+                                        trendPlan,
+                                        pod,
+                                    ),
+                                    "capacity_knee_method",
+                                )
+                            val rawActual =
+                                analysisIdentity(
                                     accepted,
                                     policy,
                                     config,
@@ -108,19 +124,8 @@ class AnalysisDocumentsEquivalenceTest {
                                 )
                             val actual =
                                 stripTopLevelKey(
-                                    analysisIdentity(
-                                        accepted,
-                                        policy,
-                                        config,
-                                        resource,
-                                        diag,
-                                        optionalHashes,
-                                        optionalHashes,
-                                        cap,
-                                        trendPlan,
-                                        pod,
-                                    ),
-                                    "incident_method",
+                                    stripTopLevelKey(rawActual, "incident_method"),
+                                    "capacity_knee_method",
                                 )
                             assertArrayEquals(expected, actual, "$type $config ${policy?.sha256} ${resource?.semanticSha256} $extras")
                             assertEquals(sha256Hex(expected), sha256Hex(actual))

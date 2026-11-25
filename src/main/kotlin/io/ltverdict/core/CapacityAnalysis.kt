@@ -33,7 +33,7 @@ internal fun evaluateCapacity(
     val businessChecks = windowPolicy.evidence.filter { it.string("type") == "policy_check" }
     val series = resources.series.associateBy(ResourceSeriesV1::id)
     val windows = resources.windows.associateBy(ResourceWindowV1::id)
-    val evaluations =
+    val rawEvaluations =
         plan.stages.map { stage ->
             checkCancelled()
             evaluateStage(
@@ -50,6 +50,22 @@ internal fun evaluateCapacity(
                 checkCancelled,
             )
         }
+    val targetResourceFailed =
+        plan.requiredCapacity != null &&
+            rawEvaluations.any { it.stage.target <= plan.requiredCapacity && it.resourceVerdict == "FAIL" }
+    val evaluations =
+        if (!targetResourceFailed) {
+            rawEvaluations
+        } else {
+            val required = checkNotNull(plan.requiredCapacity)
+            rawEvaluations.map { item ->
+                if (item.stage.target > required && item.verdict == "PASS" && item.resourceVerdict == "NO_POLICY") {
+                    item.copy(verdict = "INDETERMINATE", verifiedLoad = null)
+                } else {
+                    item
+                }
+            }
+        }
     val bound = bounds(evaluations, validity)
     val unboundRule = RULE_WINDOW_NOT_FOUND in windowPolicy.coverageReasons
     val stageReasons = evaluations.flatMap(StageEvaluation::reasons) + bound.reasons
@@ -57,12 +73,21 @@ internal fun evaluateCapacity(
     val stageVerdict = policyVerdict(plan.requiredCapacity, evaluations, bound)
     val blocked = unboundRule && (stageVerdict == PolicyVerdict.PASS || stageVerdict == PolicyVerdict.FAIL)
     val policyVerdict = if (blocked) PolicyVerdict.NO_VERDICT else stageVerdict
-    // The payload of analysis-result and of capacity.json is the summary evidence without its `id` and `type`.
-    val summary = capacitySummary(plan, evaluations, bound, policyVerdict, reasons).toJson()
-    val capacityJson = JsonObject(summary.filterKeys { it != "id" && it != "type" })
-    // ADR 0026: a diagnostic evidence item after the summary; it does not touch the bounds, the verdict or capacity_summary.
+    // ADR 0026: calibrated knee diagnostic populates capacity_summary.capacity_knee / knee_reason; bounds & verdict never depend on it.
     val knee = windowMetrics?.let { capacityKnee(plan, evaluations, validity, it) }
-    return CapacityAnalysis(policyVerdict, capacityJson, listOfNotNull(summary, knee), reasons)
+    // The payload of analysis-result and of capacity.json is the summary evidence without its `id` and `type`.
+    val summary =
+        capacitySummary(
+            plan,
+            evaluations,
+            bound,
+            policyVerdict,
+            reasons,
+            capacityKnee = knee?.kneeLoad,
+            kneeReason = knee?.reason ?: if (validity != RunValidity.VALID) "KNEE_RUN_NOT_VALID" else "KNEE_STAGE_DATA_MISSING",
+        ).toJson()
+    val capacityJson = JsonObject(summary.filterKeys { it != "id" && it != "type" })
+    return CapacityAnalysis(policyVerdict, capacityJson, listOfNotNull(summary, knee?.evidence), reasons)
 }
 
 private fun capacityKnee(
@@ -70,7 +95,7 @@ private fun capacityKnee(
     evaluations: List<StageEvaluation>,
     validity: RunValidity,
     windowMetrics: Map<String, NormalizedMetrics>,
-): JsonObject {
+): CapacityKneeResult {
     val points =
         evaluations.map { evaluation ->
             val metrics = windowMetrics[evaluation.stage.evaluationWindowId]?.overall
@@ -90,7 +115,7 @@ private fun capacityKnee(
             points.any { it == null } -> "KNEE_STAGE_DATA_MISSING"
             else -> null
         }
-    return capacityKneeEvidence(plan.loadAxis, points.filterNotNull(), refusal)
+    return evaluateCapacityKnee(plan.loadAxis, points.filterNotNull(), refusal)
 }
 
 private data class StageEvaluation(
@@ -104,6 +129,7 @@ private data class StageEvaluation(
     val verifiedLoad: BigDecimal?,
     val evidenceRefs: List<String>,
     val reasons: List<String>,
+    val resourceVerdict: String?,
 )
 
 private data class Bounds(
@@ -204,6 +230,7 @@ private fun evaluateStage(
         if (verdict == "PASS" || verdict == "FAIL") verified else null,
         evidenceRefs,
         reasons.distinct(),
+        summary?.string("resource_verdict"),
     )
 }
 
@@ -287,21 +314,20 @@ private fun bounds(
 ): Bounds {
     val reasons = mutableListOf<String>()
     if (validity != RunValidity.VALID) reasons += "CAPACITY_RUN_NOT_VALID"
+    val passPrefix = evaluations.takeWhile { it.verdict == "PASS" }
+    val afterPass = evaluations.drop(passPrefix.size)
+    val failRun = afterPass.takeWhile { it.verdict == "FAIL" }
+    val tail = afterPass.drop(failRun.size)
     if (evaluations.isEmpty() ||
-        evaluations.any { it.verdict == "INDETERMINATE" || it.verdict == "NO_POLICY" }
+        (failRun.isEmpty() && tail.any { it.verdict == "PASS" || it.verdict == "FAIL" }) ||
+        (passPrefix.isEmpty() && failRun.isEmpty())
     ) {
         reasons += "CAPACITY_STAGE_NOT_VERIFIED"
     }
     if (evaluations.zipWithNext().any { (left, right) -> left.stage.target >= right.stage.target }) {
-        reasons +=
-            "CAPACITY_NON_MONOTONIC_TARGET"
+        reasons += "CAPACITY_NON_MONOTONIC_TARGET"
     }
-    if (evaluations.zipWithNext().any { (left, right) ->
-            left.verifiedLoad != null &&
-                right.verifiedLoad != null &&
-                left.verifiedLoad > right.verifiedLoad
-        }
-    ) {
+    if (evaluations.mapNotNull(StageEvaluation::verifiedLoad).zipWithNext().any { (left, right) -> left > right }) {
         reasons += "CAPACITY_NON_MONOTONIC_VERIFIED_LOAD"
     }
     var failed = false
@@ -310,8 +336,8 @@ private fun bounds(
         if (failed && it.verdict == "PASS") reasons += "CAPACITY_NON_MONOTONIC_OUTCOME"
     }
     if (reasons.isNotEmpty()) return Bounds("INDETERMINATE", null, null, reasons.distinct())
-    val firstFail = evaluations.firstOrNull { it.verdict == "FAIL" }
-    val lastPass = evaluations.lastOrNull { it.verdict == "PASS" }
+    val firstFail = failRun.firstOrNull()
+    val lastPass = passPrefix.lastOrNull()
     if (firstFail != null && lastPass != null && checkNotNull(lastPass.verifiedLoad) >= checkNotNull(firstFail.verifiedLoad)) {
         return Bounds("INDETERMINATE", null, null, listOf("CAPACITY_NON_MONOTONIC_VERIFIED_LOAD"))
     }
@@ -331,15 +357,23 @@ private fun policyVerdict(
     required: BigDecimal?,
     evaluations: List<StageEvaluation>,
     bounds: Bounds,
-): PolicyVerdict =
-    when {
+): PolicyVerdict {
+    val slaRequiredStages =
+        if (required != null) {
+            evaluations.filter { it.stage.target <= required }.ifEmpty { evaluations }
+        } else {
+            evaluations
+        }
+    return when {
         required == null -> PolicyVerdict.NO_POLICY
-        evaluations.any { "CAPACITY_SLA_MISSING" in it.reasons } -> PolicyVerdict.NO_POLICY
+        slaRequiredStages.any { "CAPACITY_SLA_MISSING" in it.reasons } -> PolicyVerdict.NO_POLICY
+        bounds.type == "INDETERMINATE" && evaluations.any { "CAPACITY_SLA_MISSING" in it.reasons } -> PolicyVerdict.NO_POLICY
         bounds.type == "INDETERMINATE" -> PolicyVerdict.NO_VERDICT
         bounds.lower != null && bounds.lower >= required -> PolicyVerdict.PASS
         bounds.upper != null && bounds.upper <= required -> PolicyVerdict.FAIL
         else -> PolicyVerdict.NO_VERDICT
     }
+}
 
 private fun capacitySummary(
     plan: CapacityPlanV1,
@@ -347,6 +381,8 @@ private fun capacitySummary(
     bounds: Bounds,
     policyVerdict: PolicyVerdict,
     reasons: List<String>,
+    capacityKnee: BigDecimal?,
+    kneeReason: String,
 ) = CapacitySummaryEvidence(
     id = "capacity-summary",
     schemaVersion = "capacity.v1",
@@ -358,8 +394,8 @@ private fun capacitySummary(
     upperExclusive = bounds.upper.canonical(),
     policyVerdict = policyVerdict,
     reasons = reasons,
-    capacityKnee = null,
-    kneeReason = "KNEE_DETECTOR_NOT_IMPLEMENTED",
+    capacityKnee = capacityKnee?.let(::canonicalDecimal),
+    kneeReason = kneeReason,
 )
 
 private fun stageDocument(

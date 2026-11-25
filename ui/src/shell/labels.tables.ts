@@ -84,13 +84,22 @@ const CAPACITY_BOUND_WORDS = {
 } as const
 
 const KNEE_REASON_WORDS: Record<string, string> = {
+  KNEE_DETECTED: 'точка перегиба обнаружена',
   KNEE_TOO_FEW_STAGES: 'ступеней меньше пяти',
   KNEE_STAGE_DATA_MISSING: 'по части ступеней нет достаточных данных',
   KNEE_RUN_NOT_VALID: 'прогон не признан пригодным',
-  KNEE_LOAD_NOT_INCREASING: 'достигнутая нагрузка не растёт от ступени к ступени',
+  KNEE_LOAD_NOT_INCREASING: 'достигнутая нагрузка снижается на более высокой ступени или постоянна на всём прогоне',
   KNEE_NO_BREAK: 'излома в кривой p95 не видно',
   KNEE_BREAK_NOT_MATERIAL: 'рост p95 за изломом слишком мал',
   KNEE_BREAK_WITHIN_NOISE: 'рост p95 за изломом не превышает шум',
+}
+
+const KNEE_CONFIDENCE_WORDS: Record<string, string> = {
+  HIGH: 'высокая',
+  MEDIUM: 'средняя',
+  LOW: 'низкая',
+  NONE: 'нет',
+  UNCALIBRATED: 'не откалибровано',
 }
 
 const AXIS_NAMES: Record<string, string> = { rps: 'RPS' }
@@ -112,13 +121,21 @@ export const CAPACITY_LABELS = {
   verdictLabel: 'Вердикт по ёмкости',
   kneeLabel: 'Точка перегиба',
   kneeNotImplemented: 'Точка перегиба в этой версии не определяется',
-  kneeNone: (reason: string): string => `Точка перегиба не найдена (${reason})`,
+  kneeNone: (reason: string): string => {
+    const words = KNEE_REASON_WORDS[reason]
+    return words ? `Точка перегиба не найдена: ${words}` : `Точка перегиба не найдена (${reason})`
+  },
   kneeValue: (value: string, unit: string): string => `${value} ${unit}`,
   kneeDiagnosticLabel: 'Колено (диагностика)',
-  kneeDiagnosticDetected: (lower: string, upper: string, unit: string, lowerStage: string, upperStage: string): string =>
-    `между ${lower} и ${upper} ${unit}: излом после ступени ${lowerStage}, деградация со ступени ${upperStage}; не откалибровано, не влияет на границу ёмкости и вердикт; ${CAPACITY_KNEE_METHOD}`,
-  kneeDiagnosticNone: (reasons: string[]): string =>
-    `не определено (${reasons.map((code) => KNEE_REASON_WORDS[code] ?? code).join('; ') || 'причина не указана'}); диагностика, не откалибровано; ${CAPACITY_KNEE_METHOD}`,
+  kneeDiagnosticDetected: (lower: string, upper: string, unit: string, lowerStage: string, upperStage: string, calibrated = false, confidence?: string): string => {
+    const calibrationText = calibrated ? 'откалибровано, не влияет на границу ёмкости и вердикт' : 'не откалибровано, не влияет на границу ёмкости и вердикт'
+    const confidenceText = confidence && KNEE_CONFIDENCE_WORDS[confidence] && calibrated ? `; достоверность: ${KNEE_CONFIDENCE_WORDS[confidence]}` : ''
+    return `между ${lower} и ${upper} ${unit}: излом после ступени ${lowerStage}, деградация со ступени ${upperStage}; ${calibrationText}${confidenceText}; ${CAPACITY_KNEE_METHOD}`
+  },
+  kneeDiagnosticNone: (reasons: string[], calibrated = false): string => {
+    const calibrationText = calibrated ? 'диагностика, откалибровано' : 'диагностика, не откалибровано'
+    return `не определено (${reasons.map((code) => KNEE_REASON_WORDS[code] ?? code).join('; ') || 'причина не указана'}); ${calibrationText}; ${CAPACITY_KNEE_METHOD}`
+  },
   reasonsLabel: 'Причины',
   noReasons: 'нет',
   smallSampleNote: 'Малая выборка: у ступеней с этой пометкой запросов в окне меньше минимума или у правила окна малая выборка. Такая ступень не подтверждена и не определяет границу ёмкости. Сама метка не означает нарушения SLA, а результат SLA в этом окне для границы не используется.',
@@ -133,6 +150,37 @@ export const CAPACITY_LABELS = {
   noEvidence: 'нет',
   evidenceSummary: (count: number): string => `Основания (${count})`,
   empty: 'В результате нет сводки по ёмкости.',
+} as const
+
+export const CAPACITY_CHART_LABELS = {
+  title: 'Кривая отклика p95 и колено ёмкости',
+  aria: (stagesCount: number, details: string): string =>
+    `График зависимости p95 отклика от нагрузки по ${stagesCount} ступеням. ${details}`,
+  xAxisTitle: (unit: string): string => `Достигнутая нагрузка (${unit})`,
+  yAxisTitle: 'Время отклика (мс)',
+  p95Series: 'p95 отклика',
+  p99Series: 'p99 отклика',
+  lowerLine: (value: string, unit: string): string => `Нижняя граница ${value} ${unit}`,
+  upperLine: (value: string, unit: string): string => `Верхняя граница ${value} ${unit}`,
+  kneeLine: (value: string, unit: string): string => `Колено ${value} ${unit}`,
+  kneeInterval: (from: string, to: string, unit: string): string => `Интервал колена [${from}; ${to}) ${unit}`,
+  cursorLabel: 'Курсор по ступеням кривой колена',
+  cursorNone: 'Наведите указатель или переместите ползунок, чтобы прочитать значения по ступеням.',
+  legend: 'Сплошная линия — p95, пунктир — p99 (при наличии). Фигура и цвет точки: круг — выдержана, квадрат — нарушение, треугольник — не подтверждена, ромб — сбой или отсутствие проверки генератора.',
+  empty: 'Для графика кривой отклика нужно не менее двух ступеней с измеренным p95.',
+  guardsTitle: 'Проверки генератора нагрузки',
+  guardsAlert: 'Внимание: на части ступеней проверка генератора нагрузки не пройдена или отсутствует. Насыщение генератора не должно приниматься за предел системы.',
+  guardsOk: 'Все проверки генератора нагрузки на ступенях пройдены: ограничений генератора не зафиксировано.',
+  guardStatus: {
+    PASS: 'в норме',
+    FAIL: 'насыщение / нарушение',
+    MISSING: 'нет проверки',
+    NONE: 'без проверки',
+  } as Record<string, string>,
+  guardLine: (stageId: string, statusText: string, detail: string): string =>
+    `${stageId}: ${statusText}${detail ? ` (${detail})` : ''}`,
+  readout: (stageId: string, loadText: string, unit: string, p95Text: string, p99Text: string | null, verdictText: string, guardText: string): string =>
+    `Ступень ${stageId}: нагрузка ${loadText} ${unit}, p95 ${p95Text} мс${p99Text ? `, p99 ${p99Text} мс` : ''}, итог «${verdictText}», генератор: ${guardText}.`,
 } as const
 
 const TREND_REASON_WORDS: Record<string, string> = {

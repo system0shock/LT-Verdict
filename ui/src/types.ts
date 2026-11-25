@@ -672,7 +672,7 @@ export interface ResourceTrendFinding {
   evidence_id: string
 }
 
-// ADR 0026: an uncalibrated diagnostic of the capacity knee; it never changes the capacity bound or the verdict.
+// ADR 0026: calibrated diagnostic of the capacity knee; it never changes the capacity bound or the verdict.
 export interface CapacityKneeDiagnosticEvidence {
   id: string
   type: 'capacity_knee_diagnostic'
@@ -681,9 +681,9 @@ export interface CapacityKneeDiagnosticEvidence {
   load_axis?: string
   unit?: string
   status: 'DETECTED' | 'NOT_DETECTED'
-  confidence: 'UNCALIBRATED'
-  calibrated: false
-  diagnostic_only?: true
+  confidence: string
+  calibrated: boolean
+  diagnostic_only?: boolean
   last_stable_stage_id: string | null
   last_stable_load: number | string | null
   first_degraded_stage_id: string | null

@@ -318,7 +318,7 @@ internal data class CapacitySummaryEvidence(
     @SerialName("upper_exclusive") @Serializable(with = RawDecimalSerializer::class) val upperExclusive: BigDecimal?,
     @SerialName("policy_verdict") val policyVerdict: PolicyVerdict,
     val reasons: List<String>,
-    /** Always null: the knee detector is a separate evidence item (ADR 0026). */
+    /** Last stable load before the calibrated p95 knee, or null when not detected (ADR 0026). */
     @SerialName("capacity_knee") val capacityKnee: String?,
     @SerialName("knee_reason") val kneeReason: String,
 ) : DerivedEvidence

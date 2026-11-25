@@ -317,6 +317,8 @@ export interface CapacityBlock {
   verdictText: string
   boundText: string
   statement: string
+  kneeLine: string | null
+  guardWarning: boolean
   axisText: string
   counts: string
   legend: string
@@ -383,11 +385,19 @@ export function capacityBlock(result: AnalysisResult): CapacityBlock | null {
   const lower = lowerValue === null ? null : capacityNumber(summary.lower_inclusive)
   const upper = upperValue === null ? null : capacityNumber(summary.upper_exclusive)
   const count = (kind: CapacityStageKind) => rows.filter((row) => row.kind === kind).length
+  const guardWarning = stages.some((stage) =>
+    (stage.reasons ?? []).some((code) => code === 'CAPACITY_GUARD_FAILED' || code === 'CAPACITY_GUARD_MISSING'),
+  )
+  const kneeLine = summary.capacity_knee == null
+    ? null
+    : OVERVIEW_LABELS.capacityKneeLine(capacityNumber(summary.capacity_knee), view.unit)
   return {
     verdict: view.verdict,
     verdictText: OVERVIEW_LABELS.capacityVerdict[view.verdict] ?? view.verdictText,
     boundText: view.boundText,
     statement: capacityStatement(view, lower, upper, view.reasons.some((reason) => reason.code === 'RULE_WINDOW_NOT_FOUND')),
+    kneeLine,
+    guardWarning,
     axisText: CAPACITY_LABELS.axisValue(view.axis, view.unit),
     counts: OVERVIEW_LABELS.capacityCounts(rows.length, count('pass'), count('fail'), count('unverified')),
     legend: OVERVIEW_LABELS.capacityLegend(lower, upper, view.unit),

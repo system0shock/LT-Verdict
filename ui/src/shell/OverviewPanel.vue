@@ -7,6 +7,7 @@ import {
 } from './deep'
 import { OVERVIEW_LABELS } from './labels'
 import { CAPACITY_LABELS } from './labels.tables'
+import CapacityKneeChart from './CapacityKneeChart.vue'
 import PlatformMap from './PlatformMap.vue'
 import SharedCursorChart from './SharedCursorChart.vue'
 import TimeChart from './TimeChart.vue'
@@ -521,6 +522,19 @@ const kindLabels: Record<AttentionKind, string> = {
       >
         {{ capacity.statement }}
       </p>
+      <p
+        v-if="capacity.kneeLine"
+        data-testid="capacity-block-knee"
+      >
+        {{ capacity.kneeLine }}
+      </p>
+      <p
+        v-if="capacity.guardWarning"
+        role="note"
+        data-testid="capacity-block-guard-warning"
+      >
+        {{ OVERVIEW_LABELS.capacityGuardWarning }}
+      </p>
       <h3>{{ OVERVIEW_LABELS.capacityChartTitle }}</h3>
       <p class="muted">
         {{ CAPACITY_LABELS.axisLabel }}: {{ capacity.axisText }}. {{ capacity.counts }}
@@ -635,6 +649,10 @@ const kindLabels: Record<AttentionKind, string> = {
       <p class="muted">
         {{ capacity.legend }}
       </p>
+      <CapacityKneeChart
+        :result="result"
+        compact
+      />
       <p
         v-if="capacity.smallSample"
         class="muted"

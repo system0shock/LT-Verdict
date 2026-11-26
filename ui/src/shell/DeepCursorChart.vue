@@ -111,7 +111,8 @@ watch(() => [props.axis.fromMs, props.axis.toMs], () => {
 
 function onPointer(event: PointerEvent) {
   if (pinned.value && event.type === 'pointermove') return
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const hostEl = event.currentTarget as HTMLElement
+  const rect = (hostEl.querySelector('.time-chart') ?? hostEl).getBoundingClientRect()
   if (rect.width > 0) {
     cursorMs.value = nearestTime(props.axis, plotFraction(event.clientX, rect))
     pointerPos.value = { x: event.clientX, y: event.clientY }

@@ -23,6 +23,9 @@ const props = withDefaults(defineProps<{
   ySplits?: number
   decimals?: number
   maxTimeIntervals?: number
+  syncOffsetMs?: number | null
+  syncPinned?: boolean
+  syncActive?: boolean
 }>(), {
   stages: () => [],
   unit: '',
@@ -31,7 +34,17 @@ const props = withDefaults(defineProps<{
   ySplits: 2,
   decimals: 2,
   maxTimeIntervals: 3,
+  syncOffsetMs: undefined,
+  syncPinned: undefined,
+  syncActive: undefined,
 })
+
+const emit = defineEmits<{
+  'sync-hover': [offsetMs: number]
+  'sync-leave': []
+  'sync-pin': [offsetMs: number]
+  'sync-unpin': []
+}>()
 
 const TOKEN_HEX: Partial<Record<ChartToken, string>> = {
   brand: '#60A5FA',
@@ -47,10 +60,14 @@ const TOKEN_HEX: Partial<Record<ChartToken, string>> = {
   c7: '#A78BFA',
 }
 
-const cursorMs = ref<number | null>(null)
+const localCursorMs = ref<number | null>(null)
 const pointerPos = ref({ x: 0, y: 0 })
 const hoverActive = ref(false)
-const pinned = ref(false)
+const localPinned = ref(false)
+
+const isSynced = computed(() => props.syncOffsetMs !== undefined)
+const isPinned = computed(() => (props.syncPinned !== undefined ? props.syncPinned : localPinned.value))
+const isActive = computed(() => (props.syncActive !== undefined ? props.syncActive : true))
 
 const allPoints = computed(() => {
   if (props.lane.series?.length) {
@@ -67,6 +84,31 @@ const minStepMs = computed(() => {
     if (d > 0 && d < step) step = d
   }
   return Number.isFinite(step) ? step : Math.max(1000, (props.frame.toMs - props.frame.fromMs) / 60)
+})
+
+function nearestPointX(targetMs: number): number {
+  const pts = allPoints.value
+  if (!pts.length) return targetMs
+  let best = pts[0].x
+  let bestDist = Math.abs(best - targetMs)
+  for (let i = 1; i < pts.length; i += 1) {
+    const d = Math.abs(pts[i].x - targetMs)
+    if (d < bestDist) {
+      bestDist = d
+      best = pts[i].x
+    }
+  }
+  return best
+}
+
+const cursorMs = computed<number | null>(() => {
+  if (!isSynced.value) return localCursorMs.value
+  if (props.syncOffsetMs === null || props.syncOffsetMs === undefined) return null
+  const target = props.frame.originMs + props.syncOffsetMs
+  const pad = minStepMs.value
+  if (target < props.frame.fromMs - pad || target > props.frame.toMs + pad) return null
+  const clamped = Math.max(props.frame.fromMs, Math.min(props.frame.toMs, target))
+  return nearestPointX(clamped)
 })
 
 const flags = computed(() => ({
@@ -104,8 +146,12 @@ const formattedVal = computed(() => {
   return props.unit ? `${num} ${props.unit}` : num
 })
 
+const tooltipVisible = computed(() =>
+  isActive.value && (hoverActive.value || isPinned.value) && cursorMs.value !== null,
+)
+
 const tooltipSections = computed<FloatingTooltipSection[]>(() => {
-  if (cursorMs.value === null) return []
+  if (!tooltipVisible.value || cursorMs.value === null) return []
   const tol = minStepMs.value * 0.75
   if (props.lane.series?.length) {
     const rows = props.lane.series.map((s) => {
@@ -136,62 +182,72 @@ const tooltipSections = computed<FloatingTooltipSection[]>(() => {
   }]
 })
 
-function nearestX(fraction: number): number | null {
+function nearestXFromFraction(fraction: number): number | null {
   const span = props.frame.toMs - props.frame.fromMs
   if (span <= 0) return null
   const target = props.frame.fromMs + fraction * span
-  const pts = allPoints.value
-  if (!pts.length) return target
-  let best = pts[0].x
-  let bestDist = Math.abs(best - target)
-  for (let i = 1; i < pts.length; i += 1) {
-    const d = Math.abs(pts[i].x - target)
-    if (d < bestDist) {
-      bestDist = d
-      best = pts[i].x
-    }
-  }
-  return best
+  return nearestPointX(target)
+}
+
+function chartRect(currentTarget: EventTarget | null): DOMRect | null {
+  const el = currentTarget as HTMLElement | null
+  if (!el) return null
+  return (el.querySelector('.time-chart') ?? el).getBoundingClientRect()
 }
 
 function onPointer(event: PointerEvent) {
-  if (pinned.value && event.type === 'pointermove') return
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  if (rect.width <= 0) return
-  const snapped = nearestX(plotFraction(event.clientX, rect))
+  if (isPinned.value && event.type === 'pointermove') return
+  const rect = chartRect(event.currentTarget)
+  if (!rect || rect.width <= 0) return
+  const snapped = nearestXFromFraction(plotFraction(event.clientX, rect))
   if (snapped !== null) {
-    cursorMs.value = snapped
+    localCursorMs.value = snapped
     pointerPos.value = { x: event.clientX, y: event.clientY }
     hoverActive.value = true
+    if (isSynced.value) emit('sync-hover', snapped - props.frame.originMs)
   }
 }
 
 function onPointerLeave() {
-  if (!pinned.value) {
+  if (!isPinned.value) {
     hoverActive.value = false
-    cursorMs.value = null
+    localCursorMs.value = null
+    if (isSynced.value) emit('sync-leave')
   }
 }
 
 function onClick(event: MouseEvent) {
-  if (cursorMs.value === null) return
-  if (pinned.value) {
-    pinned.value = false
-    return
-  }
+  const rect = chartRect(event.currentTarget)
+  const snapped = rect && rect.width > 0
+    ? nearestXFromFraction(plotFraction(event.clientX, rect))
+    : cursorMs.value
+  if (snapped === null) return
   pointerPos.value = { x: event.clientX, y: event.clientY }
   hoverActive.value = true
-  pinned.value = true
+  if (isSynced.value) {
+    emit('sync-pin', snapped - props.frame.originMs)
+    return
+  }
+  if (localPinned.value) {
+    localPinned.value = false
+    return
+  }
+  localCursorMs.value = snapped
+  localPinned.value = true
 }
 
 function unpin() {
-  pinned.value = false
   hoverActive.value = false
-  cursorMs.value = null
+  if (isSynced.value) {
+    emit('sync-unpin')
+    return
+  }
+  localPinned.value = false
+  localCursorMs.value = null
 }
 
 function onKeyDown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && pinned.value) unpin()
+  if (!isSynced.value && event.key === 'Escape' && localPinned.value) unpin()
 }
 
 onMounted(() => window.addEventListener('keydown', onKeyDown))
@@ -214,16 +270,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
       :flags="flags"
       :cursor-ms="cursorMs"
       :cursor-value="formattedVal"
-      :hide-inline-value="hoverActive || pinned"
+      :hide-inline-value="true"
     />
     <ChartFloatingTooltip
-      :visible="(hoverActive || pinned) && cursorMs !== null"
+      :visible="tooltipVisible"
       :client-x="pointerPos.x"
       :client-y="pointerPos.y"
       :title="formattedTime"
       :meta="activeStage"
       :sections="tooltipSections"
-      :pinned="pinned"
+      :pinned="isPinned"
       @unpin="unpin"
     />
   </div>

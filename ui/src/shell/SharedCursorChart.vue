@@ -35,18 +35,57 @@ const props = withDefaults(defineProps<{
   transactions?: TransactionCatalogItem[]
   runId?: string
   analysisId?: string
+  syncOffsetMs?: number | null
+  syncPinned?: boolean
+  syncActive?: boolean
 }>(), {
   stages: () => [],
   p95Thresholds: () => [],
   transactions: () => [],
   runId: '',
   analysisId: '',
+  syncOffsetMs: undefined,
+  syncPinned: undefined,
+  syncActive: undefined,
 })
 
-const cursor = ref<number | null>(null)
+const emit = defineEmits<{
+  'sync-hover': [offsetMs: number]
+  'sync-scrub': [offsetMs: number]
+  'sync-leave': []
+  'sync-pin': [offsetMs: number]
+  'sync-unpin': []
+}>()
+
+const localCursor = ref<number | null>(null)
 const pointerPos = ref({ x: 0, y: 0 })
 const hoverActive = ref(false)
-const pinned = ref(false)
+const localPinned = ref(false)
+
+const isSynced = computed(() => props.syncOffsetMs !== undefined)
+const pinned = computed(() => (props.syncPinned !== undefined ? props.syncPinned : localPinned.value))
+const isActive = computed(() => (props.syncActive !== undefined ? props.syncActive : true))
+
+function nearestIndexForMs(targetMs: number): number | null {
+  const pts = props.series.points
+  if (!pts.length) return null
+  let best = 0
+  let bestDist = Math.abs(pts[0].startMs - targetMs)
+  for (let i = 1; i < pts.length; i += 1) {
+    const d = Math.abs(pts[i].startMs - targetMs)
+    if (d < bestDist) {
+      bestDist = d
+      best = i
+    }
+  }
+  return best
+}
+
+const cursor = computed<number | null>(() => {
+  if (!isSynced.value) return localCursor.value
+  if (props.syncOffsetMs === null || props.syncOffsetMs === undefined) return null
+  return nearestIndexForMs(props.syncOffsetMs)
+})
 
 const rpsMode = ref<'total' | 'tx'>('total')
 const txStacked = ref(true)
@@ -69,8 +108,8 @@ const tracks: Array<{ key: TrackKey; label: string; color: string; colorVar: str
 ]
 
 watch(() => props.series, () => {
-  cursor.value = null
-  pinned.value = false
+  localCursor.value = null
+  localPinned.value = false
   hoverActive.value = false
 })
 
@@ -315,48 +354,85 @@ const tooltipSections = computed<FloatingTooltipSection[]>(() => {
   return sections
 })
 
+const tooltipVisible = computed(() =>
+  isActive.value && (hoverActive.value || pinned.value) && cursorMs.value !== null,
+)
+
+function plotRect(currentTarget: EventTarget | null): DOMRect | null {
+  const el = currentTarget as HTMLElement | null
+  if (!el) return null
+  return (el.querySelector('.time-chart') ?? el).getBoundingClientRect()
+}
+
 function onPointer(event: PointerEvent) {
   if (pinned.value && event.type === 'pointermove') return
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  if (rect.width <= 0) return
+  const rect = plotRect(event.currentTarget)
+  if (!rect || rect.width <= 0) return
   const index = nearestIndex(props.series, plotFraction(event.clientX, rect))
   if (index !== -1) {
-    cursor.value = index
+    localCursor.value = index
     pointerPos.value = { x: event.clientX, y: event.clientY }
     hoverActive.value = true
+    if (isSynced.value) emit('sync-hover', props.series.points[index].startMs)
   }
 }
 
 function onPointerLeave() {
-  if (!pinned.value) hoverActive.value = false
+  if (!pinned.value) {
+    hoverActive.value = false
+    if (isSynced.value) emit('sync-leave')
+  }
 }
 
 function onPlotClick(event: MouseEvent) {
-  if (cursor.value === null) return
-  if (pinned.value) {
-    pinned.value = false
-    return
-  }
+  const rect = plotRect(event.currentTarget)
+  const index = rect && rect.width > 0
+    ? nearestIndex(props.series, plotFraction(event.clientX, rect))
+    : (cursor.value ?? -1)
+  if (index === -1) return
   pointerPos.value = { x: event.clientX, y: event.clientY }
   hoverActive.value = true
-  pinned.value = true
+  if (isSynced.value) {
+    emit('sync-pin', props.series.points[index].startMs)
+    return
+  }
+  if (localPinned.value) {
+    localPinned.value = false
+    return
+  }
+  localCursor.value = index
+  localPinned.value = true
 }
 
 function unpin() {
-  pinned.value = false
   hoverActive.value = false
+  if (isSynced.value) {
+    emit('sync-unpin')
+    return
+  }
+  localPinned.value = false
 }
 
 function onKeyDown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && pinned.value) unpin()
+  if (!isSynced.value && event.key === 'Escape' && localPinned.value) unpin()
 }
 
 function focusCursor(event: FocusEvent) {
-  if (cursor.value === null) cursor.value = Number((event.target as HTMLInputElement).value)
+  if (cursor.value === null) {
+    const idx = Number((event.target as HTMLInputElement).value)
+    localCursor.value = idx
+    hoverActive.value = false
+    const pt = props.series.points[idx]
+    if (isSynced.value && pt) emit('sync-scrub', pt.startMs)
+  }
 }
 
 function inputCursor(event: Event) {
-  cursor.value = Number((event.target as HTMLInputElement).value)
+  const idx = Number((event.target as HTMLInputElement).value)
+  localCursor.value = idx
+  hoverActive.value = false
+  const pt = props.series.points[idx]
+  if (isSynced.value && pt) emit('sync-scrub', pt.startMs)
 }
 
 onMounted(() => window.addEventListener('keydown', onKeyDown))
@@ -711,13 +787,13 @@ onBeforeUnmount(() => {
           :cursor-ms="cursorMs"
           :cursor-value="readout ? `${readout[track.key]}${units[track.key]}` : ''"
           :cursor-time="track.key === 'p95' ? readout?.time ?? null : null"
-          :hide-inline-value="hoverActive || pinned"
+          :hide-inline-value="tooltipVisible"
         />
       </div>
     </div>
 
     <ChartFloatingTooltip
-      :visible="(hoverActive || pinned) && cursorMs !== null"
+      :visible="tooltipVisible"
       :client-x="pointerPos.x"
       :client-y="pointerPos.y"
       :title="readout ? `+${readout.time}` : ''"

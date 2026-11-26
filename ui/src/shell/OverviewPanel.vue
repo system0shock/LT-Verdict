@@ -67,6 +67,52 @@ const loadError = ref('')
 const series = computed(() => loadSeries(runLoad.value.buckets, runLoad.value.rollupSeconds))
 const controller = new AbortController()
 
+// Synchronized crosshair across ALL charts on Overview (Main Load, Incidents, Platform, Trends — matching mockup v4.4)
+const syncOffsetMs = ref<number | null>(null)
+const syncPinned = ref(false)
+const syncActiveChart = ref<string | null>(null)
+
+function onSyncHover(chartId: string, offsetMs: number) {
+  if (syncPinned.value) return
+  syncOffsetMs.value = offsetMs
+  syncActiveChart.value = chartId
+}
+
+function onSyncScrub(offsetMs: number) {
+  syncOffsetMs.value = offsetMs
+  if (!syncPinned.value) syncActiveChart.value = null
+}
+
+function onSyncLeave(chartId: string) {
+  if (syncPinned.value) return
+  if (syncActiveChart.value === chartId) {
+    syncActiveChart.value = null
+    syncOffsetMs.value = null
+  }
+}
+
+function onSyncPin(chartId: string, offsetMs: number) {
+  if (syncPinned.value) {
+    syncPinned.value = false
+    syncOffsetMs.value = offsetMs
+    syncActiveChart.value = chartId
+    return
+  }
+  syncOffsetMs.value = offsetMs
+  syncActiveChart.value = chartId
+  syncPinned.value = true
+}
+
+function onSyncUnpin() {
+  syncPinned.value = false
+  syncActiveChart.value = null
+  syncOffsetMs.value = null
+}
+
+function onGlobalKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && syncPinned.value) onSyncUnpin()
+}
+
 function sparklineLane(seriesId: string, color: ChartToken = 'brand'): ChartLane | null {
   const track = sparklineTracks.value.get(seriesId)
   if (!track || !sparklineFrame.value) return null
@@ -130,7 +176,7 @@ function incidentChart(card: IncidentCard): {
     const track = sparklineTracks.value.get(seriesId)
     if (lane && track) {
       return {
-        lane,
+        lane: { ...lane, key: `inc:${card.id}` },
         frame: sparklineFrame.value,
         stages: [],
         label: track.label,
@@ -162,7 +208,7 @@ function incidentChart(card: IncidentCard): {
     }
     const base = loadLane(series.value, metric, metric === 'p95' ? (thresholds.length ? thresholds : p95Thresholds.value) : [])
     return {
-      lane: { ...base, color: metric === 'errors' ? 'fail' : color, area: metric !== 'errors', bars: metric === 'errors' },
+      lane: { ...base, key: `inc:${card.id}`, color: metric === 'errors' ? 'fail' : color, area: metric !== 'errors', bars: metric === 'errors' },
       frame: loadFrame(series.value),
       stages: stages.value,
       label: metric === 'errors' ? OVERVIEW_LABELS.trackErrors : metric === 'rps' ? OVERVIEW_LABELS.trackRps : `${OVERVIEW_LABELS.trackP95} (${card.scopeLabel})`,
@@ -229,6 +275,7 @@ async function loadSparklines() {
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', onGlobalKeyDown)
   if (props.result.run_validity === 'INVALID') return
   loading.value = true
   const sparklinePromise = loadSparklines()
@@ -242,7 +289,10 @@ onMounted(async () => {
   }
   await sparklinePromise
 })
-onUnmounted(() => controller.abort())
+onUnmounted(() => {
+  window.removeEventListener('keydown', onGlobalKeyDown)
+  controller.abort()
+})
 
 async function jumpToIncident(incidentId: string) {
   if (incidents.value.moreItems.some((item) => item.id === incidentId)) {
@@ -350,6 +400,14 @@ const kindLabels: Record<AttentionKind, string> = {
         :transactions="transactions"
         :run-id="runId"
         :analysis-id="analysisId"
+        :sync-offset-ms="syncOffsetMs"
+        :sync-pinned="syncPinned"
+        :sync-active="syncActiveChart === 'main-load'"
+        @sync-hover="(ms) => onSyncHover('main-load', ms)"
+        @sync-scrub="onSyncScrub"
+        @sync-leave="onSyncLeave('main-load')"
+        @sync-pin="(ms) => onSyncPin('main-load', ms)"
+        @sync-unpin="onSyncUnpin"
       />
       <p
         v-else
@@ -452,6 +510,13 @@ const kindLabels: Record<AttentionKind, string> = {
                 :unit="incidentChart(card)!.unit"
                 :decimals="incidentChart(card)!.decimals"
                 :plot-height="96"
+                :sync-offset-ms="syncOffsetMs"
+                :sync-pinned="syncPinned"
+                :sync-active="syncActiveChart === `inc:${card.id}`"
+                @sync-hover="(ms) => onSyncHover(`inc:${card.id}`, ms)"
+                @sync-leave="onSyncLeave(`inc:${card.id}`)"
+                @sync-pin="(ms) => onSyncPin(`inc:${card.id}`, ms)"
+                @sync-unpin="onSyncUnpin"
               />
             </div>
             <p class="inc-card__summary">
@@ -586,6 +651,13 @@ const kindLabels: Record<AttentionKind, string> = {
                   :unit="incidentChart(card)!.unit"
                   :decimals="incidentChart(card)!.decimals"
                   :plot-height="96"
+                  :sync-offset-ms="syncOffsetMs"
+                  :sync-pinned="syncPinned"
+                  :sync-active="syncActiveChart === `inc-more:${card.id}`"
+                  @sync-hover="(ms) => onSyncHover(`inc-more:${card.id}`, ms)"
+                  @sync-leave="onSyncLeave(`inc-more:${card.id}`)"
+                  @sync-pin="(ms) => onSyncPin(`inc-more:${card.id}`, ms)"
+                  @sync-unpin="onSyncUnpin"
                 />
               </div>
               <p class="inc-card__summary">
@@ -680,6 +752,13 @@ const kindLabels: Record<AttentionKind, string> = {
             :unit="tile.unit ?? ''"
             :plot-height="78"
             :max-time-intervals="2"
+            :sync-offset-ms="syncOffsetMs"
+            :sync-pinned="syncPinned"
+            :sync-active="syncActiveChart === `plat:${tile.seriesId}`"
+            @sync-hover="(ms) => onSyncHover(`plat:${tile.seriesId}`, ms)"
+            @sync-leave="onSyncLeave(`plat:${tile.seriesId}`)"
+            @sync-pin="(ms) => onSyncPin(`plat:${tile.seriesId}`, ms)"
+            @sync-unpin="onSyncUnpin"
           />
           <p class="v4-sub tile-card__meta">
             {{ tile.entity }} · {{ tile.metric }} · {{ tile.windowId }}
@@ -759,6 +838,13 @@ const kindLabels: Record<AttentionKind, string> = {
             :label="card.seriesId"
             :unit="card.unit ?? ''"
             :plot-height="94"
+            :sync-offset-ms="syncOffsetMs"
+            :sync-pinned="syncPinned"
+            :sync-active="syncActiveChart === `trend:${card.id}`"
+            @sync-hover="(ms) => onSyncHover(`trend:${card.id}`, ms)"
+            @sync-leave="onSyncLeave(`trend:${card.id}`)"
+            @sync-pin="(ms) => onSyncPin(`trend:${card.id}`, ms)"
+            @sync-unpin="onSyncUnpin"
           />
           <p class="tile-card__stats v4-sub v4-num">
             <span>{{ OVERVIEW_LABELS.trendsSlope(card.slope, card.unit) }}</span>

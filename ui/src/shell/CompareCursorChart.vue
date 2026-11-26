@@ -151,7 +151,8 @@ const tooltipSections = computed<FloatingTooltipSection[]>(() => {
 
 function onPointer(event: PointerEvent) {
   if (pinned.value && event.type === 'pointermove') return
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const hostEl = event.currentTarget as HTMLElement
+  const rect = (hostEl.querySelector('.time-chart') ?? hostEl).getBoundingClientRect()
   if (rect.width <= 0) return
   const index = nearestStopIndex(stops.value, frame.value, plotFraction(event.clientX, rect))
   if (index !== -1) {

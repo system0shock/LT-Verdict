@@ -55,7 +55,15 @@ const newest = computed(() => releases.value[0] ?? null)
 const newestArm = computed(() => newest.value?.analyses[0]?.arm ?? null)
 const suggested = computed(() => (newest.value ? suggestManualBaseline(releases.value, newest.value, newestArm.value) : null))
 const statistical = computed(() => (newest.value ? statisticalAvailability(releases.value, newest.value, newestArm.value) : null))
-const points = computed(() => dynamicsPoints(rows.value, (analysisId) => metricOf(analysisId, 'response_time_p95_ms')))
+const dynamicsMetric = ref<'response_time_p95_ms' | 'throughput_rps' | 'error_rate_ratio'>('response_time_p95_ms')
+const dynamicsMetricMeta = computed(() => (
+  dynamicsMetric.value === 'throughput_rps'
+    ? { label: 'Интенсивность (RPS)', unit: 'зпр/с' }
+    : dynamicsMetric.value === 'error_rate_ratio'
+      ? { label: 'Доля ошибок', unit: '' }
+      : { label: 'p95 отклика', unit: 'мс' }
+))
+const points = computed(() => dynamicsPoints(rows.value, (analysisId) => metricOf(analysisId, dynamicsMetric.value)))
 const baselineValue = computed(() => {
   const baselinePoint = points.value.find((point) => {
     const analysis = point.release.analyses[0]
@@ -382,11 +390,48 @@ async function save() {
       {{ notice }}
     </p>
 
+    <div
+      v-if="releases.length"
+      class="history-metric-switcher"
+      role="tablist"
+      aria-label="Метрика графика динамики релизов"
+    >
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="dynamicsMetric === 'response_time_p95_ms'"
+        data-testid="history-metric-p95"
+        @click="dynamicsMetric = 'response_time_p95_ms'"
+      >
+        p95 отклика
+      </button>
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="dynamicsMetric === 'throughput_rps'"
+        data-testid="history-metric-rps"
+        @click="dynamicsMetric = 'throughput_rps'"
+      >
+        RPS
+      </button>
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="dynamicsMetric === 'error_rate_ratio'"
+        data-testid="history-metric-errors"
+        @click="dynamicsMetric = 'error_rate_ratio'"
+      >
+        Доля ошибок
+      </button>
+    </div>
+
     <HistoryDynamics
       v-if="releases.length"
       :points="points"
       :hidden="hiddenLabels"
       :baseline-value="baselineValue"
+      :metric-label="dynamicsMetricMeta.label"
+      :unit="dynamicsMetricMeta.unit"
     />
 
     <div

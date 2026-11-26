@@ -3,7 +3,26 @@ import { nextTick } from 'vue'
 import { SHELL_LABELS, SHELL_TABS, type ShellTabKey } from './labels'
 import { SHELL_PANEL_ID, shellTabId } from './shell'
 
+const props = withDefaults(defineProps<{
+  badges?: Partial<Record<ShellTabKey, { text: string; tone?: 'crit' | 'accent' | 'neutral' }>>
+}>(), {
+  badges: () => ({}),
+})
+
 const model = defineModel<ShellTabKey>({ required: true })
+
+const ICONS: Record<ShellTabKey, string> = {
+  setup: '+',
+  overview: '⊞',
+  deep: '📈',
+  tables: '▤',
+  compare: '⇄',
+  history: '↺',
+  rules: '☰',
+  advice: '✦',
+}
+
+const PROJECT_KEYS = new Set<ShellTabKey>(['history', 'rules'])
 
 async function moveTo(index: number) {
   const count = SHELL_TABS.length
@@ -39,25 +58,47 @@ function onKeydown(event: KeyboardEvent, index: number) {
       aria-orientation="vertical"
       :aria-label="SHELL_LABELS.navLabel"
     >
-      <button
+      <template
         v-for="(tab, index) in SHELL_TABS"
-        :id="shellTabId(tab.key)"
         :key="tab.key"
-        type="button"
-        role="tab"
-        class="nav-item shell-tab"
-        :aria-selected="model === tab.key"
-        :aria-controls="SHELL_PANEL_ID"
-        :tabindex="model === tab.key ? 0 : -1"
-        @click="model = tab.key"
-        @keydown="onKeydown($event, index)"
       >
-        <span>{{ tab.label }}</span>
         <span
-          v-if="tab.pending"
-          class="shell-tab__badge"
-        >{{ SHELL_LABELS.pendingBadge }}</span>
-      </button>
+          v-if="index === 1"
+          class="shell-nav-group"
+          aria-hidden="true"
+        >Открытый прогон</span>
+        <span
+          v-if="PROJECT_KEYS.has(tab.key) && !PROJECT_KEYS.has(SHELL_TABS[index - 1]?.key)"
+          class="shell-nav-group"
+          aria-hidden="true"
+        >Проект</span>
+        <button
+          :id="shellTabId(tab.key)"
+          type="button"
+          role="tab"
+          class="nav-item shell-tab"
+          :class="{ 'shell-tab--primary': tab.key === 'setup' }"
+          :aria-selected="model === tab.key"
+          :aria-controls="SHELL_PANEL_ID"
+          :tabindex="model === tab.key ? 0 : -1"
+          @click="model = tab.key"
+          @keydown="onKeydown($event, index)"
+        >
+          <span
+            class="shell-tab__label"
+            :data-icon="ICONS[tab.key]"
+          >{{ tab.label }}</span>
+          <span
+            v-if="props.badges[tab.key]"
+            class="shell-tab__badge"
+            :class="props.badges[tab.key]?.tone ? `shell-tab__badge--${props.badges[tab.key]!.tone}` : ''"
+          >{{ props.badges[tab.key]!.text }}</span>
+          <span
+            v-else-if="tab.pending"
+            class="shell-tab__badge"
+          >{{ SHELL_LABELS.pendingBadge }}</span>
+        </button>
+      </template>
     </div>
   </nav>
 </template>

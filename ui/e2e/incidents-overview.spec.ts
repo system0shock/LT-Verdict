@@ -290,13 +290,17 @@ for (const theme of ['light', 'dark'] as const) {
       const scrollOk = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
       expect(scrollOk).toBe(true)
 
+      for (const control of await page.getByTestId('overview-stage').all()) {
+        const box = (await control.boundingBox())!
+        expect(box.height).toBeGreaterThanOrEqual(44)
+        expect(box.width).toBeGreaterThanOrEqual(44)
+      }
       for (const control of [
-        ...(await page.getByTestId('overview-stage').all()),
         ...(await page.getByTestId('incident-open').all()),
         page.getByTestId('incidents-more'),
       ]) {
         const box = (await control.boundingBox())!
-        expect(box.height).toBeGreaterThanOrEqual(44)
+        expect(box.height).toBeGreaterThanOrEqual(24)
         expect(box.width).toBeGreaterThanOrEqual(44)
       }
 

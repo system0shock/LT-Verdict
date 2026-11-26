@@ -815,16 +815,25 @@ export function trendOverview(result: AnalysisResult): TrendOverview | null {
   const cards: TrendOverviewCard[] = observedChecks.slice(0, 6).map((check) => {
     const dir = check.observed_direction
     const directionLabel = dir === 'increase' ? 'рост' : dir === 'decrease' ? 'снижение' : dir === 'flat' ? 'без изменений' : 'не определено'
+    const rawSlope = check.slope_per_second !== null && check.slope_per_second !== undefined ? Number(check.slope_per_second) : Number.NaN
+    let formattedSlope = decimal(check.slope_per_second) || '—'
+    let slopeUnit = check.unit
+    if (Number.isFinite(rawSlope) && rawSlope !== 0 && Math.abs(rawSlope) < 0.05) {
+      const perHour = rawSlope * 3600
+      const sign = perHour > 0 ? '+' : ''
+      formattedSlope = `${sign}${formatNumber(perHour, 2)}`
+      slopeUnit = check.unit === '%' ? 'п.п./ч' : `${check.unit ?? 'ед.'}/ч`
+    }
     return {
       id: check.id,
       checkId: check.check_id,
       seriesId: check.series_id,
       entity: check.entity,
-      unit: check.unit,
+      unit: slopeUnit,
       windowId: check.window_id,
       direction: dir,
       directionLabel,
-      slope: decimal(check.slope_per_second) || '—',
+      slope: formattedSlope,
       shift: decimal(check.split_half_shift) || '—',
       median: decimal(check.median) || '—',
     }
@@ -901,4 +910,51 @@ export function platformTiles(result: AnalysisResult, limit = 8): PlatformTile[]
       return a.seriesId < b.seriesId ? -1 : a.seriesId > b.seriesId ? 1 : 0
     })
     .slice(0, limit)
+}
+
+export interface TransactionCatalogItem {
+  label: string
+  sampleCount: number
+  avgRps: number
+  p50Ms: number
+  p95Ms: number
+  p99Ms: number
+  errorRatePct: number
+  status: 'FAIL' | 'WARN' | 'PASS'
+}
+
+export function transactionCatalog(result: AnalysisResult): TransactionCatalogItem[] {
+  const failedTx = new Set<string>()
+  for (const item of result.evidence) {
+    if (item.type === 'policy_check' && item.status === 'FAIL' && item.scope?.kind === 'transaction' && item.scope.label) {
+      failedTx.add(item.scope.label)
+    }
+  }
+  const byLabel = new Map<string, TransactionCatalogItem>()
+  for (const item of result.evidence) {
+    if (item.type !== 'metric_summary' || item.scope.kind !== 'transaction' || !item.scope.label) continue
+    if (item.window_id !== undefined && item.window_id !== null) continue
+    const label = item.scope.label
+    const rps = item.throughput_rps && item.throughput_rps.denominator > 0
+      ? item.throughput_rps.numerator / item.throughput_rps.denominator
+      : 0
+    const errPct = item.error_rate_ratio && item.error_rate_ratio.denominator > 0
+      ? (item.error_rate_ratio.numerator / item.error_rate_ratio.denominator) * 100
+      : 0
+    const status: 'FAIL' | 'WARN' | 'PASS' = failedTx.has(label) ? 'FAIL' : errPct > 0.2 ? 'WARN' : 'PASS'
+    byLabel.set(label, {
+      label,
+      sampleCount: item.sample_count,
+      avgRps: rps,
+      p50Ms: item.latency_ms.p50,
+      p95Ms: item.latency_ms.p95,
+      p99Ms: item.latency_ms.p99,
+      errorRatePct: errPct,
+      status,
+    })
+  }
+  return [...byLabel.values()].sort((a, b) => {
+    const rank = { FAIL: 0, WARN: 1, PASS: 2 }
+    return rank[a.status] - rank[b.status] || b.avgRps - a.avgRps
+  })
 }

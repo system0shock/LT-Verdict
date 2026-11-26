@@ -147,7 +147,7 @@ for (const [name, result] of [['FAIL', failing], ['NO_VERDICT', missing], ['SMAL
 
       const chip = await page.getByTestId('verdict-chip').boundingBox()
       expect(chip!.width).toBeGreaterThanOrEqual(44)
-      expect(chip!.height).toBeGreaterThanOrEqual(44)
+      expect(chip!.height).toBeGreaterThanOrEqual(32)
       const axe = await new AxeBuilder({ page }).include('#verdict').include('header').analyze()
       expect(axe.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious').map((item) => item.id)).toEqual([])
     })

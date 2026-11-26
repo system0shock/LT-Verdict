@@ -14,10 +14,13 @@ const props = defineProps<{
   result: AnalysisResult
 }>()
 
+const emit = defineEmits<{ 'open-service': [service: string] }>()
+
 const loaded = ref<Record<string, AnalysisResult>>({})
 const failures = ref<Record<string, string>>({})
 const loading = ref(false)
 const onlyProblems = ref(false)
+const search = ref('')
 const picks = computed(() => armAnalyses(props.analyses, props.analysisId))
 const results = computed<ArmResult[]>(() => picks.value.map((pick) => ({
   arm: pick.arm,
@@ -25,7 +28,11 @@ const results = computed<ArmResult[]>(() => picks.value.map((pick) => ({
 })))
 const map = computed(() => buildServiceArmMap(results.value))
 const problems = computed(() => new Set(problemServices(map.value)))
-const rows = computed(() => onlyProblems.value ? map.value.services.filter((service) => problems.value.has(service)) : map.value.services)
+const rows = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  const base = onlyProblems.value ? map.value.services.filter((service) => problems.value.has(service)) : map.value.services
+  return q ? base.filter((service) => service.toLowerCase().includes(q)) : base
+})
 const duplicates = computed(() => picks.value.filter((pick) => pick.analysesOfArm > 1))
 const controller = new AbortController()
 
@@ -55,14 +62,40 @@ const cellOf = (service: string, arm: string) => map.value.cells.find((cell) => 
     data-testid="platform-map"
     aria-labelledby="overview-platform-map-title"
   >
-    <h2 id="overview-platform-map-title">
-      {{ LABELS.title }}
-    </h2>
-    <p class="muted">
-      {{ LABELS.lead }}
-    </p>
+    <div class="platform-map__head">
+      <div>
+        <h2 id="overview-platform-map-title">
+          {{ LABELS.title }}
+        </h2>
+        <p class="v4-sub">
+          {{ LABELS.lead }}
+        </p>
+      </div>
+      <div
+        v-if="map.services.length"
+        class="platform-map__controls"
+      >
+        <input
+          v-model="search"
+          type="search"
+          class="v4-inp"
+          data-testid="platform-map-search"
+          placeholder="Поиск сервиса…"
+          aria-label="Поиск сервиса в матрице плеч"
+        >
+        <label class="v4-check">
+          <input
+            v-model="onlyProblems"
+            type="checkbox"
+            data-testid="platform-map-only-problems"
+          >
+          {{ LABELS.onlyProblems }}
+        </label>
+      </div>
+    </div>
     <p
       v-if="loading"
+      class="v4-sub"
       role="status"
       data-testid="platform-map-loading"
     >
@@ -79,24 +112,20 @@ const cellOf = (service: string, arm: string) => map.value.cells.find((cell) => 
     </p>
     <p
       v-if="!map.services.length && !loading"
+      class="v4-sub"
       data-testid="platform-map-empty"
     >
       {{ LABELS.empty }}
     </p>
     <template v-else-if="map.services.length">
-      <p data-testid="platform-map-summary">
+      <p
+        class="v4-sub"
+        data-testid="platform-map-summary"
+      >
         {{ problems.size ? LABELS.summary(problems.size, map.services.length) : LABELS.noProblems }}
       </p>
-      <label class="platform-map__filter">
-        <input
-          v-model="onlyProblems"
-          type="checkbox"
-          data-testid="platform-map-only-problems"
-        >
-        {{ LABELS.onlyProblems }}
-      </label>
       <div
-        class="table-wrap"
+        class="v4-table-wrap platform-map__scroll"
         tabindex="0"
         role="region"
         :aria-label="LABELS.region"
@@ -105,7 +134,7 @@ const cellOf = (service: string, arm: string) => map.value.cells.find((cell) => 
           <thead>
             <tr>
               <th scope="col">
-                {{ LABELS.service }}
+                {{ LABELS.service }} ({{ rows.length }})
               </th>
               <th
                 v-for="arm in map.arms"
@@ -125,7 +154,13 @@ const cellOf = (service: string, arm: string) => map.value.cells.find((cell) => 
               :data-service="service"
             >
               <th scope="row">
-                {{ service }}
+                <button
+                  type="button"
+                  class="platform-map__service-btn"
+                  @click="emit('open-service', service)"
+                >
+                  {{ service }}
+                </button>
               </th>
               <td
                 v-for="arm in map.arms"
@@ -159,17 +194,40 @@ const cellOf = (service: string, arm: string) => map.value.cells.find((cell) => 
           </tbody>
         </table>
       </div>
+      <p
+        v-for="pick in duplicates"
+        :key="pick.arm"
+        class="v4-sub"
+        data-testid="platform-map-duplicate-note"
+      >
+        {{ LABELS.duplicates(pick.arm, pick.analysesOfArm) }}
+      </p>
     </template>
-    <p
-      v-for="pick in duplicates"
-      :key="pick.arm"
-      class="muted"
-      data-testid="platform-map-duplicates"
-    >
-      {{ LABELS.duplicates(pick.arm, pick.analysesOfArm) }}
-    </p>
-    <p class="muted">
-      {{ LABELS.limit }}
-    </p>
   </section>
 </template>
+
+<style scoped>
+.platform-map {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.platform-map__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 14px;
+}
+
+.platform-map__head h2 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.platform-map__scroll {
+  max-height: 380px;
+  overflow-y: auto;
+}
+</style>

@@ -195,7 +195,8 @@ export const OVERVIEW_LABELS = {
   trendsSummaryCounts: (total: number, observed: number, notMaterial: number, insufficient: number, unavailable: number) =>
     `Проверок: ${total}. Наблюдается: ${observed}. Не существенно: ${notMaterial}. Мало данных: ${insufficient}. Недоступно: ${unavailable}.`,
   trendsEmpty: 'Существенных трендов в устойчивом окне не обнаружено.',
-  trendsSlope: (slope: string, unit: string | null) => `Наклон: ${slope}${unit ? ` ${unit}` : ''}/с`,
+  trendsSlope: (slope: string, unit: string | null) =>
+    slope.includes('/') ? `Наклон: ${slope}` : `Наклон: ${slope}${unit ? ` ${unit}` : ''}/с`,
   trendsShift: (shift: string, unit: string | null) => `Сдвиг половин окна: ${shift}${unit ? ` ${unit}` : ''}`,
   trendsMedian: (median: string, unit: string | null) => `Медиана: ${median}${unit ? ` ${unit}` : ''}`,
   trendsOpenDeep: 'Открыть ряд в глубоком анализе',

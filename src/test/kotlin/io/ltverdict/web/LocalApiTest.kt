@@ -100,6 +100,68 @@ class LocalApiTest {
     lateinit var tempDir: Path
 
     @Test
+    fun `transaction-buckets caches per-transaction rollups outside identity and error-groups serves breakdown`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val jtlWithErrors =
+                (
+                    "timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success," +
+                        "failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect\n" +
+                        "1767225600000,120,POST /checkout,200,OK,t1,text,true,,0,0,1,1,null,0,0,0\n" +
+                        "1767225600500,850,POST /checkout,504,Gateway Time-out,t1,text,false,Gateway Time-out,0,0,1,1,null,0,0,0\n" +
+                        "1767225601000,45,GET /catalog,200,OK,t1,text,true,,0,0,1,1,null,0,0,0\n" +
+                        "1767225601500,55,GET /catalog,200,OK,t1,text,true,,0,0,1,1,null,0,0,0\n"
+                ).encodeToByteArray()
+            val input = store.acceptInput(jtlWithErrors.inputStream(), "tx-buckets-test.jtl")
+            val analysisId = api.createJob(input.runId).analysisId(api)
+            val base = "/api/runs/${input.runId}/analyses/$analysisId"
+            val resultBefore = api.get("$base/result").body()
+
+            val txRes = api.get("$base/transaction-buckets?rollup=1&tx=POST+%2Fcheckout&tx=GET+%2Fcatalog")
+            assertEquals(200, txRes.statusCode())
+            val body = txRes.jsonObject()
+            assertEquals(1L, body.getValue("rollup_seconds").jsonPrimitive.long)
+            val series = body.getValue("series").jsonArray
+            assertEquals(2, series.size)
+
+            val checkout = series[0].jsonObject
+            assertEquals("POST /checkout", checkout.getValue("tx").jsonPrimitive.content)
+            val checkoutBuckets = checkout.getValue("buckets").jsonArray
+            assertEquals(1, checkoutBuckets.size)
+            val cb = checkoutBuckets[0].jsonObject
+            assertEquals(0L, cb.getValue("bucket_start_ms").jsonPrimitive.long)
+            assertEquals(2L, cb.getValue("sample_count").jsonPrimitive.long)
+            assertEquals(1L, cb.getValue("error_count").jsonPrimitive.long)
+            assertEquals(850L, cb.getValue("max_latency_ms").jsonPrimitive.long)
+
+            val catalog = series[1].jsonObject
+            assertEquals("GET /catalog", catalog.getValue("tx").jsonPrimitive.content)
+            val catalogBuckets = catalog.getValue("buckets").jsonArray
+            assertEquals(1, catalogBuckets.size)
+            val gb = catalogBuckets[0].jsonObject
+            assertEquals(1000L, gb.getValue("bucket_start_ms").jsonPrimitive.long)
+            assertEquals(2L, gb.getValue("sample_count").jsonPrimitive.long)
+            assertEquals(0L, gb.getValue("error_count").jsonPrimitive.long)
+
+            // Validation guards
+            assertEquals(400, api.get("$base/transaction-buckets?rollup=1").statusCode())
+            assertEquals(400, api.get("$base/transaction-buckets?rollup=7&tx=POST+%2Fcheckout").statusCode())
+            val tooMany = (1..9).joinToString("&") { "tx=t$it" }
+            assertEquals(400, api.get("$base/transaction-buckets?rollup=1&$tooMany").statusCode())
+
+            // Error groups endpoint returns error-groups.v1 breakdown
+            val egRes = api.get("$base/error-groups")
+            assertEquals(200, egRes.statusCode())
+            val egBody = egRes.jsonObject()
+            assertEquals("error-groups.v1", egBody.getValue("schema_version").jsonPrimitive.content)
+            assertEquals(1L, egBody.getValue("total_error_count").jsonPrimitive.long)
+            assertEquals(1, egBody.getValue("groups").jsonArray.size)
+
+            // Analysis result bytes are completely unchanged (outside identity)
+            assertEquals(resultBefore, api.get("$base/result").body())
+        }
+
+    @Test
     fun `saved analytics is bounded read only and Confluence report is downloadable`() =
         withServer { store, api ->
             api.bootstrap()

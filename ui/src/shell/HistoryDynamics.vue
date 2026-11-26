@@ -7,6 +7,7 @@ import { SVGRenderer } from 'echarts/renderers'
 import { historyDynamicsOption, type DynamicsPoint, type HistoryChartColors } from './history'
 import { HISTORY_LABELS } from './labels.history'
 import { formatNumber } from './overview'
+import ChartFloatingTooltip, { type FloatingTooltipSection } from './ChartFloatingTooltip.vue'
 import { PLOT_INSET, plotFraction } from './timeChart'
 
 echarts.use([LineChart, GridComponent, MarkLineComponent, SVGRenderer])
@@ -15,13 +16,20 @@ const props = withDefaults(defineProps<{
   points: readonly DynamicsPoint[]
   hidden: readonly string[]
   baselineValue?: number | null
+  metricLabel?: string
+  unit?: string
 }>(), {
   baselineValue: null,
+  metricLabel: 'p95 отклика',
+  unit: 'мс',
 })
 
 const L = HISTORY_LABELS
 const host = ref<HTMLElement | null>(null)
 const selected = ref<number | null>(null)
+const pointerPos = ref({ x: 0, y: 0 })
+const hoverActive = ref(false)
+const pinned = ref(false)
 let chart: echarts.ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
 let themeObserver: MutationObserver | null = null
@@ -30,10 +38,45 @@ const systemTheme = window.matchMedia('(prefers-color-scheme: dark)')
 const summaries = computed(() =>
   props.points.map((point) => L.dynamicsPoint(point.release.label, point.verdict, formatNumber(point.value))),
 )
+const activePoint = computed(() => (selected.value === null ? null : props.points[selected.value] ?? null))
 const activeSummary = computed(() => (selected.value === null ? null : summaries.value[selected.value] ?? null))
 
+const tooltipSections = computed<FloatingTooltipSection[]>(() => {
+  const pt = activePoint.value
+  if (!pt) return []
+  const unitSuffix = props.unit ? ` ${props.unit}` : ''
+  const verdictColor = pt.verdict === 'PASS' ? '#34D399' : pt.verdict === 'FAIL' ? '#FF7B72' : '#FBBF24'
+  let deltaSub = ''
+  if (props.baselineValue !== null && Number.isFinite(props.baselineValue) && props.baselineValue !== 0) {
+    const pct = Math.round(((pt.value - props.baselineValue) / Math.abs(props.baselineValue)) * 100)
+    deltaSub = `(${pct > 0 ? '+' : ''}${pct}% к baseline)`
+  }
+  const rows = [
+    {
+      key: 'metric',
+      label: props.metricLabel,
+      value: `${formatNumber(pt.value)}${unitSuffix}`,
+      sub: deltaSub,
+      color: verdictColor,
+      breach: pt.verdict === 'FAIL',
+    },
+  ]
+  if (props.baselineValue !== null && Number.isFinite(props.baselineValue)) {
+    rows.push({
+      key: 'baseline',
+      label: 'Baseline',
+      value: `${formatNumber(props.baselineValue)}${unitSuffix}`,
+      sub: '',
+      color: '#94A3B8',
+      breach: false,
+    })
+  }
+  return [{ rows }]
+})
+
 function colors(): HistoryChartColors {
-  const css = getComputedStyle(document.documentElement)
+  const sourceEl = host.value?.closest('.shell') ?? document.documentElement
+  const css = getComputedStyle(sourceEl)
   const token = (name: string) => css.getPropertyValue(name).trim()
   return {
     brand: token('--brand'),
@@ -59,11 +102,36 @@ function draw() {
 
 function onPointer(event: PointerEvent) {
   if (!props.points.length) return
+  if (pinned.value && event.type === 'pointermove') return
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   if (rect.width <= 0) return
   const fraction = plotFraction(event.clientX, rect)
   const index = Math.min(props.points.length - 1, Math.max(0, Math.round(fraction * (props.points.length - 1))))
   selected.value = index
+  pointerPos.value = { x: event.clientX, y: event.clientY }
+  hoverActive.value = true
+}
+
+function onPointerLeave() {
+  if (!pinned.value) hoverActive.value = false
+}
+
+function onChartClick(event: MouseEvent) {
+  if (selected.value === null) return
+  if (pinned.value) {
+    pinned.value = false
+    return
+  }
+  pointerPos.value = { x: event.clientX, y: event.clientY }
+  hoverActive.value = true
+  pinned.value = true
+}
+
+function onKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && pinned.value) {
+    pinned.value = false
+    hoverActive.value = false
+  }
 }
 
 function focusCursor(event: FocusEvent) {
@@ -83,10 +151,13 @@ onMounted(() => {
   themeObserver = new MutationObserver(draw)
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
   systemTheme.addEventListener('change', draw)
+  window.addEventListener('keydown', onKeyDown)
 })
 
 watch(() => [props.points, props.baselineValue], () => {
   selected.value = null
+  pinned.value = false
+  hoverActive.value = false
   draw()
   if (host.value && resizeObserver) {
     resizeObserver.disconnect()
@@ -98,6 +169,7 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   themeObserver?.disconnect()
   systemTheme.removeEventListener('change', draw)
+  window.removeEventListener('keydown', onKeyDown)
   chart?.dispose()
   chart = null
 })
@@ -124,6 +196,8 @@ void PLOT_INSET
         :aria-label="L.dynamicsAria(points.length, summaries.join('; '))"
         @pointermove="onPointer"
         @pointerdown="onPointer"
+        @pointerleave="onPointerLeave"
+        @click="onChartClick"
       >
         <div
           ref="host"
@@ -131,6 +205,16 @@ void PLOT_INSET
           aria-hidden="true"
         />
       </div>
+      <ChartFloatingTooltip
+        :visible="(hoverActive || pinned) && activePoint !== null"
+        :client-x="pointerPos.x"
+        :client-y="pointerPos.y"
+        :title="activePoint?.release.label ?? ''"
+        :meta="activePoint?.verdict ?? ''"
+        :sections="tooltipSections"
+        :pinned="pinned"
+        @unpin="pinned = false; hoverActive = false"
+      />
       <p
         class="history-dynamics__readout"
         data-testid="history-dynamics-readout"
@@ -175,17 +259,18 @@ void PLOT_INSET
 
 .history-dynamics__chart {
   width: 100%;
-  max-width: 640px;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--surface-inset);
   touch-action: pan-y;
+  cursor: crosshair;
 }
 
 .history-dynamics__host {
   width: 100%;
-  height: 220px;
+  height: 230px;
   min-width: 0;
   overflow: hidden;
 }
@@ -197,7 +282,6 @@ void PLOT_INSET
 
 .history-dynamics__slider {
   width: 100%;
-  max-width: 640px;
   min-height: 44px;
   margin: 0;
 }

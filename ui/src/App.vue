@@ -861,7 +861,8 @@ async function selectRun(run: RunSummary, options: { autoOpen?: boolean } = {}) 
     await refreshAnalyses(run.run_id)
     if (revision !== analysisRevision) return
     if (options.autoOpen !== false && analyses.value.length > 0) {
-      await selectAnalysis(analyses.value[0], { tabAtStart })
+      const preferred = analyses.value.find((item) => !!item.resource_arm || !!item.resource_snapshot_sha256) ?? analyses.value[0]
+      await selectAnalysis(preferred, { tabAtStart })
     }
   } catch (failure) {
     if (revision === analysisRevision) showError(failure)
@@ -1023,96 +1024,134 @@ async function jumpTo(target: AttentionTarget) {
     : element.querySelector<HTMLElement>('[tabindex="0"]')
   focusable?.focus({ preventScroll: true })
 }
+const tabBadges = computed<Partial<Record<ShellTabKey, { text: string; tone?: 'crit' | 'accent' | 'neutral' }>>>(() => {
+  const out: Partial<Record<ShellTabKey, { text: string; tone?: 'crit' | 'accent' | 'neutral' }>> = {}
+  const res = result.value
+  if (res) {
+    const failedCount = res.evidence.filter((e) => (e.type === 'policy_check' || e.type === 'resource_policy_check') && e.status === 'FAIL').length
+    if (failedCount > 0) out.tables = { text: String(failedCount), tone: 'crit' }
+    const incCount = res.incidents?.total_count ?? 0
+    if (incCount > 0) out.overview = { text: String(incCount), tone: 'crit' }
+  }
+  if (runs.value.length > 0) out.history = { text: String(runs.value.length), tone: 'accent' }
+  return out
+})
+
+const scaleBadges = computed(() => {
+  const res = result.value
+  if (!res) return ''
+  const txCount = res.evidence.filter((e) => e.type === 'metric_summary' && e.scope.kind === 'transaction').length
+  const services = new Set<string>()
+  for (const e of res.evidence) {
+    if ((e.type === 'resource_policy_check' || e.type === 'resource_summary' || e.type === 'trend_check') && 'entity' in e && typeof e.entity === 'string' && e.entity) {
+      services.add(e.entity)
+    }
+  }
+  const parts: string[] = []
+  if (txCount > 0) parts.push(`${txCount} транз.`)
+  if (services.size > 0) parts.push(`${services.size} серв.`)
+  return parts.join(' · ')
+})
 </script>
 
 <template>
   <div class="app-shell shell">
     <aside class="sidebar side-navigation">
-      <h1>LT Verdict</h1>
-      <ShellTabs v-model="activeTab" />
-      <section
-        class="run-list-section"
-        aria-labelledby="run-list-title"
-        lang="ru"
-      >
-        <h2 id="run-list-title">
-          {{ SHELL_LABELS.runsTitle }}
-        </h2>
-        <ul
-          data-testid="run-list"
-          class="run-list"
-          tabindex="0"
+      <div class="rail-brand">
+        <h1>LT Verdict</h1>
+        <span class="rail-brand__tag">v4.4</span>
+      </div>
+      <ShellTabs
+        v-model="activeTab"
+        :badges="tabBadges"
+      />
+      <div class="rail-lists">
+        <section
+          class="run-list-section"
+          aria-labelledby="run-list-title"
+          lang="ru"
         >
-          <li
-            v-for="run in runs"
-            :key="run.run_id"
-            :title="run.run_id"
+          <h2 id="run-list-title">
+            {{ SHELL_LABELS.runsTitle }}
+          </h2>
+          <ul
+            data-testid="run-list"
+            class="run-list"
+            tabindex="0"
           >
-            <button
-              type="button"
-              :disabled="working || (uploadProgress > 0 && !job) || trialBusy"
-              :aria-pressed="currentRun?.run_id === run.run_id"
-              @click="selectRun(run)"
+            <li
+              v-for="run in runs"
+              :key="run.run_id"
+              :title="run.run_id"
             >
-              <span>{{ runTitle(run) }}</span>
-              <small>{{ run.source_type }} · {{ run.sha256.slice(0, 8) }}<template v-if="run.accepted_at && !timeInTitle(run)"> · <time :datetime="run.accepted_at">{{ acceptedAtFormat.format(new Date(run.accepted_at)) }}</time></template></small>
-            </button>
-          </li>
-          <li
-            v-if="runs.length === 0"
-            class="muted"
-          >
-            {{ SHELL_LABELS.runsEmpty }}
-          </li>
-        </ul>
-        <button
-          v-if="nextRunAfter"
-          type="button"
-          @click="refreshRuns(nextRunAfter ?? undefined)"
-        >
-          {{ SHELL_LABELS.runsMore }}
-        </button>
-      </section>
-      <section
-        v-if="currentRun"
-        class="run-list-section"
-        aria-labelledby="analysis-list-title"
-        lang="ru"
-      >
-        <h2 id="analysis-list-title">
-          {{ SHELL_LABELS.analysesTitle }}
-        </h2>
-        <ul class="run-list">
-          <li
-            v-for="analysis in analyses"
-            :key="analysis.analysis_id"
-          >
-            <button
-              type="button"
-              :disabled="working || (uploadProgress > 0 && !job) || trialBusy"
-              :title="analysis.analysis_id"
-              :aria-pressed="selectedAnalysisId === analysis.analysis_id"
-              @click="selectAnalysis(analysis)"
+              <button
+                type="button"
+                :disabled="working || (uploadProgress > 0 && !job) || trialBusy"
+                :aria-pressed="currentRun?.run_id === run.run_id"
+                @click="selectRun(run)"
+              >
+                <span>{{ runTitle(run) }}</span>
+                <small>{{ run.source_type }} · {{ run.sha256.slice(0, 8) }}<template v-if="run.accepted_at && !timeInTitle(run)"> · <time :datetime="run.accepted_at">{{ acceptedAtFormat.format(new Date(run.accepted_at)) }}</time></template></small>
+              </button>
+            </li>
+            <li
+              v-if="runs.length === 0"
+              class="muted"
             >
-              <span>{{ SHELL_LABELS.analysisItem }} {{ analysis.analysis_id.slice(0, 12) }}</span>
-              <small>{{ analysis.policy_verdict }} · {{ analysis.run_validity }}<span v-if="analysis.policy_id"> · {{ analysis.policy_id }}</span></small>
-            </button>
-          </li>
-          <li
-            v-if="analyses.length === 0"
-            class="muted"
+              {{ SHELL_LABELS.runsEmpty }}
+            </li>
+          </ul>
+          <button
+            v-if="nextRunAfter"
+            type="button"
+            class="v4-btn v4-btn--xs"
+            @click="refreshRuns(nextRunAfter ?? undefined)"
           >
-            {{ SHELL_LABELS.analysesEmpty }}
-          </li>
-        </ul>
-        <button
-          v-if="nextAnalysisAfter"
-          type="button"
-          @click="refreshAnalyses(undefined, nextAnalysisAfter ?? undefined)"
+            {{ SHELL_LABELS.runsMore }}
+          </button>
+        </section>
+        <section
+          v-if="currentRun"
+          class="run-list-section"
+          aria-labelledby="analysis-list-title"
+          lang="ru"
         >
-          {{ SHELL_LABELS.analysesMore }}
-        </button>
-      </section>
+          <h2 id="analysis-list-title">
+            {{ SHELL_LABELS.analysesTitle }}
+          </h2>
+          <ul class="run-list">
+            <li
+              v-for="analysis in analyses"
+              :key="analysis.analysis_id"
+            >
+              <button
+                type="button"
+                :disabled="working || (uploadProgress > 0 && !job) || trialBusy"
+                :title="analysis.analysis_id"
+                :aria-pressed="selectedAnalysisId === analysis.analysis_id"
+                @click="selectAnalysis(analysis)"
+              >
+                <span>{{ analysis.resource_arm ? `${SHELL_LABELS.runArm} ${analysis.resource_arm}` : `${SHELL_LABELS.analysisItem} ${analysis.analysis_id.slice(0, 10)}` }}</span>
+                <small>{{ analysis.policy_verdict }} · {{ analysis.run_validity }}<span v-if="analysis.policy_id"> · {{ analysis.policy_id }}</span></small>
+              </button>
+            </li>
+            <li
+              v-if="analyses.length === 0"
+              class="muted"
+            >
+              {{ SHELL_LABELS.analysesEmpty }}
+            </li>
+          </ul>
+          <button
+            v-if="nextAnalysisAfter"
+            type="button"
+            class="v4-btn v4-btn--xs"
+            @click="refreshAnalyses(undefined, nextAnalysisAfter ?? undefined)"
+          >
+            {{ SHELL_LABELS.analysesMore }}
+          </button>
+        </section>
+      </div>
     </aside>
 
     <div class="workspace">
@@ -1121,38 +1160,44 @@ async function jumpTo(target: AttentionTarget) {
         lang="ru"
       >
         <div class="run-identity">
-          <strong>{{ currentRun ? runTitle(currentRun) : SHELL_LABELS.noRun }}</strong>
+          <div class="run-identity__top">
+            <strong>{{ currentRun ? runTitle(currentRun) : SHELL_LABELS.noRun }}</strong>
+            <span
+              v-if="scaleBadges"
+              class="v4-pill v4-pill--info"
+            >{{ scaleBadges }}</span>
+          </div>
           <span
             v-if="currentRun"
-            class="mono"
-          >{{ currentRun.source_type }} · {{ currentRun.run_id.slice(0, 24) }}…</span>
-          <span v-if="analysisContext">{{ analysisContext }}</span>
-          <span v-if="completedAt">{{ SHELL_LABELS.completed }} {{ completedAt }}</span>
+            class="run-identity__meta"
+          >{{ currentRun.source_type }} · {{ currentRun.run_id.slice(0, 20) }}<template v-if="analysisContext"> · {{ analysisContext }}</template><template v-if="completedAt"> · {{ SHELL_LABELS.completed }} {{ completedAt }}</template></span>
         </div>
-        <a
-          v-if="verdictSummary"
-          href="#verdict"
-          class="verdict-chip"
-          data-testid="verdict-chip"
-          :data-verdict="verdictSummary.verdict"
-          :aria-label="`Вердикт ${verdictSummary.verdict} ${verdictSummary.chip}, перейти к описанию`"
-          @click="showVerdict"
-        ><strong>{{ verdictSummary.verdict }}</strong> <span>{{ verdictSummary.chip }}</span></a>
-        <button
-          type="button"
-          class="theme-toggle"
-          :aria-label="theme === 'light' ? SHELL_LABELS.themeToDark : SHELL_LABELS.themeToLight"
-          @click="theme = theme === 'light' ? 'dark' : 'light'"
-        >
-          <span aria-hidden="true">{{ theme === 'light' ? '◐' : '◑' }}</span>
-          {{ theme === 'light' ? SHELL_LABELS.themeToDark : SHELL_LABELS.themeToLight }}
-        </button>
-        <a
-          v-if="result && selectedAnalysisId"
-          class="button-secondary shell-export-link"
-          :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=html`"
-          download
-        >{{ EXPORT_LABELS.html }}</a>
+        <div class="topbar-actions">
+          <a
+            v-if="verdictSummary"
+            href="#verdict"
+            class="verdict-chip"
+            data-testid="verdict-chip"
+            :data-verdict="verdictSummary.verdict"
+            :aria-label="`Вердикт ${verdictSummary.verdict} ${verdictSummary.chip}, перейти к описанию`"
+            @click="showVerdict"
+          ><span class="verdict-chip__badge">{{ verdictSummary.verdict }}</span> <span>{{ verdictSummary.chip }}</span></a>
+          <button
+            type="button"
+            class="theme-toggle"
+            :aria-label="theme === 'light' ? SHELL_LABELS.themeToDark : SHELL_LABELS.themeToLight"
+            @click="theme = theme === 'light' ? 'dark' : 'light'"
+          >
+            <span aria-hidden="true">{{ theme === 'light' ? '◐' : '◑' }}</span>
+            {{ theme === 'light' ? SHELL_LABELS.themeToDark : SHELL_LABELS.themeToLight }}
+          </button>
+          <a
+            v-if="result && selectedAnalysisId"
+            class="shell-export-link"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=html`"
+            download
+          >{{ EXPORT_LABELS.html }}</a>
+        </div>
       </header>
 
       <main>
@@ -1181,6 +1226,7 @@ async function jumpTo(target: AttentionTarget) {
             :analyses="analyses"
             :focus="deepFocus"
             @select-analysis="selectAnalysisById"
+            @open-overview="activeTab = 'overview'"
           />
 
           <PodHeatmap

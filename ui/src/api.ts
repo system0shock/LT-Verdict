@@ -17,6 +17,7 @@ import type {
   BaselineSlotView,
   Bootstrap,
   BucketPage,
+  ErrorGroupsResponse,
   JobStatus,
   Policy,
   PolicyError,
@@ -33,6 +34,7 @@ import type {
   SourceRequest,
   SourcesResponse,
   StageProposalResponse,
+  TransactionBucketsResponse,
   WindowComparisonRequest,
   Release,
   ReleaseList,
@@ -256,6 +258,36 @@ export function getBuckets(
   if (include) query.set('include', include)
   return request(
     `/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/buckets?${query}`,
+    { signal },
+  )
+}
+
+export function getTransactionBuckets(
+  runId: string,
+  analysisId: string,
+  rollup: number,
+  transactions: readonly string[],
+  fromMillis?: number,
+  toMillis?: number,
+  signal?: AbortSignal,
+): Promise<TransactionBucketsResponse> {
+  const query = new URLSearchParams({ rollup: String(rollup), limit: '500' })
+  for (const tx of transactions) query.append('tx', tx)
+  if (fromMillis !== undefined) query.set('from_ms', String(fromMillis))
+  if (toMillis !== undefined) query.set('to_ms', String(toMillis))
+  return request(
+    `/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/transaction-buckets?${query}`,
+    { signal },
+  )
+}
+
+export function getErrorGroups(
+  runId: string,
+  analysisId: string,
+  signal?: AbortSignal,
+): Promise<ErrorGroupsResponse> {
+  return request(
+    `/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/error-groups`,
     { signal },
   )
 }

@@ -556,6 +556,10 @@ test('grouped metric catalog switches the ~260px primary chart, pins load metric
   await expect(page.getByTestId('deep-role-system')).toBeVisible()
   await expect(page.getByTestId('deep-role-generator')).toBeVisible()
 
+  // Default mode is workbench (stacked lanes); switch to Focus mode to verify ~260px hero chart.
+  await expect(page.getByTestId('deep-mode-workbench')).toHaveAttribute('aria-pressed', 'true')
+  await page.getByTestId('deep-mode-focus').click()
+
   const primaryHost = page.getByTestId('deep-track-load-rps').locator('.time-chart__host')
   const secondaryHost = page.getByTestId('deep-track-load-p95').locator('.time-chart__host')
   expect((await primaryHost.boundingBox())!.height).toBeGreaterThanOrEqual(255)

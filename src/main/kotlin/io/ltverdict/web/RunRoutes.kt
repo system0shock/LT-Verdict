@@ -16,6 +16,8 @@ import io.ltverdict.core.stageProposalJson
 import io.ltverdict.integrations.report.readRunTimeline
 import io.ltverdict.integrations.report.renderConfluenceReport
 import io.ltverdict.integrations.report.renderSavedLoadChart
+import io.ltverdict.metrics.readTransactionBuckets
+import io.ltverdict.metrics.toJsonObject
 import io.ltverdict.report.readErrorGroupsFile
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
@@ -191,6 +193,72 @@ internal fun Route.runRoutes(
         )
     }
 
+    get("/api/runs/{runId}/analyses/{analysisId}/transaction-buckets") {
+        call.requireQueries(setOf("rollup", "from_ms", "to_ms", "limit"), setOf("tx"))
+        val rollup = call.singleQuery("rollup")?.toIntOrNull()
+        if (rollup !in ROLLUPS) malformed("rollup must be 1, 10, 30 or 60")
+        val txList =
+            call.request.queryParameters
+                .getAll("tx")
+                .orEmpty()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+        if (txList.isEmpty() || txList.size > MAX_TX_SERIES_PER_REQUEST) {
+            malformed("tx must specify between 1 and $MAX_TX_SERIES_PER_REQUEST transactions")
+        }
+        val from = call.longQuery("from_ms", 0)
+        val to = call.optionalLongQuery("to_ms")
+        val limit = call.intQuery("limit", DEFAULT_BUCKET_LIMIT, 1..MAX_BUCKET_LIMIT)
+        if (from < 0 || to != null && to <= from) malformed("Bucket range is invalid")
+        // Verify analysis belongs to run and exists before reading the run input cache.
+        context.store.requireAnalysis(call)
+        val runId = call.parameters["runId"].orEmpty()
+        val input =
+            try {
+                withContext(Dispatchers.IO) { context.store.requireInput(runId) }
+            } catch (_: NoSuchElementException) {
+                notFound("Source input was not found for run")
+            } catch (_: IllegalArgumentException) {
+                notFound("Source input was not found for run")
+            }
+        val response =
+            withContext(Dispatchers.IO) {
+                val jobContext = currentCoroutineContext()
+                readTransactionBuckets(
+                    input = input,
+                    rollupSeconds = rollup!!,
+                    requestedTx = txList,
+                    fromMillis = from,
+                    toMillis = to,
+                    limit = limit,
+                    checkCancelled = { jobContext.ensureActive() },
+                )
+            }
+        call.respondJson(response.toJsonObject())
+    }
+
+    get("/api/runs/{runId}/analyses/{analysisId}/error-groups") {
+        call.requireOnlyQueries()
+        val stored = context.store.requireAnalysis(call)
+        val bytes =
+            if (stored.artifacts.any { it.path == "error-groups.json" }) {
+                withContext(Dispatchers.IO) { readErrorGroupsFile(stored.path) }
+            } else {
+                null
+            }
+        if (bytes != null) {
+            call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
+        } else {
+            call.respondJson(
+                buildJsonObject {
+                    put("available", false)
+                    put("groups", JsonArray(emptyList()))
+                },
+            )
+        }
+    }
+
     post("/api/runs/{runId}/stage-proposal") {
         call.requireOnlyQueries()
         val input =
@@ -280,6 +348,8 @@ private const val MAX_ANALYSIS_LIMIT = 100
 private const val DEFAULT_BUCKET_LIMIT = 500
 
 private const val MAX_BUCKET_LIMIT = 500
+
+private const val MAX_TX_SERIES_PER_REQUEST = 8
 
 private const val MAX_BUCKET_LATENCY_MILLIS = 86_400_000L
 

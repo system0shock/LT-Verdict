@@ -276,6 +276,8 @@ Linux использует `./gradlew installDist` и
 - [ADR 0005 — resource snapshot и оконные SLA](docs/adr/0005-resource-window-sla.md)
 - [Дизайн корреляционного среза](docs/superpowers/specs/2026-09-05-load-resource-correlation-design.md)
 - [ADR 0006 — ограниченная корреляция](docs/adr/0006-bounded-load-resource-correlation.md)
+- [ADR 0038 — кэш временных рядов транзакций и маршруты ошибок для UI v4](docs/adr/0038-transaction-time-series-cache.md)
+- [Дизайн UI v4.4 (Обзор, графики Grafana, рубрикаторы, ошибки ПВС и сравнение ресурсов)](docs/superpowers/specs/2026-11-26-ui-v4-overview-charts-rubricators-design.md)
 - [Выбранные и отложенные методы статистического анализа](docs/statistical-method-roadmap.md)
 - [Методика проверки статанализа v1 и Applicability](docs/statistical-validation-methodology-v1.md)
 - [Результаты проверки статанализа v1](docs/statistical-validation-results-v1.md)

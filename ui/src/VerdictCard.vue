@@ -2,6 +2,13 @@
 import type { VerdictSummary } from './verdictSummary'
 
 defineProps<{ summary: VerdictSummary }>()
+
+const badgeSubtext: Record<VerdictSummary['verdict'], string> = {
+  FAIL: 'пороги нарушены',
+  PASS: 'пороги в норме',
+  NO_VERDICT: 'не оценено',
+  NO_POLICY: 'без политики',
+}
 </script>
 
 <template>
@@ -12,44 +19,73 @@ defineProps<{ summary: VerdictSummary }>()
     :data-verdict="summary.verdict"
     aria-labelledby="verdict-title"
   >
-    <p
-      class="status-icon"
-      aria-hidden="true"
-    >
-      {{ summary.verdict === 'PASS' ? '✓' : summary.verdict === 'FAIL' ? '×' : '!' }}
-    </p>
-    <div class="verdict-main">
-      <p class="eyebrow">
-        Вердикт политики: <strong
-          class="verdict-badge"
-          data-testid="verdict-badge"
-        >{{ summary.verdict }}</strong>
-      </p>
-      <h2 id="verdict-title">
-        {{ summary.headline }}
-      </h2>
-      <p>{{ summary.lead }}</p>
-
-      <div
-        v-if="summary.kpis.length"
-        class="verdict-kpis"
-        data-testid="verdict-kpis"
-        role="region"
-        aria-label="Ключевые пороги правил"
-      >
+    <div class="vcard-top">
+      <div class="vcard-lead">
         <div
-          v-for="kpi in summary.kpis"
-          :key="kpi.key"
-          class="verdict-kpi"
-          data-testid="verdict-kpi"
-          :data-status="kpi.status"
+          class="vbadge"
+          :data-verdict="summary.verdict"
         >
-          <span class="verdict-kpi__label">{{ kpi.label }}</span>
-          <strong class="verdict-kpi__value">{{ kpi.observed }}</strong>
-          <span class="verdict-kpi__threshold muted">порог {{ kpi.threshold }}</span>
+          <strong
+            class="verdict-badge"
+            data-testid="verdict-badge"
+          >{{ summary.verdict }}</strong>
+          <span>{{ badgeSubtext[summary.verdict] }}</span>
+        </div>
+        <div class="vcard-copy">
+          <h2 id="verdict-title">
+            {{ summary.headline }}
+          </h2>
+          <p class="v4-sub">
+            {{ summary.lead }}
+          </p>
+          <dl
+            v-if="summary.facts.length"
+            class="vcard-passport verdict-facts"
+          >
+            <div
+              v-for="fact in summary.facts"
+              :key="fact.label"
+            >
+              <dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd>
+            </div>
+          </dl>
         </div>
       </div>
+    </div>
 
+    <div
+      v-if="summary.kpis.length"
+      class="verdict-kpis"
+      data-testid="verdict-kpis"
+      role="region"
+      aria-label="Ключевые пороги правил"
+    >
+      <div
+        v-for="kpi in summary.kpis"
+        :key="kpi.key"
+        class="verdict-kpi"
+        data-testid="verdict-kpi"
+        :data-status="kpi.status"
+      >
+        <div class="verdict-kpi__top">
+          <span
+            class="verdict-kpi__label"
+            :title="kpi.label"
+          >{{ kpi.label }}</span>
+          <span
+            class="v4-pill"
+            :class="kpi.status === 'FAIL' ? 'v4-pill--crit' : kpi.status === 'PASS' ? 'v4-pill--good' : 'v4-pill--warn'"
+          >{{ kpi.status === 'FAIL' ? 'FAIL' : kpi.status === 'PASS' ? 'OK' : 'N/A' }}</span>
+        </div>
+        <strong class="verdict-kpi__value">{{ kpi.observed }}</strong>
+        <span class="verdict-kpi__threshold">порог {{ kpi.threshold }}</span>
+      </div>
+    </div>
+
+    <div
+      v-if="summary.linesTitle || summary.causes.length || summary.stages || summary.notes.length"
+      class="vcard-extra"
+    >
       <template v-if="summary.linesTitle">
         <h3>{{ summary.linesTitle }}</h3>
         <ul
@@ -108,7 +144,7 @@ defineProps<{ summary: VerdictSummary }>()
           {{ summary.stages.title }}
         </h3>
         <div
-          class="table-wrap"
+          class="v4-table-wrap"
           tabindex="0"
           role="region"
           aria-label="Стадии нагрузки"
@@ -167,13 +203,5 @@ defineProps<{ summary: VerdictSummary }>()
         </ul>
       </template>
     </div>
-    <dl class="verdict-facts">
-      <div
-        v-for="fact in summary.facts"
-        :key="fact.label"
-      >
-        <dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd>
-      </div>
-    </dl>
   </section>
 </template>

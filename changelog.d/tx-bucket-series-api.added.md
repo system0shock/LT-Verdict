@@ -1,0 +1,1 @@
+- Added read-only endpoints `GET /api/runs/{runId}/analyses/{analysisId}/transaction-buckets` (cached per-transaction rollup series from `inputs/source.bin`, outside `identity.json` and `analysis-result.json`, ADR 0038) and `GET /api/runs/{runId}/analyses/{analysisId}/error-groups` (ADR 0031 error breakdown for UI).
